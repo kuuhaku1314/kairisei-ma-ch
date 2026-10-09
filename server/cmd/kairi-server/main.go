@@ -22,7 +22,7 @@ import (
 	"kairisei.local/server/internal/multiplayer"
 )
 
-const serverVersion = "1.3.7"
+const serverVersion = "1.3.8"
 
 type options struct {
 	showVersion       bool
