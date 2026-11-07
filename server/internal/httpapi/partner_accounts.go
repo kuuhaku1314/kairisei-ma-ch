@@ -180,6 +180,7 @@ func (view friendPointPartnerView) deckWire(deckIndex int8) (map[string]any, err
 		view.Buddies,
 		view.SupportUnlocked,
 		view.IsBurst,
+		nil,
 	)
 }
 
@@ -309,13 +310,6 @@ func friendPointAccountFriend(relation game.FriendPointAccountRelation) (gamesta
 		Magic:           magic,
 		Mind:            mind,
 	}, true
-}
-
-func (a *API) localAccountFriendRelations() ([]game.FriendPointAccountRelation, error) {
-	if a.friendPointAccounts == nil {
-		return nil, errors.New("local-account friend repository is unavailable")
-	}
-	return a.friendPointAccounts.ListFriendPointAccountRelations(a.initialState.User.UserID)
 }
 
 func (a *API) friendPointAccountStates(targetUserIDs []int) (map[int]int8, error) {

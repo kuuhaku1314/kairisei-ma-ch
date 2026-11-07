@@ -21,7 +21,7 @@ func TeamBattleFamePool(profile gamestate.TeamBattleRewardProfile, policy gamest
 	return nil
 }
 
-func teamBattleFameReward(pool []gamestate.Reward, seed string, arthur, box int) gamestate.Reward {
-	sum := sha256.Sum256([]byte(fmt.Sprintf("%s|arthur=%d|fame-box=%d", seed, arthur, box)))
+func teamBattleFameReward(pool []gamestate.Reward, seed string, memberType, box int) gamestate.Reward {
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s|member=%d|fame-box=%d", seed, memberType, box)))
 	return cloneReward(pool[binary.BigEndian.Uint64(sum[:8])%uint64(len(pool))])
 }

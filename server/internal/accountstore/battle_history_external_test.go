@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"kairisei.local/server/internal/accountstore"
+	"kairisei.local/server/internal/game"
 	"kairisei.local/server/internal/gamestate"
 	"kairisei.local/server/internal/multiplayer"
 	"kairisei.local/server/internal/testfixture"
@@ -39,7 +40,7 @@ func TestBattleClearStatisticsCommitOnceAndSeparateDaysModes(t *testing.T) {
 		state := load(id)
 		hash := strings.Repeat("a", 64)
 		state.User.Gold += 11
-		state.TeamBattleSoloResultReceipts = []gamestate.TeamBattleSoloResultReceipt{{RequestSHA256: hash, BossID: 1, ClaimedAtUnix: yesterday, Response: json.RawMessage(`{"is_clear":1,"user":{},"partners":[]}`)}}
+		state.TeamBattleSoloResultReceipts = []gamestate.TeamBattleSoloResultReceipt{{RequestSHA256: hash, BossID: 1, ClaimedAtUnix: yesterday, Snapshot: json.RawMessage(`{"is_clear":1,"member_type":1}`)}}
 		r := gamestate.BattleClearRecord{BossID: 1, UserID: id, Mode: 0, CompletedAt: yesterday, EventKey: fmt.Sprintf("solo:%d:1", id), Decks: decks(id)}
 		// Account save and counter rollback together if the statistics write fails.
 		db, _ := a.Database().Open()
@@ -47,7 +48,7 @@ func TestBattleClearStatisticsCommitOnceAndSeparateDaysModes(t *testing.T) {
 			t.Fatal(err)
 		}
 		before := load(id).User.Gold
-		if err := a.PersistSoloClear(state, r, hash); err == nil {
+		if err := persistSoloClear(a, state, r, hash); err == nil {
 			t.Fatal("failed statistics write committed account")
 		}
 		if got := load(id); got.User.Gold != before || len(got.TeamBattleSoloResultReceipts) != 0 {
@@ -56,10 +57,10 @@ func TestBattleClearStatisticsCommitOnceAndSeparateDaysModes(t *testing.T) {
 		if _, err := db.Exec(`DROP TRIGGER fail_clear`); err != nil {
 			t.Fatal(err)
 		}
-		if err := a.PersistSoloClear(state, r, hash); err != nil {
+		if err := persistSoloClear(a, state, r, hash); err != nil {
 			t.Fatal(err)
 		}
-		if err := a.PersistSoloClear(state, r, hash); err != nil {
+		if err := persistSoloClear(a, state, r, hash); err != nil {
 			t.Fatal(err)
 		}
 		if load(id).User.Gold != before+11 {
@@ -82,8 +83,8 @@ func TestBattleClearStatisticsCommitOnceAndSeparateDaysModes(t *testing.T) {
 	state := load(other)
 	for i, when := range []int64{now.Unix(), now.Add(-31 * 24 * time.Hour).Unix()} {
 		hash := fmt.Sprintf("%064x", i+1)
-		state.TeamBattleSoloResultReceipts = append(state.TeamBattleSoloResultReceipts, gamestate.TeamBattleSoloResultReceipt{RequestSHA256: hash, BossID: 1, ClaimedAtUnix: when, Response: json.RawMessage(`{"is_clear":1,"user":{},"partners":[]}`)})
-		if err := a.PersistSoloClear(state, gamestate.BattleClearRecord{BossID: 1, UserID: other, CompletedAt: when, EventKey: hash, Decks: decks(other)}, hash); err != nil {
+		state.TeamBattleSoloResultReceipts = append(state.TeamBattleSoloResultReceipts, gamestate.TeamBattleSoloResultReceipt{RequestSHA256: hash, BossID: 1, ClaimedAtUnix: when, Snapshot: json.RawMessage(`{"is_clear":1,"member_type":1}`)})
+		if err := persistSoloClear(a, state, gamestate.BattleClearRecord{BossID: 1, UserID: other, CompletedAt: when, EventKey: hash, Decks: decks(other)}, hash); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -126,5 +127,81 @@ func TestBattleClearStatisticsCommitOnceAndSeparateDaysModes(t *testing.T) {
 	recent, err := a.RecentBattleClears(1, now)
 	if err != nil || len(recent) != 5 {
 		t.Fatalf("recent samples / retention: %d %v", len(recent), err)
+	}
+	// Solo snapshots follow actual member order and can repeat a profession;
+	// the same settlement receipt still commits once with the account update.
+	for index, types := range [][]int{{3}, {3, 2}, {3, 3, 1}} {
+		state := load(accountstore.PrimaryUserID)
+		boss := 10 + index
+		hash := fmt.Sprintf("%064x", 100+index)
+		state.TeamBattleSoloResultReceipts = append(state.TeamBattleSoloResultReceipts, gamestate.TeamBattleSoloResultReceipt{RequestSHA256: hash, BossID: boss, ClaimedAtUnix: now.Unix(), Snapshot: json.RawMessage(`{"is_clear":1,"member_type":1}`)})
+		party := make([]gamestate.BattleClearDeck, len(types))
+		for i, arthur := range types {
+			party[i] = decks(state.User.UserID)[arthur-1]
+		}
+		record := gamestate.BattleClearRecord{BossID: boss, UserID: state.User.UserID, CompletedAt: now.Unix(), EventKey: hash, Decks: party}
+		for retry := 0; retry < 2; retry++ {
+			if err := persistSoloClear(a, state, record, hash); err != nil {
+				t.Fatal(err)
+			}
+		}
+		rows, err := a.RecentBattleClears(boss, now)
+		if err != nil || len(rows) != 1 || rows[0].Count != 1 || len(rows[0].Decks) != len(types) {
+			t.Fatal("sparse party persistence/retry differs", err, rows)
+		}
+		for i, arthur := range types {
+			if rows[0].Decks[i].ArthurType != arthur {
+				t.Fatal("stored party order changed")
+			}
+		}
+	}
+}
+
+func persistSoloClear(accounts *accountstore.Accounts, state gamestate.State, record gamestate.BattleClearRecord, hash string) error {
+	return accounts.PersistSoloBattle(state, game.SoloBattleCommit{BossID: record.BossID, ReceiptSHA: hash, Clear: &record})
+}
+
+func TestSoloRentalAndInventoryCommitTogether(t *testing.T) {
+	a := testfixture.NewFriendCapacityTestAccounts(t)
+	_ = testfixture.CreateNamedFriendCapacityAccount(t, a, 0x591)
+	owner := testfixture.CreateNamedFriendCapacityAccount(t, a, 0x592)
+	state, err := a.LoadState(accountstore.PrimaryUserID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := state.User.Gold
+	state.User.Gold += 7
+	hash := strings.Repeat("d", 64)
+	state.TeamBattleSoloResultReceipts = []gamestate.TeamBattleSoloResultReceipt{{BossID: 1, RequestSHA256: hash, ClaimedAtUnix: time.Now().Unix(), Snapshot: json.RawMessage(`{"is_clear":1,"member_type":1}`)}}
+	commit := game.SoloBattleCommit{BossID: 1, ReceiptSHA: hash, RentalEventKey: "solo:atomic-rental", RentalCredits: []game.FriendPointRentalCredit{{OwnerUserID: owner, FriendPoint: 5}}}
+	db, err := a.Database().Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TRIGGER fail_rental BEFORE INSERT ON cn_friend_point_rental BEGIN SELECT RAISE(ABORT,'forced'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.PersistSoloBattle(state, commit); err == nil {
+		t.Fatal("rental failure committed settlement")
+	}
+	loaded, err := a.LoadPersistentState(state.User.UserID)
+	if err != nil || loaded.User.Gold != before || len(loaded.TeamBattleSoloResultReceipts) != 0 {
+		t.Fatal("partial solo settlement", err)
+	}
+	if _, err := db.Exec(`DROP TRIGGER fail_rental`); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if err := a.PersistSoloBattle(state, commit); err != nil {
+			t.Fatal(err)
+		}
+	}
+	events, err := a.ListFriendPointRentalEvents(owner, 0)
+	if err != nil || len(events) != 1 || events[0].FriendPoint != 5 {
+		t.Fatal("rental not committed exactly once", events, err)
+	}
+	loaded, err = a.LoadPersistentState(state.User.UserID)
+	if err != nil || loaded.User.Gold != before+7 || len(loaded.TeamBattleSoloResultReceipts) != 1 {
+		t.Fatal("settlement not committed exactly once", err)
 	}
 }

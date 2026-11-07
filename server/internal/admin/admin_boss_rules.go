@@ -226,12 +226,18 @@ func (a *API) saveBossRules(w http.ResponseWriter, r *http.Request) {
 		writeContentError(w, err)
 		return
 	}
+	configuration, err := game.NewContentConfiguration(c.configuration.Revision+1, state)
+	if err != nil {
+		WriteAdminError(w, 400, err.Error())
+		return
+	}
 	doc, err := o.writeDocument(bossRulesKey, *body.Expected, next)
 	if err != nil {
 		writeContentError(w, err)
 		return
 	}
 	c.rules, c.ruleRevision = next, doc.Revision
-	c.configuration = game.ContentConfiguration{Revision: c.configuration.Revision + 1, State: state}
+	c.configuration = configuration
+	o.publishRuntimeLocked()
 	WriteAdminJSON(w, 200, map[string]any{"state": "PASS", "revision": doc.Revision})
 }

@@ -15,39 +15,30 @@ import (
 	"kairisei.local/server/internal/gamestate"
 	"kairisei.local/server/internal/httpapi"
 	"kairisei.local/server/internal/masterdata"
-	"kairisei.local/server/internal/protocol"
 )
 
 const (
 	cn602CatalogVersion = 790
 	cn602MenuBundle     = "main_c/scenes/scene_Menu.dat"
 	cn602LocalSession   = "local-cn-session-key"
-	// UI availability bits are independent of the fixed HTTP route set.
-	cn602LocalModuleSwitchState = int64(protocol.ModuleEverydayTask | protocol.ModuleActivity |
-		protocol.ModuleRecommendDeck | protocol.ModuleStrategyButton | protocol.ModulePVP |
-		protocol.ModuleFailureAdvise | protocol.ModuleCopyCard | protocol.ModuleChangeCloth |
-		protocol.ModuleChangeModel | protocol.ModuleReturnToDungeon)
 )
 
 var cn602ScrambleKey = [...]byte{0x01, 0xcd, 0x45, 0x89, 0x67, 0xab, 0x23, 0xef}
 
 // New assembles the CN protocol adapter, account runtime and resource service.
-// The returned handler implements io.Closer; its owner must close it after all
+// The owner must close the returned handler after all
 // HTTP/Admin/BattleSv work has drained, including on listener setup failure.
-func New(config Config) (http.Handler, error) {
+func New(config Config) (*cnDeploymentHandler, error) {
 	app, err := assembleApplication(config)
 	if err != nil {
 		return nil, err
 	}
 	handler, err := app.handler()
-	if err == nil {
-		err = app.accounts.InvalidateSessions()
-	}
 	if err != nil {
 		_ = app.accounts.Database().Close()
 		return nil, err
 	}
-	return handler, err
+	return handler, nil
 }
 
 func assembleApplication(config Config) (*application, error) {
@@ -108,10 +99,15 @@ func assembleApplication(config Config) (*application, error) {
 	if err != nil {
 		return nil, err
 	}
-	catalog, err = prepareRuntimeState(catalog)
+	catalog, err = prepareRuntimeState.prepareCatalog(catalog)
 	if err != nil {
 		return nil, err
 	}
+	cardCatalog, err := game.NewCardCatalog(catalog)
+	if err != nil {
+		return nil, err
+	}
+	cardCatalog.ApplyDefinitions(&catalog)
 	saveDatabase.SetCatalog(catalog)
 	primaryState, err := saveDatabase.LoadOrImport()
 	if err != nil {
@@ -128,6 +124,9 @@ func assembleApplication(config Config) (*application, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := accountStore.AttachCreationPolicy(operationStore.AccountCreationPolicy); err != nil {
+		return nil, err
+	}
 	if err := config.Multiplayer.AttachGameSpeed(operationStore.TeamBattleSpeed); err != nil {
 		return nil, err
 	}
@@ -137,27 +136,36 @@ func assembleApplication(config Config) (*application, error) {
 	if err := operationStore.InitializePlayerPolicy(catalog, config.Masters.Navi); err != nil {
 		return nil, err
 	}
-	basePreparer := prepareRuntimeState
-	prepareRuntimeState = func(state gamestate.State) (gamestate.State, error) {
-		prepared, err := basePreparer(state)
-		if err != nil {
-			return prepared, err
-		}
-		return game.ApplyContentState(prepared, operationStore.ContentConfiguration()), nil
-	}
+	basePreparer := prepareRuntimeState.prepareAccount
 	buildBusinessHandler := func(userID int, state gamestate.State) (http.Handler, error) {
+		content := operationStore.ContentConfiguration()
+		prepare := func(state gamestate.State) (gamestate.State, error) {
+			prepared, err := basePreparer(state)
+			if err != nil {
+				return prepared, err
+			}
+			return game.ApplyContentState(prepared, content), nil
+		}
 		return newCNBusinessHandler(httpapi.Config{
 			InitialState:        state,
 			BaseURL:             "http://" + config.Network.AdvertiseHost + ":" + strconv.Itoa(config.Network.HTTPPort),
+			GachaBannerVersions: resources.GachaBannerVersions,
 			Logger:              config.Logger,
 			PersistState:        func(next gamestate.State) error { return accountStore.PersistState(userID, next) },
 			PVP:                 pvpConfig,
 			PVPAccounts:         accountStore,
+			GiftCodes:           accountStore,
 			FriendPointAccounts: accountStore,
 			BattleHistory:       accountStore,
+			BossScoreRankings:   accountStore,
+			TowerRankings:       accountStore,
 			BattleSV:            config.Network.BattleSV,
 			Multiplayer:         config.Multiplayer,
-		}, prepareRuntimeState)
+			CombatDefinitions:   config.CombatDefinitions,
+			CardCatalog:         cardCatalog,
+			MissionCatalog:      operationStore.MissionCatalog(),
+			BattleCatalog:       content.BattleCatalog,
+		}, prepare)
 	}
 	cacheLimit, err := accounthttp.ConfiguredAccountCacheLimit()
 	if err != nil {
@@ -168,10 +176,11 @@ func assembleApplication(config Config) (*application, error) {
 		return nil, err
 	}
 	businessHandler := accounthttp.New(accounthttp.Config{
-		Primary:       primaryBusinessHandler,
-		IdleLimit:     cacheLimit,
-		Prepare:       operationStore.PrepareBusiness,
-		PersistStates: accountStore.PersistStates,
+		Primary:          primaryBusinessHandler,
+		IdleLimit:        cacheLimit,
+		Prepare:          func(handler http.Handler) { operationStore.Runtime.PrepareBusiness(handler) },
+		PersistStates:    accountStore.PersistStates,
+		PersistCompleted: accountStore.PersistCompletedBattle,
 		Build: func(userID int) (http.Handler, error) {
 			state, err := accountStore.LoadState(userID)
 			if err != nil {
@@ -192,6 +201,9 @@ func assembleApplication(config Config) (*application, error) {
 	if err := config.Multiplayer.AttachContinueAuthorizer(businessHandler.ChargeMultiplayerContinue); err != nil {
 		return nil, err
 	}
+	if err := config.Multiplayer.AttachBattleCompleter(businessHandler.CompleteMultiplayerBattle); err != nil {
+		return nil, err
+	}
 	absolute, err := filepath.Abs(config.Persistence.RequestLog)
 	if err != nil {
 		return nil, err
@@ -206,7 +218,8 @@ func assembleApplication(config Config) (*application, error) {
 	r := &recorder{path: absolute}
 	app := &application{
 		config: config, resources: resources, accounts: accountStore,
-		operations: operationStore, business: businessHandler, recorder: r, progression: playerProgression,
+		operations: operationStore.Runtime, editor: operationStore, business: businessHandler, recorder: r, progression: playerProgression,
+		pvpRanks: pvpConfig.Ranks,
 	}
 	assembled = true
 	return app, nil

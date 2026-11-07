@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 
 	"kairisei.local/server/internal/gamestate"
@@ -61,6 +62,12 @@ func cloneBuddyEvolutionPrices(source map[string][]int) map[string][]int {
 	return result
 }
 
+func (s *Account) BuddyCount() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.buddies)
+}
+
 func (s *Account) BuddyState() []gamestate.Buddy {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -78,27 +85,6 @@ func (s *Account) buddyIndexByUniqueIDLocked(uniqueID int64) int {
 		}
 	}
 	return -1
-}
-
-func (s *Account) clearBuddyIDsFromDecksLocked(remove map[int64]struct{}) {
-	if len(remove) == 0 {
-		return
-	}
-	for deckIndex := range s.decks {
-		ids := s.decks[deckIndex].BuddyUniqueIDs
-		if len(ids) > 0 && ids[0] != 0 {
-			if _, removingLeader := remove[ids[0]]; removingLeader {
-				// Removing the leader unequips its entire formation, not its inventory.
-				clear(ids)
-				continue
-			}
-		}
-		for slot, uniqueID := range ids {
-			if _, exists := remove[uniqueID]; exists {
-				s.decks[deckIndex].BuddyUniqueIDs[slot] = 0
-			}
-		}
-	}
 }
 
 func (s *Account) normalizeBuddyLocked(buddy gamestate.Buddy, definition gamestate.BuddyDefinition) (gamestate.Buddy, error) {
@@ -135,12 +121,19 @@ func (s *Account) normalizeBuddyLocked(buddy gamestate.Buddy, definition gamesta
 }
 
 func (s *Account) buddyMaximumExperienceLocked(definition gamestate.BuddyDefinition) (int, error) {
+	return s.buddyExperienceAtLevelLocked(definition, definition.MaxLevel)
+}
+
+func (s *Account) buddyExperienceAtLevelLocked(definition gamestate.BuddyDefinition, level int) (int, error) {
+	if level < 1 || level > definition.MaxLevel {
+		return 0, errors.New("buddy level is invalid")
+	}
 	values, exists := s.buddyExperience[definition.ExperienceTableID]
 	if !exists || len(values) < definition.MaxLevel-1 {
 		return 0, errors.New("buddy experience table is unavailable")
 	}
 	total := 0
-	for _, value := range values[:definition.MaxLevel-1] {
+	for _, value := range values[:level-1] {
 		if value <= 0 || total > math.MaxInt-value {
 			return 0, errors.New("buddy experience table is invalid")
 		}
@@ -169,6 +162,18 @@ func (s *Account) addBuddyExperienceLocked(buddy gamestate.Buddy, definition gam
 		buddy.Level++
 	}
 	return s.normalizeBuddyLocked(buddy, definition)
+}
+
+func (s *Account) checkBuddyConsumptionLocked(material gamestate.Buddy) error {
+	if material.IsLock != 0 {
+		return ErrBuddyLocked
+	}
+	for _, deck := range s.decks {
+		if slices.Contains(deck.BuddyUniqueIDs, material.UniqueID) {
+			return errBuddyInDeck
+		}
+	}
+	return nil
 }
 
 func (s *Account) FuseBuddy(baseUniqueID int64, inputs []BuddyFusionInput) (buddyFusionResult, error) {
@@ -210,8 +215,8 @@ func (s *Account) FuseBuddy(baseUniqueID int64, inputs []BuddyFusionInput) (budd
 			if index < 0 {
 				return buddyFusionResult{}, ErrBuddyUnavailable
 			}
-			if s.buddies[index].IsLock != 0 {
-				return buddyFusionResult{}, ErrBuddyLocked
+			if err := s.checkBuddyConsumptionLocked(s.buddies[index]); err != nil {
+				return buddyFusionResult{}, err
 			}
 			if _, duplicate := seenBuddies[input.ID]; duplicate {
 				return buddyFusionResult{}, errors.New("duplicate buddy fusion material")
@@ -325,8 +330,7 @@ func (s *Account) FuseBuddy(baseUniqueID int64, inputs []BuddyFusionInput) (budd
 		}
 	}
 	s.buddies = kept
-	consumeStackUses(s.stackCards, stackUses)
-	s.clearBuddyIDsFromDecksLocked(consumedBuddies)
+	s.consumeStackUsesLocked(stackUses)
 	s.gold -= int(cost)
 	backStackCards := make([]gamestate.CardStack, 0)
 	for cardID, count := range backStackCounts {
@@ -368,8 +372,8 @@ func (s *Account) prepareBuddyEvolutionMaterialLocked(base gamestate.Buddy, mate
 		if index < 0 {
 			return buddyEvolutionMaterial{}, ErrBuddyUnavailable
 		}
-		if s.buddies[index].IsLock != 0 {
-			return buddyEvolutionMaterial{}, ErrBuddyLocked
+		if err := s.checkBuddyConsumptionLocked(s.buddies[index]); err != nil {
+			return buddyEvolutionMaterial{}, err
 		}
 		if materialDefinition.SameBuddyID != baseDefinition.SameBuddyID {
 			return buddyEvolutionMaterial{}, errors.New("buddy evolution material belongs to another family")
@@ -395,10 +399,9 @@ func (s *Account) prepareBuddyEvolutionMaterialLocked(base gamestate.Buddy, mate
 
 func (s *Account) consumePreparedBuddyEvolutionMaterialLocked(material buddyEvolutionMaterial) {
 	if material.stackIndex >= 0 {
-		s.stackCards[material.stackIndex].Num--
+		s.consumeStackCardLocked(material.stackIndex, 1)
 	}
 	s.removeBuddiesLocked(material.removeBuddies)
-	s.clearBuddyIDsFromDecksLocked(material.removeBuddies)
 }
 
 func (s *Account) EvolveBuddy(baseUniqueID int64, materialUniqueID int64, materialCardID int) (buddyEvolutionResult, error) {
@@ -510,8 +513,8 @@ func (s *Account) SellBuddies(uniqueIDs []int64) (int, int, int, []DeckInfo, err
 		if index < 0 {
 			return 0, 0, 0, nil, ErrBuddyUnavailable
 		}
-		if s.buddies[index].IsLock != 0 {
-			return 0, 0, 0, nil, ErrBuddyLocked
+		if err := s.checkBuddyConsumptionLocked(s.buddies[index]); err != nil {
+			return 0, 0, 0, nil, err
 		}
 		if _, duplicate := remove[uniqueID]; duplicate {
 			return 0, 0, 0, nil, errors.New("duplicate buddy sell selection")
@@ -523,7 +526,6 @@ func (s *Account) SellBuddies(uniqueIDs []int64) (int, int, int, []DeckInfo, err
 		}
 	}
 	s.removeBuddiesLocked(remove)
-	s.clearBuddyIDsFromDecksLocked(remove)
 	s.gold += int(getGold)
 	return int(getGold), s.gold, len(s.buddies), s.rankedDecksLocked(s.decks), nil
 }

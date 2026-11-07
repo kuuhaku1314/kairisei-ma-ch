@@ -158,6 +158,7 @@ func InitializeOnboardingSnapshot(state *gamestate.State, userID int) error {
 	state.PVP.DefenseDecks = []gamestate.PVPDeckSelection{}
 	state.FriendPointInboxCursor = 0
 	state.TeamBattleScores = nil
+	state.TeamBattleSoloScores = nil
 	state.TowerQuestProgress = nil
 	state.TowerQuestConfigVersion = 0
 	progress, err := collectCatalogProgress(*state)

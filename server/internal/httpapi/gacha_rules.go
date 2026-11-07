@@ -10,6 +10,16 @@ func gachaGiftsWire(profile gamestate.GachaProfile) []any {
 	for _, reward := range profile.CurrentGifts() {
 		result = append(result, map[string]any{"is_random": 0, "rewards": []any{map[string]any{"is_empty": 0, "reward": reward}}})
 	}
+	for _, gift := range profile.CurrentRandomGifts() {
+		rewards := make([]any, 0, len(gift.Pool)+1)
+		for _, entry := range gift.Pool {
+			rewards = append(rewards, map[string]any{"is_empty": 0, "reward": entry.Reward})
+		}
+		if gift.EmptyWeight > 0 {
+			rewards = append(rewards, map[string]any{"is_empty": 1, "reward": gamestate.Reward{CardSkillLevels: []int16{}}})
+		}
+		result = append(result, map[string]any{"is_random": 1, "rewards": rewards})
+	}
 	return result
 }
 

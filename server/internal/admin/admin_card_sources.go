@@ -2,6 +2,7 @@ package admin
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 
 	"kairisei.local/server/internal/gamestate"
@@ -48,9 +49,9 @@ func cardCrystalGachaSource(text string) bool {
 	return strings.Contains(text, "扭蛋") && !strings.Contains(strings.ToLower(text), "boss币")
 }
 
-// Tags describe the original acquisition text, not resource readiness. A card
-// with multiple acquisition paths belongs to every matching tab.
-func cardSourceTags(text string) []string {
+// Acquisition channels come from the source text, normal/god evolution from
+// incoming recipes. Point stars and factor breakthrough belong to rarity filters.
+func cardSourceTags(text string, evolutionTypes []int) []string {
 	tags := []string{}
 	if cardCrystalGachaSource(text) {
 		tags = append(tags, "gacha")
@@ -61,14 +62,15 @@ func cardSourceTags(text string) []string {
 	if strings.Contains(strings.ToLower(text), "boss币") {
 		tags = append(tags, "boss_coin")
 	}
-	if strings.Contains(text, "进化") || strings.Contains(text, "進化") || strings.Contains(text, "乖离") {
-		tags = append(tags, "evolution")
-	}
-	if strings.Contains(text, "覚醒") || strings.Contains(text, "觉醒") {
-		tags = append(tags, "awakening")
-	}
-	if strings.Contains(text, "限界") {
-		tags = append(tags, "limit")
+	for _, kind := range evolutionTypes {
+		var tag string
+		switch kind { // Original EVOLUTION_TYPE: NORMAL/GOD.
+		case 0, 1:
+			tag = "evolution"
+		}
+		if tag != "" && !slices.Contains(tags, tag) {
+			tags = append(tags, tag)
+		}
 	}
 	if strings.Contains(text, "特典") || strings.Contains(text, "活动") || strings.Contains(text, "任务") || strings.Contains(text, "礼包") || text == "PVP" {
 		tags = append(tags, "event")

@@ -19,7 +19,7 @@ func TestQuestFirstClearCrystalsAreGrantedOncePerDifficulty(t *testing.T) {
 			if !stageQuest {
 				configuration = json.RawMessage(`{"9":[],"10":[{"0":100001,"9":0,"10":[{"0":10000101,"10":0},{"0":10000102,"10":0}]}],"11":[],"12":[]}`)
 			}
-			s := &Account{coinFree: 7, teamBattleSolo: configuration}
+			s := &Account{coinFree: 7, teamBattleSolo: battleCatalogFixture(t, configuration)}
 			if stageQuest {
 				s.stageQuests = map[int]json.RawMessage{area: json.RawMessage(`{"stage_quest":{"areaid":100001,"stage_object":[{"stageid":10000101,"is_clear_done":0,"raid_boss":[{"boss_group":{"bosses":[{"bossid":10000101,"state":0}]},"clear_reward":[]}]},{"stageid":10000102,"is_clear_done":0,"raid_boss":[{"boss_group":{"bosses":[{"bossid":10000102,"state":0}]},"clear_reward":[]}]}]},"stage_clear":[],"new_clear_stage":[]}`)}
 			}
@@ -52,7 +52,7 @@ func TestQuestFirstClearCrystalsAreGrantedOncePerDifficulty(t *testing.T) {
 				}
 				// Reconstruct the domain store from durable progress/coins. No
 				// active run or result receipt can suppress a new run's reward.
-				s = &Account{coinFree: s.coinFree, teamBattleSolo: append(json.RawMessage(nil), s.teamBattleSolo...), stageQuests: s.stageQuests}
+				s = &Account{coinFree: s.coinFree, teamBattleSolo: battleCatalogFixture(t, s.teamBattleSolo.saved()), stageQuests: s.stageQuests}
 			}
 		})
 	}

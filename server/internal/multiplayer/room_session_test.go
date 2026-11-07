@@ -56,6 +56,7 @@ func TestCompletionIsolatesRoomsAndPublishesOnlyAfterPersistence(t *testing.T) {
 	s := &Server{hub: h, logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	repository := &sessionCompletionRepository{entered: make(chan struct{}), release: make(chan struct{}), failure: errors.New("disk unavailable")}
 	h.repository = repository
+	h.completionCommit = repository.SaveCompleted
 	var release sync.Once
 	unblock := func() { release.Do(func() { close(repository.release) }) }
 	defer unblock()
@@ -81,6 +82,14 @@ func TestCompletionIsolatesRoomsAndPublishesOnlyAfterPersistence(t *testing.T) {
 	}
 	unrelated := make(chan error, 1)
 	go func() {
+		if _, err := h.SettlementFor(1, 1001); !errors.Is(err, ErrCompletedBattlePending) {
+			unrelated <- errors.New("pending completion held its room lock or became visible")
+			return
+		}
+		if err := s.tryAdvanceUserAttack(1); err != nil {
+			unrelated <- err
+			return
+		}
 		if got := h.List(RoomSearch{}); len(got) != 1 || got[0].RoomID != 3 {
 			unrelated <- errors.New("search lost unrelated room")
 			return
@@ -98,7 +107,7 @@ func TestCompletionIsolatesRoomsAndPublishesOnlyAfterPersistence(t *testing.T) {
 	if err := awaitSessionWork(t, unrelated); err != nil {
 		t.Fatal(err)
 	}
-	if engine.turn != 1 {
+	if engine.TurnNumber() != 1 {
 		t.Fatal("unrelated engine did not advance")
 	}
 	if snapshot, exists := h.Snapshot(1); !exists || snapshot.State != RoomStateBattle {
@@ -133,13 +142,13 @@ func TestCompletionIsolatesRoomsAndPublishesOnlyAfterPersistence(t *testing.T) {
 }
 
 func TestConcurrentRoomsAndDuplicateAcknowledgementsMatchSerialBattle(t *testing.T) {
-	fixture, members := nextBattleFixture(t)
+	_, members := nextBattleFixture(t)
 	h := NewHub()
 	s := &Server{hub: h, logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	const roomCount = 12
 	outputs := make([]*sessionTestConn, roomCount+1)
 	for id := 1; id <= roomCount+1; id++ {
-		engine, err := newBattleEngine(fixture.catalog, RoomSpec{EnemyPartyID: 1, CostInitial: 3, HoldMax: 2, Seed: 602}, members)
+		engine, err := newBattleEngine(roomFixtureCatalog(), RoomSpec{EnemyPartyID: 1, CostInitial: 3, HoldMax: 2, Seed: 602}, members)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -193,7 +202,7 @@ func TestConcurrentRoomsAndDuplicateAcknowledgementsMatchSerialBattle(t *testing
 			return err
 		}
 		session = h.lockRoomSession(id)
-		current.cardPlaySubmissions[1] = cardPlaySubmission{CardTypes: [5]int{current.engine.players[0].Hand[0]}, Targets: [5]int{5}}
+		current.cardPlaySubmissions[1] = cardPlaySubmission{CardTypes: [5]int{firstFixtureHandCard(t, current.engine, 1)}, Targets: [5]int{5}}
 		for slot := 2; slot <= 4; slot++ {
 			current.cardPlaySubmissions[slot] = cardPlaySubmission{}
 		}

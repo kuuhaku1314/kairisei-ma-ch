@@ -2,102 +2,77 @@ package admin
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
-	"sync"
 	"time"
 
 	"kairisei.local/server/internal/accountstore"
+	operationservice "kairisei.local/server/internal/operations"
 )
-
-const maintenanceKey = "server-maintenance"
-
-type maintenanceState struct {
-	Enabled       bool        `json:"enabled"`
-	Revision      int         `json:"revision"`
-	GameRequests  int         `json:"game_requests"`
-	AdminRequests int         `json:"admin_requests"`
-	Busy          bool        `json:"busy"`
-	Cleanup       *cleanupJob `json:"cleanup,omitempty"`
-}
-
-type cleanupJob struct {
-	GroupID     int                                    `json:"group_id,omitempty"`
-	Scope       string                                 `json:"scope"`
-	Mode        string                                 `json:"mode"`
-	State       string                                 `json:"state"`
-	Error       string                                 `json:"error,omitempty"`
-	Report      *accountstore.OperationalCleanupReport `json:"report,omitempty"`
-	AuditReport *accountstore.AuditCleanupReport       `json:"audit_report,omitempty"`
-}
-
-type maintenanceGate struct {
-	mu     sync.Mutex
-	state  maintenanceState
-	cancel context.CancelFunc
-	done   chan struct{}
-}
-
-func (o *Operations) loadMaintenance() error {
-	doc, err := o.storage.ReadDocument(maintenanceKey)
-	if err != nil {
-		return err
-	}
-	var saved struct {
-		Enabled bool `json:"enabled"`
-	}
-	if doc.Revision > 0 {
-		if err := json.Unmarshal(doc.Payload, &saved); err != nil {
-			return err
-		}
-	}
-	o.maintenance.state = maintenanceState{Enabled: saved.Enabled, Revision: doc.Revision}
-	return nil
-}
-
-func (o *Operations) MaintenanceState() maintenanceState {
-	o.maintenance.mu.Lock()
-	defer o.maintenance.mu.Unlock()
-	return o.maintenance.state
-}
-
-// Admission and its active count share a lock: cleanup cannot race the last
-// accepted request, including registration before an account lock exists.
-func (o *Operations) AdmitGameRequest() (func(), bool) {
-	m := &o.maintenance
-	m.mu.Lock()
-	if m.state.Enabled {
-		m.mu.Unlock()
-		return nil, false
-	}
-	m.state.GameRequests++
-	m.mu.Unlock()
-	return func() { m.mu.Lock(); m.state.GameRequests--; m.mu.Unlock() }, true
-}
 
 func (a *API) maintenanceWrites(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.URL.Path == "/api/maintenance" || r.URL.Path == "/api/maintenance/cleanup" {
+		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.URL.Path == "/api/maintenance" || r.URL.Path == "/api/maintenance/cleanup" || r.URL.Path == "/api/maintenance/battles/interrupt" {
 			next.ServeHTTP(w, r)
 			return
 		}
-		m := &a.operations.maintenance
-		m.mu.Lock()
-		if m.state.Busy {
-			m.mu.Unlock()
-			WriteAdminError(w, 409, "正在检查或清理运营状态，请完成后再修改配置／账号")
+		finish, ok := a.operations.AdmitAdminMutation()
+		if !ok {
+			WriteAdminError(w, 409, "维护操作正在进行，请完成后再修改配置／账号")
 			return
 		}
-		m.state.AdminRequests++
-		m.mu.Unlock()
-		defer func() { m.mu.Lock(); m.state.AdminRequests--; m.mu.Unlock() }()
+		defer finish()
 		next.ServeHTTP(w, r)
 	})
 }
 
 func (a *API) getMaintenance(w http.ResponseWriter, _ *http.Request) {
-	WriteAdminJSON(w, 200, map[string]any{"state": "PASS", "maintenance": a.operations.MaintenanceState(), "rooms": a.multiplayerHub.RoomCount(), "gacha_trash": a.operations.gachaTrash()})
+	rooms, creating := a.multiplayerHub.MaintenanceActivity()
+	WriteAdminJSON(w, 200, map[string]any{"state": "PASS", "maintenance": a.operations.MaintenanceState(), "rooms": rooms, "creating_rooms": creating, "gacha_trash": a.operations.gachaTrash()})
+}
+
+func (a *API) interruptBattles(w http.ResponseWriter, r *http.Request) {
+	if err := requireAdminMutation(r); err != nil {
+		WriteAdminError(w, 403, err.Error())
+		return
+	}
+	var body struct {
+		Expected *int `json:"expected_revision"`
+	}
+	if decodeAdminJSON(r, &body) != nil || body.Expected == nil {
+		WriteAdminError(w, 400, "缺少维护版本，请刷新后重试")
+		return
+	}
+	runtime, ok := a.business.(interface {
+		WithAccountMaintenance(context.Context, func() error) error
+	})
+	if !ok {
+		WriteAdminError(w, 503, "当前运行入口不支持中断对局")
+		return
+	}
+	closed, solo := 0, 0
+	err := a.operations.InterruptBattles(r.Context(), *body.Expected, func(ctx context.Context) error {
+		var err error
+		closed, err = a.multiplayerHub.InterruptRooms(ctx)
+		if err != nil {
+			return err
+		}
+		// Drop both serving-lifetime solo sessions and cached account handlers
+		// after accepted settlements finish. Durable receipts remain available.
+		return runtime.WithAccountMaintenance(ctx, func() error {
+			solo = a.accounts.DiscardUnsettledBattles()
+			return nil
+		})
+	})
+	if errors.Is(err, operationservice.ErrMaintenanceConflict) {
+		WriteAdminError(w, 409, err.Error())
+		return
+	}
+	if err != nil {
+		writeContentError(w, err)
+		return
+	}
+	WriteAdminJSON(w, 200, map[string]any{"state": "PASS", "closed_rooms": closed, "discarded_solo": solo, "maintenance": a.operations.MaintenanceState()})
 }
 
 func (a *API) setMaintenance(w http.ResponseWriter, r *http.Request) {
@@ -113,54 +88,16 @@ func (a *API) setMaintenance(w http.ResponseWriter, r *http.Request) {
 		WriteAdminError(w, 400, "缺少维护状态或版本，请刷新后重试")
 		return
 	}
-	m := &a.operations.maintenance
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.state.Busy || *body.Expected != m.state.Revision {
-		WriteAdminError(w, 409, "维护状态已变化或清理正在进行，请刷新后重试")
-		return
-	}
-	if err := a.multiplayerHub.SetMaintenance(body.Enabled); err != nil {
+	state, err := a.operations.SetMaintenance(body.Enabled, *body.Expected, a.multiplayerHub.SetMaintenance)
+	if errors.Is(err, operationservice.ErrMaintenanceConflict) {
 		WriteAdminError(w, 409, err.Error())
 		return
 	}
-	doc, err := a.operations.storage.WriteDocument(maintenanceKey, m.state.Revision, struct {
-		Enabled bool `json:"enabled"`
-	}{body.Enabled}, maintenanceKey)
 	if err != nil {
-		_ = a.multiplayerHub.SetMaintenance(m.state.Enabled)
 		writeContentError(w, err)
 		return
 	}
-	m.state.Enabled, m.state.Revision = body.Enabled, doc.Revision
-	WriteAdminJSON(w, 200, map[string]any{"state": "PASS", "maintenance": m.state})
-}
-
-func (o *Operations) beginCleanup() (func(), error) {
-	m := &o.maintenance
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if !m.state.Enabled {
-		return nil, errors.New("请先开启服务器维护模式")
-	}
-	if m.state.Busy || m.state.GameRequests != 0 || m.state.AdminRequests != 0 {
-		return nil, errors.New("仍有请求正在处理，请稍后刷新再试")
-	}
-	m.state.Busy = true
-	return func() { m.mu.Lock(); m.state.Busy = false; m.mu.Unlock() }, nil
-}
-
-func (o *Operations) CloseMaintenance() {
-	m := &o.maintenance
-	m.mu.Lock()
-	cancel, done := m.cancel, m.done
-	m.mu.Unlock()
-	if cancel != nil {
-		cancel()
-	}
-	if done != nil {
-		<-done
-	}
+	WriteAdminJSON(w, 200, map[string]any{"state": "PASS", "maintenance": state})
 }
 
 func (a *API) cleanupReferences(ctx context.Context) (accountstore.OperationalReferences, error) {
@@ -218,12 +155,13 @@ func (a *API) cleanupOperationalState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Scope    string `json:"scope"`
-		Mode     string `json:"mode"`
-		Digest   string `json:"digest"`
-		StartUTC string `json:"start_utc"`
-		EndUTC   string `json:"end_utc"`
-		GroupID  int    `json:"group_id"`
+		Scope    string                             `json:"scope"`
+		Mode     string                             `json:"mode"`
+		Digest   string                             `json:"digest"`
+		StartUTC string                             `json:"start_utc"`
+		EndUTC   string                             `json:"end_utc"`
+		GroupID  int                                `json:"group_id"`
+		History  accountstore.HistoryCleanupRequest `json:"history"`
 	}
 	if decodeAdminJSON(r, &body) != nil || (body.Mode != "preview" && body.Mode != "apply") || (body.Mode == "apply" && len(body.Digest) != 64) {
 		WriteAdminError(w, 400, "请先预览并提交对应清理摘要")
@@ -232,7 +170,7 @@ func (a *API) cleanupOperationalState(w http.ResponseWriter, r *http.Request) {
 	if body.Scope == "" {
 		body.Scope = "operational"
 	}
-	if body.Scope != "operational" && body.Scope != "audit" && body.Scope != "gacha" {
+	if body.Scope != "operational" && body.Scope != "audit" && body.Scope != "gacha" && body.Scope != "history" {
 		WriteAdminError(w, 400, "不支持的清理范围")
 		return
 	}
@@ -248,6 +186,12 @@ func (a *API) cleanupOperationalState(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if body.Scope == "history" {
+		if err := body.History.Normalize(time.Now()); err != nil {
+			WriteAdminError(w, 400, err.Error())
+			return
+		}
+	}
 	runtime, ok := a.business.(interface {
 		WithAccountMaintenance(context.Context, func() error) error
 	})
@@ -255,25 +199,11 @@ func (a *API) cleanupOperationalState(w http.ResponseWriter, r *http.Request) {
 		WriteAdminError(w, 503, "当前运行入口不支持维护清理")
 		return
 	}
-	finish, err := a.operations.beginCleanup()
-	if err != nil {
-		WriteAdminError(w, 409, err.Error())
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-	m := &a.operations.maintenance
-	m.mu.Lock()
-	m.cancel = cancel
-	m.done = make(chan struct{})
-	done := m.done
-	m.state.Cleanup = &cleanupJob{Scope: body.Scope, Mode: body.Mode, State: "running", GroupID: body.GroupID}
-	m.mu.Unlock()
-	go func() {
-		defer close(done)
-		defer cancel()
-		defer finish()
-		job := &cleanupJob{Scope: body.Scope, Mode: body.Mode, State: "complete", GroupID: body.GroupID}
-		err := runtime.WithAccountMaintenance(ctx, func() error {
+	err := a.operations.RunCleanup(operationservice.CleanupJob{Scope: body.Scope, Mode: body.Mode, GroupID: body.GroupID}, func(ctx context.Context, job *operationservice.CleanupJob) error {
+		if rooms, creating := a.multiplayerHub.MaintenanceActivity(); rooms != 0 || creating != 0 {
+			return errors.New("仍有组队房间或建房请求，请先中断未结算对局")
+		}
+		return runtime.WithAccountMaintenance(ctx, func() error {
 			expected := ""
 			if body.Mode == "apply" {
 				expected = body.Digest
@@ -281,6 +211,11 @@ func (a *API) cleanupOperationalState(w http.ResponseWriter, r *http.Request) {
 			if body.Scope == "gacha" {
 				report, err := a.purgeGacha(ctx, body.GroupID, expected)
 				job.Report = &report
+				return err
+			}
+			if body.Scope == "history" {
+				report, err := a.operations.storage.CleanupHistory(ctx, body.History, expected)
+				job.HistoryReport = &report
 				return err
 			}
 			a.operations.configMu.RLock()
@@ -298,13 +233,38 @@ func (a *API) cleanupOperationalState(w http.ResponseWriter, r *http.Request) {
 			job.Report = &report
 			return err
 		})
-		if err != nil {
-			job.State = "failed"
-			job.Error = err.Error()
-		}
-		m.mu.Lock()
-		m.state.Cleanup = job
-		m.mu.Unlock()
-	}()
+	})
+	if err != nil {
+		WriteAdminError(w, 409, err.Error())
+		return
+	}
 	WriteAdminJSON(w, http.StatusAccepted, map[string]any{"state": "PASS", "maintenance": a.operations.MaintenanceState()})
+}
+
+// getMaintenanceHistory summarizes cleanable history sizes; it is read-only and
+// available outside maintenance so operators can judge when to clean.
+func (a *API) getMaintenanceHistory(w http.ResponseWriter, r *http.Request) {
+	overview, err := a.operations.storage.HistoryOverview(r.Context())
+	if err != nil {
+		WriteAdminError(w, 500, err.Error())
+		return
+	}
+	bosses := make([]map[string]any, 0, len(overview.RankRows))
+	a.operations.configMu.RLock()
+	scoring := a.scoreRankingBossesLocked()
+	for _, row := range overview.RankRows {
+		name := ""
+		if content := a.operations.content; content != nil {
+			if boss, ok := content.bosses[row.BossID]; ok {
+				name = boss.Name
+				if boss.Difficulty != "" {
+					name += " · " + boss.Difficulty
+				}
+			}
+		}
+		_, open := scoring[row.BossID]
+		bosses = append(bosses, map[string]any{"boss_id": row.BossID, "rows": row.Rows, "name": name, "scoring": open})
+	}
+	a.operations.configMu.RUnlock()
+	WriteAdminJSON(w, 200, map[string]any{"state": "PASS", "overview": overview, "rank_bosses": bosses})
 }

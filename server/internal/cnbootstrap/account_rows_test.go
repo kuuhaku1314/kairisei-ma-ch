@@ -106,6 +106,12 @@ func TestAccountRowsCommitOnlyChangesAndRollbackTogether(t *testing.T) {
 	if fingerprint(load(userID)) != expected {
 		t.Fatal("failed save partially committed wallet/inventory/gift changes")
 	}
+	exec(`DROP TRIGGER fail_save`)
+	expected = fingerprint(state)
+	persist(state)
+	if fingerprint(load(userID)) != expected {
+		t.Fatal("component digests advanced past a failed transaction")
+	}
 	if fingerprint(load(otherID)) != otherBefore {
 		t.Fatal("another account changed")
 	}

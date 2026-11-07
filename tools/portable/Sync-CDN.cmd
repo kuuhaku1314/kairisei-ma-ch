@@ -14,7 +14,7 @@ if not "%~2"=="" (
   popd
   exit /b 2
 )
-"%~dp0kairi-server.exe" -sync-cdn cdn-sync.json %sync_flags%
+"%~dp0kairi-server.exe" -sync-cdn cdn-sync.json %sync_flags% -platform-content-config "%~dp0deployment.json"
 set "sync_exit=%ERRORLEVEL%"
 popd
 if "%sync_exit%"=="0" echo CDN command completed.

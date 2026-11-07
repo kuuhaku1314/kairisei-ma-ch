@@ -6,11 +6,22 @@ import (
 	"errors"
 	"net/http"
 
-	adminapi "kairisei.local/server/internal/admin"
-	"kairisei.local/server/internal/gamestate"
+	operationservice "kairisei.local/server/internal/operations"
 )
 
-func cnBootstrapTeamBattleSoloShow(businessHandler http.Handler, operations *adminapi.Operations) http.HandlerFunc {
+// The business decoder owns the current request contract.
+func cnBootstrapSoloStart(businessHandler http.Handler) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		payload, err := readCNSessionPayload(request, "TeamBattleSoloStart")
+		if err != nil {
+			http.Error(writer, err.Error(), http.StatusUnauthorized)
+			return
+		}
+		businessHandler.ServeHTTP(writer, adaptCNBusinessRequest(request, http.MethodPost, "/TeamBattleSoloStart", payload))
+	}
+}
+
+func cnBootstrapTeamBattleSoloShow(businessHandler http.Handler, operations *operationservice.Runtime) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		payload, err := readCNSessionPayload(request, "TeamBattleSoloShow")
 		if err != nil {
@@ -27,7 +38,7 @@ func cnBootstrapTeamBattleSoloShow(businessHandler http.Handler, operations *adm
 			return
 		}
 		activeArthurType := wire["0"]
-		if activeArthurType < 1 || activeArthurType > 4 {
+		if activeArthurType < 1 || activeArthurType > 5 {
 			http.Error(writer, "invalid CN TeamBattleSoloShow Arthur type", http.StatusBadRequest)
 			return
 		}
@@ -52,13 +63,13 @@ func cnBootstrapTeamBattleSoloShow(businessHandler http.Handler, operations *adm
 	}
 }
 
-func cnBootstrapPastBossShow(businessHandler http.Handler, operations *adminapi.Operations) http.HandlerFunc {
+func cnBootstrapPastBossShow(businessHandler http.Handler, operations *operationservice.Runtime) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := requireCNSessionOnly(r, "TeamBattlePastBossShow"); err != nil {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
 		}
-		allowed, err := operations.BattleGroupAllowlist(adminapi.PastBattlePublicationKey)
+		allowed, err := operations.BattleGroupAllowlist(operationservice.PastBattlePublicationKey)
 		if err != nil {
 			http.Error(w, "read local past boss publication", http.StatusInternalServerError)
 			return
@@ -88,10 +99,6 @@ func cnBootstrapTeamBattleResult(businessHandler http.Handler) http.HandlerFunc 
 			http.Error(writer, err.Error(), http.StatusUnauthorized)
 			return
 		}
-		if err := requireCNExactFields(payload, "TeamBattleResult", "roomid"); err != nil {
-			http.Error(writer, err.Error(), http.StatusBadRequest)
-			return
-		}
 		forwardCNBusiness(
 			writer,
 			adaptCNBusinessRequest(request, http.MethodPost, "/TeamBattleResult", payload),
@@ -108,24 +115,25 @@ func cnBootstrapTeamBattleSoloEnd(businessHandler http.Handler) http.HandlerFunc
 			http.Error(writer, err.Error(), http.StatusUnauthorized)
 			return
 		}
-		if err := requireCNExactFields(
-			payload,
-			"TeamBattleSoloEnd",
-			"progress",
-			"is_clear",
-			"input_cmd",
-			"enemy_dead_bit",
-			"bossid",
-		); err != nil {
-			http.Error(writer, err.Error(), http.StatusBadRequest)
-			return
-		}
 		forwardCNBusiness(
 			writer,
 			adaptCNBusinessRequest(request, http.MethodPost, "/TeamBattleSoloEnd", payload),
 			businessHandler,
 			adaptCNTeamBattleResultResponse,
 		)
+	}
+}
+
+// Permanent report validation belongs to the use case so its protocol result
+// reaches the client's cache-discard callback instead of becoming HTTP 400.
+func cnBootstrapPvpEnd(business http.Handler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		payload, err := readCNSessionPayload(r, "PvpEnd")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+		business.ServeHTTP(w, adaptCNBusinessRequest(r, http.MethodPost, "/PvpEnd", payload))
 	}
 }
 
@@ -193,7 +201,7 @@ func filterCNTeamBattleGroups(content json.RawMessage, allowed map[int]struct{})
 		if err := json.Unmarshal(group, &identity); err != nil {
 			return nil, err
 		}
-		if _, exists := allowed[identity.GroupID]; exists || gamestate.IsBurstQuestGroup(identity.GroupID) {
+		if _, exists := allowed[identity.GroupID]; exists {
 			filtered = append(filtered, group)
 		}
 	}

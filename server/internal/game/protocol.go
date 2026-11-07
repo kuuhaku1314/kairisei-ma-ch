@@ -2,6 +2,7 @@ package game
 
 type CardInfo struct {
 	UniqueID      int64
+	CreateTime    int
 	CardID        int
 	Level         int
 	LevelMax      int

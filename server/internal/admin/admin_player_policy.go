@@ -13,6 +13,7 @@ import (
 	"kairisei.local/server/internal/game"
 	"kairisei.local/server/internal/gamestate"
 	"kairisei.local/server/internal/masterdata"
+	"kairisei.local/server/internal/operations"
 )
 
 const playerPolicyKey = "player-policy"
@@ -37,6 +38,7 @@ type loginRewards struct {
 }
 
 type PlayerPolicy struct {
+	HomeBanners   operations.HomeBannerPolicy `json:"home_banners"`
 	Notice        noticePolicy                `json:"notice"`
 	TutorialMail  game.TutorialCompletionMail `json:"tutorial_completion_mail"`
 	Login         loginRewards                `json:"login_rewards"`
@@ -86,6 +88,19 @@ func (o *Operations) loadPlayerPolicy() error {
 		if err := json.Unmarshal(doc.Payload, &value); err != nil {
 			return err
 		}
+		// Retire the old dedicated event-page advertisement even when an
+		// operator saved it before the shared carousel gained score targets.
+		value.HomeBanners.Items = slices.DeleteFunc(value.HomeBanners.Items, func(row operations.HomeBannerEntry) bool {
+			return row.Target == "eventpage"
+		})
+		// The pre-release per-draw targets are retired. Keep the artwork available
+		// for reselection in Admin and leave those rows disabled until then.
+		for i := range value.HomeBanners.Items {
+			row := &value.HomeBanners.Items[i]
+			if row.Target == "gacha" {
+				row.Target, row.TargetID, row.Enabled = "none", 0, false
+			}
+		}
 		// Stored policy predates newly published navigators after a resource
 		// upgrade. Complete only missing IDs; saved prices and switches win.
 		// Keep duplicates/unknown IDs intact so normal validation rejects them.
@@ -105,6 +120,7 @@ func (o *Operations) loadPlayerPolicy() error {
 		return fmt.Errorf("player policy: %w", err)
 	}
 	o.playerPolicy.Store(o.playerSnapshot(value, doc.Revision))
+	o.publishRuntimeLocked()
 	return nil
 }
 
@@ -122,6 +138,9 @@ func validPolicyAmount(amount int, allowZero bool) bool {
 }
 
 func (o *Operations) validatePlayerPolicy(p PlayerPolicy) error {
+	if err := validateHomeBanners(p.HomeBanners); err != nil {
+		return err
+	}
 	if o.playerDefaults == nil {
 		return errors.New("运营目录尚未载入")
 	}
@@ -170,16 +189,6 @@ func (o *Operations) validatePlayerPolicy(p PlayerPolicy) error {
 	return nil
 }
 
-func (o *Operations) preparePlayerPolicy(handler http.Handler) {
-	p := o.playerPolicy.Load()
-	if p == nil {
-		return
-	}
-	if target, ok := handler.(game.PlayerConfigurator); ok {
-		target.ApplyPlayerConfiguration(p.Runtime)
-	}
-}
-
 func (a *API) validateTutorialMail(mail game.TutorialCompletionMail) error {
 	seen := map[string]bool{}
 	for _, r := range mail.Rewards {
@@ -209,7 +218,7 @@ func (a *API) playerPolicy(w http.ResponseWriter, _ *http.Request) {
 	for _, r := range p.Value.TutorialMail.Rewards {
 		entries = append(entries, a.catalogByKey[adminCatalogKey(r.Type, r.RewardTypeID)])
 	}
-	WriteAdminJSON(w, 200, map[string]any{"state": "PASS", "revision": p.Revision, "config": p.Value, "defaults": a.operations.playerDefaults, "navi_names": a.operations.playerNaviNames, "mail_reward_entries": entries})
+	WriteAdminJSON(w, 200, map[string]any{"state": "PASS", "revision": p.Revision, "config": p.Value, "defaults": a.operations.playerDefaults, "navi_names": a.operations.playerNaviNames, "mail_reward_entries": entries, "home_banner_gachas": a.homeBannerGachas(), "home_banner_score_bosses": a.homeBannerScoreBosses()})
 }
 
 func (a *API) savePlayerPolicy(w http.ResponseWriter, r *http.Request) {
@@ -237,9 +246,15 @@ func (a *API) savePlayerPolicy(w http.ResponseWriter, r *http.Request) {
 	// Stable order makes diffs and audit records easy to compare.
 	slices.SortFunc(body.Config.Navigators, func(a, b game.NaviSetting) int { return int(a.NaviID) - int(b.NaviID) })
 	o.configMu.Lock()
+	if err := a.validateHomeBannerAssets(body.Config.HomeBanners); err != nil {
+		o.configMu.Unlock()
+		WriteAdminError(w, 400, err.Error())
+		return
+	}
 	doc, err := o.writeDocument(playerPolicyKey, *body.Expected, *body.Config)
 	if err == nil {
 		o.playerPolicy.Store(o.playerSnapshot(*body.Config, doc.Revision))
+		o.publishRuntimeLocked()
 	}
 	o.configMu.Unlock()
 	if err != nil {

@@ -210,5 +210,6 @@ func (s *Account) EndExplore(rewards []gamestate.Reward) (PresentReceiveResult, 
 			cards = append(cards, cloneCard(s.cards[index]))
 		}
 	}
+	s.recordMissionEventLocked(missionEvent{kind: gamestate.MissionExploreClear}, time.Now())
 	return result, cards, true, startedAtUnix, nil
 }

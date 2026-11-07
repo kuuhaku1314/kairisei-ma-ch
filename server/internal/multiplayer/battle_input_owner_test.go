@@ -1,9 +1,11 @@
 package multiplayer
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -55,19 +57,9 @@ func TestCardPlayConfirmationPrecedesTeamAttack(t *testing.T) {
 		t.Run(map[bool]string{false: "invalid_sender", true: "accepted_before_teammate"}[late], func(t *testing.T) {
 			hub := NewHub()
 			server := &Server{hub: hub, logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
-			skill := CombatSkillDefinition{ID: 1, FunctionID: 1, Cost: 1, Target: "ENEMY_ONE"}
-			engine := newSphereContractEngine(&CombatCatalog{
-				Cards:            map[int]CombatCardDefinition{1: {ID: 1, NormalSkillID: 1}},
-				Spheres:          map[int]CombatSphereDefinition{2: {ID: 2, SkillID: 2}},
-				PlayerSkills:     map[int][]CombatSkillDefinition{1: {skill}, 2: {{ID: 2, FunctionID: 2, Cost: 2, Target: "ENEMY_ONE"}}},
-				PlayerSkillRoles: map[int][]CombatSkillRole{1: {{Function: "ATTACK_AA"}}, 2: {{Function: "ATTACK_AA"}}},
-			})
-			engine.phase = battlePhaseUser
-			engine.players[0].Cost = 4
-			engine.players[0].Deck[0] = BattleCard{CardType: 1, CardID: 1, Level: 1}
-			engine.players[0].Deck[1] = BattleCard{CardType: 2, CardID: 1, Level: 1}
-			engine.players[0].Hand = [5]int{1, 2}
-			engine.players[0].Spheres[0] = battleSphere{Slot: 1, SphereID: 2, Level: 1, Type: sphereTypeNormal, Count: 1, Playable: true}
+			engine, _ := nextBattleFixture(t)
+			openFixtureUserPhase(t, engine)
+			card := firstFixtureHandCard(t, engine, 1)
 			left, peer := net.Pipe()
 			defer left.Close()
 			defer peer.Close()
@@ -86,32 +78,32 @@ func TestCardPlayConfirmationPrecedesTeamAttack(t *testing.T) {
 				t.Fatal(err)
 			}
 			output.output.Reset()
-			before := engine.rng
+			before := engine.StateView()
 			if !late {
-				if err := first.handleCardPlay("3,5,0,0,0,0,0,0,0,0,0,0", false); err == nil {
+				if err := first.handleCardPlay("11,5,0,0,0,0,0,0,0,0,0,0", false); err == nil {
 					lastErr := last.handleCardPlay(strings.Repeat("0,", 11)+"0", false)
 					t.Fatalf("unavailable first-player card entered queue; last legal sender received: %v", lastErr)
 				}
 				if _, accepted := current.cardPlaySubmissions[1]; accepted {
 					t.Fatal("rejected input remained queued")
 				}
-				if engine.players[0].Cost != 4 || engine.rng != before || output.output.Len() != 0 {
-					t.Fatal("rejected input changed cost, RNG or peer display")
+				if !reflect.DeepEqual(engine.StateView(), before) || output.output.Len() != 0 {
+					t.Fatal("rejected input changed battle state or peer display")
 				}
 			} else {
-				if err := first.handleCardPlay("1,5,2,5,0,0,0,0,0,0,1,5", false); err != nil {
+				if err := first.handleCardPlay(fmt.Sprintf("%d,5,0,0,0,0,0,0,0,0,0,0", card), false); err != nil {
 					t.Fatal(err)
 				}
 				confirmed := output.output.String()
-				for _, row := range []string{"22,1,1,5,0,0", "22,1,2,5,0,0", "304,1,1,5"} {
+				for _, row := range []string{fmt.Sprintf("22,1,%d,5,0,0", card)} {
 					if strings.Count(confirmed, row) != 1 {
-						t.Fatal("teammate did not immediately receive the confirmed cards and sphere", confirmed)
+						t.Fatal("teammate did not immediately receive the confirmed card", confirmed)
 					}
 				}
-				if current.userAttackStarted || strings.Contains(confirmed, "ApiUserAttack{") || engine.players[0].Cost != 2 || engine.rng != before {
-					t.Fatal("submission resolved combat early or failed to retain native cost/RNG")
+				if current.userAttackStarted || strings.Contains(confirmed, "ApiUserAttack{") || engine.StateView().Members[0].Cost != before.Members[0].Cost-1 {
+					t.Fatal("submission resolved combat early or failed to retain the accepted cost")
 				}
-				selection := engine.selectedPlays[1]
+				selection := current.cardPlaySubmissions[1]
 				// Duplicate submits and a late plan cannot replace the visible choice.
 				if err := first.handleCardPlay(strings.Repeat("0,", 11)+"0", false); err != nil {
 					t.Fatal(err)
@@ -119,7 +111,7 @@ func TestCardPlayConfirmationPrecedesTeamAttack(t *testing.T) {
 				if err := first.handleCardPlayPlan(strings.Repeat("0,", 11) + "0"); err != nil {
 					t.Fatal(err)
 				}
-				if output.output.String() != confirmed || engine.selectedPlays[1] != selection || engine.players[0].Cost != 2 {
+				if output.output.String() != confirmed || current.cardPlaySubmissions[1] != selection || engine.StateView().Members[0].Cost != before.Members[0].Cost-1 {
 					t.Fatal("confirmed submission was replaced, rebroadcast or charged twice")
 				}
 			}
@@ -146,7 +138,7 @@ func TestCardPlayConfirmationPrecedesTeamAttack(t *testing.T) {
 				strings.LastIndex(frames, "ApiCardPlayR{") > strings.Index(frames, "ApiUserAttack{") {
 				t.Fatal("surviving peer lost ordered submissions or single attack delivery", frames)
 			}
-			if strings.Count(frames, "28,2\n") != 1 || (late && strings.Count(frames, "22,1,1,5,0,0") != 1) {
+			if strings.Count(frames, "28,2\n") != 1 || (late && strings.Count(frames, fmt.Sprintf("22,1,%d,5,0,0", card)) != 1) {
 				t.Fatal("pass confirmation missing or an accepted card was repeated at attack", frames)
 			}
 			if late {

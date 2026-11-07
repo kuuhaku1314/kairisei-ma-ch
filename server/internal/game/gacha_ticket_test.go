@@ -2,6 +2,7 @@ package game
 
 import (
 	"testing"
+	"time"
 
 	"kairisei.local/server/internal/gamestate"
 )
@@ -42,6 +43,7 @@ func TestRarityFiveTicketGachaConsumesOfficialItemAndAddsCard(t *testing.T) {
 		},
 	}
 
+	beforeDraw := int(time.Now().Unix())
 	result, err := cardStore.PlayGacha(gachaID, 4, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -55,6 +57,12 @@ func TestRarityFiveTicketGachaConsumesOfficialItemAndAddsCard(t *testing.T) {
 	}
 	if cardStore.cards[0].Fame != 77 {
 		t.Fatalf("configured pool fame not applied to the drawn card: %d", cardStore.cards[0].Fame)
+	}
+	if card := cardStore.cards[0]; card.CreateTime < beforeDraw || card.CreateTime > int(time.Now().Unix()) || result.Reward.Cards[0].CreateTime != card.CreateTime {
+		t.Fatalf("new card acquisition time is missing from inventory or draw response: %+v", card)
+	}
+	if saved := snapshotCards(cardStore.cards, nil); saved[0].CreateTime != cardStore.cards[0].CreateTime || CardsFromState(saved, 0)[0].CreateTime != cardStore.cards[0].CreateTime {
+		t.Fatal("card acquisition time was lost between runtime and persisted state")
 	}
 	if pool := GachaPoolRewards(cardStore.gachas[0]); pool[0].CardFame != 77 {
 		t.Fatalf("lineup shows fame %d, want configured 77", pool[0].CardFame)

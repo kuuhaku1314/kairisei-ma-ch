@@ -19,10 +19,10 @@ func TestMaintenanceBlocksLoginAndBusinessBeforeAccountWork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	app := &application{operations: o}
+	app := &application{operations: o.Runtime, editor: o}
 	called := 0
 	handler := app.maintenanceRequests(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called++ }))
-	for _, path := range []string{"/loginSDK.php", "/local/account/login", "/GachaPlay2", "/TeamBattleSoloEnd"} {
+	for _, path := range []string{"/local/client/login", "/local/account/login", "/GachaPlay2", "/TeamBattleSoloEnd"} {
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, httptest.NewRequest(http.MethodPost, path, strings.NewReader("{}")))
 		if called != 0 || !strings.Contains(w.Body.String(), "服务器维护中") {

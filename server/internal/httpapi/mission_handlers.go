@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"net/http"
+	"time"
 )
 
 func (a *API) missionShow(writer http.ResponseWriter, request *http.Request) {
@@ -12,8 +13,15 @@ func (a *API) missionShow(writer http.ResponseWriter, request *http.Request) {
 		a.writeStoreError(writer, err)
 		return
 	}
+	if payload.IsReward != 0 && payload.IsReward != 1 {
+		writeError(writer, http.StatusBadRequest, "invalid mission history flag")
+		return
+	}
+	if a.account.RefreshStateMissions(time.Now()) && !a.persistOrError(writer) {
+		return
+	}
 	a.writeProtocol(writer, map[string]any{
-		"missions": a.account.MissionInfos(),
+		"missions": a.account.MissionInfos(payload.IsReward != 0),
 	})
 }
 

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"net/http"
 	"time"
+
+	"kairisei.local/server/internal/gamestate"
 )
 
 func (a *API) teamBattleScheduleShow(writer http.ResponseWriter, request *http.Request) {
@@ -112,7 +114,5 @@ func teamBattleScheduleContains(groupIDs []int, target int) bool {
 }
 
 func teamBattleScheduleAnchorUnix(now time.Time) int64 {
-	local := now.Local()
-	year, month, day := local.Date()
-	return time.Date(year, month, day, 0, 0, 0, 0, local.Location()).Unix()
+	return gamestate.BattleClearDay(now.Unix())*86400 - 8*3600
 }

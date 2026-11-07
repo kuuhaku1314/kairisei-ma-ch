@@ -60,19 +60,22 @@ func validatePlayerProgressionRuntimeMaster(master playerProgressionRuntimeMaste
 	if master.SchemaVersion != 2 || master.ClientProfile != "cn602-bootstrap" ||
 		policy.ConfigVersion <= 0 || policy.MaxLevel < 2 || policy.MaxLevel > 1000 ||
 		policy.Experience.Base <= 0 || policy.Experience.PerLevel < 0 ||
+		(policy.Experience.HigherLevels.FromLevel != 0 &&
+			(policy.Experience.HigherLevels.FromLevel < 1 || policy.Experience.HigherLevels.FromLevel >= policy.MaxLevel ||
+				policy.Experience.HigherLevels.Base <= 0 || policy.Experience.HigherLevels.PerLevel < 0)) ||
 		policy.BattlePoints.Base <= 0 ||
 		policy.BattlePoints.LevelsPerPoint <= 0 || policy.BattlePoints.Maximum < policy.BattlePoints.Base ||
-		policy.Friends.Minimum <= 0 ||
-		policy.Friends.Denominator <= 0 || policy.Friends.Numerator <= 0 || policy.Friends.Maximum < policy.Friends.Minimum ||
+		policy.Friends.Base <= 0 || policy.Friends.Maximum < policy.Friends.Base ||
+		policy.Friends.IncreaseFromLevel < 1 || policy.Friends.IncreaseFromLevel > policy.MaxLevel || policy.Friends.FollowerDisplayLimit <= 0 ||
 		policy.Friends.HelperReward.OtherPerPartner <= 0 ||
 		policy.Friends.HelperReward.FriendPerPartner <= policy.Friends.HelperReward.OtherPerPartner ||
 		policy.Friends.HelperReward.MaximumPartners != 3 ||
-		policy.JobParameters.MaxStatusLevel <= 0 || len(policy.JobParameters.Maximum) != 5 {
+		policy.JobParameters.MaxStatusLevel <= 0 || len(policy.JobParameters.Maximum) != 6 {
 		return errors.New("CN player progression runtime identity or policy is invalid")
 	}
 	if policy.ExperienceRequired(policy.MaxLevel-1) <= 0 || policy.CumulativeExperience(policy.MaxLevel) <= 0 ||
 		policy.BattlePointMaximum(policy.MaxLevel) != policy.BattlePoints.Maximum ||
-		policy.FriendMaximum(policy.MaxLevel) != policy.Friends.Maximum {
+		policy.FollowMaximum(policy.MaxLevel) != policy.Friends.Maximum {
 		return errors.New("CN player progression runtime curve is invalid")
 	}
 	for index, value := range policy.JobParameters.Maximum {
@@ -123,7 +126,6 @@ func ApplyPlayerProgressionRuntimeMaster(
 	if wasBPFull {
 		state.User.BP = max(state.User.BP, state.User.BPMax)
 	}
-	state.User.FriendMax = policy.FriendMaximum(state.User.Level)
 	state.User.Jobs = policy.JobsAtLevel(state.User.Level)
 	state.PlayerProgressionConfigVersion = policy.ConfigVersion
 	if err := ValidatePlayerProgressionState(state.User, policy); err != nil {
@@ -134,7 +136,7 @@ func ApplyPlayerProgressionRuntimeMaster(
 
 func ValidatePlayerProgressionState(user gamestate.User, policy gamestate.PlayerProgressionPolicy) error {
 	if user.Level < 1 || user.Level > policy.MaxLevel || user.Experience < 0 || user.NowLevelExperience < 0 ||
-		user.BPMax != policy.BattlePointMaximum(user.Level) || user.FriendMax != policy.FriendMaximum(user.Level) ||
+		user.BPMax != policy.BattlePointMaximum(user.Level) ||
 		!slices.Equal(user.Jobs, policy.JobsAtLevel(user.Level)) {
 		return errors.New("CN player progression state does not match the runtime policy")
 	}

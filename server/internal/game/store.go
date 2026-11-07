@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"math"
 	"slices"
 	"sync"
 	"time"
 
+	"kairisei.local/server/battlemodel"
 	"kairisei.local/server/internal/gamestate"
 )
 
@@ -36,12 +38,14 @@ type cardDevelopmentRule struct {
 }
 
 type Account struct {
+	combatDefinitions           *battlemodel.Definitions
 	evolutionRestrictions       *EvolutionRestrictions
 	playerRevision              uint64
 	gachaRevision               uint64
 	operatorGachaPlays          map[int]int // plays of operator pools not yet appended to gachas
 	gachaCoverBaseURL           string
 	teamBattleScores            map[int]gamestate.TeamBattleScoreProgress
+	teamBattleSoloScores        map[int]gamestate.TeamBattleScoreProgress
 	localShop                   gamestate.LocalShopState
 	localCrystalPurchaseEnabled bool
 	mu                          sync.RWMutex
@@ -71,6 +75,7 @@ type Account struct {
 	avatarShopPolicy            gamestate.AvatarShopPolicy
 	cardTemplates               map[int]CardInfo
 	cardDefinitions             map[int]gamestate.Card
+	cardSellExtract             *gamestate.CardSellExtractPolicy
 	cardCategoryProfiles        []gamestate.CardCategoryProfile
 	cardGroupProfiles           []gamestate.CardGroupProfile
 	cardExperience              map[int][]int
@@ -94,12 +99,23 @@ type Account struct {
 	cardCollectionLoveMaxIDs    map[int]struct{}
 	cardCollectionPages         [][10]int
 	buddySlots                  int
-	missions                    []gamestate.Mission
+	missionCatalog              *MissionCatalog
+	missionRevision             uint64
+	missionDirty                map[gamestate.MissionMetric]bool
+	missionDay                  int64
+	missionNextStart            int64
+	missionRequestTime          time.Time
+	missionVisits               gamestate.MissionVisits
+	pvpMissionRanks             []PVPRankConfig
+	missions                    map[int]gamestate.MissionProgress
+	missionUpdates              map[int]struct{}
 	presents                    []gamestate.Present
 	presentHistories            []gamestate.Present
 	popupReadIDs                map[int]struct{}
 	loginBonusPolicy            gamestate.LoginBonusPolicy
 	tutorialCompletionMail      TutorialCompletionMail
+	alchemistStarter            *gamestate.AlchemistStarterDeck
+	alchemistMain               AlchemistMainParameters
 	loginBonusState             gamestate.LoginBonusState
 	nextUniqueID                int64
 	nextSphereUniqueID          int64
@@ -120,7 +136,7 @@ type Account struct {
 	currentLevelExperience      int
 	nextLevelExperience         int
 	currentJobs                 []gamestate.JobParameter
-	currentFriendMax            int
+	currentFollowMax            int
 	playerProgression           gamestate.PlayerProgressionPolicy
 	currentName                 string
 	currentComment              string
@@ -144,13 +160,14 @@ type Account struct {
 	tradeShopProfiles           map[int]gamestate.TradeShopProfile
 	tradeShopPurchases          map[int]int
 	itemShopTabs                []gamestate.ItemShopTab
+	runtimeSettingsRevision     int
 	itemShopSettings            map[int]ItemShopSetting
 	itemShopPurchases           map[int]int
 	itemShopPeriods             map[int]gamestate.ItemShopPeriodCounts
 	gachas                      []gamestate.GachaProfile
 	gachaWindows                map[int][2]int64
 	gachaSelections             map[int][]gamestate.Reward
-	gachaDailyClaims            map[int]string
+	gachaDailyClaims            map[int]gamestate.GachaDailyClaim
 	bp                          int
 	bpMax                       int
 	bpRecoveryInterval          time.Duration
@@ -173,7 +190,6 @@ type Account struct {
 	exploreStages               []gamestate.ExploreStage
 	exploreStageCursor          int
 	exploreActiveStage          int
-	followMax                   int
 	storyMainParts              []gamestate.StoryMainPart
 	cnStoryMainParts            []gamestate.StoryMainPart
 	storySubCharacters          []gamestate.StorySubCharacter
@@ -183,12 +199,16 @@ type Account struct {
 	activeMainStoryID           int
 	activeMainStoryCN           bool
 	activeSubStoryID            int
+	activeSubStoryTowerID       int
+	activeSubStoryTowerFloor    int
 	burstProgress               [4]uint8
 	storyTeamBattleSession      gamestate.StoryTeamBattleSession
+	questStoryCleared           map[int]bool
+	questStorySections          []gamestate.MainQuestReadingSectionDefinition
 	mainQuest                   json.RawMessage
 	stageQuests                 map[int]json.RawMessage
 	defaultStageQuestAreaID     int
-	teamBattleSolo              json.RawMessage
+	teamBattleSolo              *battleCatalogState
 	disabledTeamBattleBossIDs   map[int]bool
 	teamBattleLimitedGroupIDs   []int
 	teamBattleScheduleSoloPush  map[int]struct{}
@@ -202,6 +222,7 @@ type Account struct {
 	teamBattleFameBonus         gamestate.TeamBattleFameBonusPolicy
 	teamBattleHostBonus         gamestate.TeamBattleHostBonusPolicy
 	towerQuestProfiles          map[int]gamestate.TowerQuestProfile
+	towerAdmission              TowerAdmission
 	towerQuestProgress          map[int]gamestate.TowerQuestProgress
 	pendingStageAreaID          int
 	activeBattle                *TeamBattleContext
@@ -213,6 +234,7 @@ func CardsFromState(cards []gamestate.Card, slot int) []CardInfo {
 	for index, card := range cards {
 		result[index] = CardInfo{
 			UniqueID:      card.UniqueID,
+			CreateTime:    card.CreateTime,
 			CardID:        card.CardID,
 			Level:         card.Level,
 			LevelMax:      card.LevelMax,
@@ -287,7 +309,7 @@ func cloneLoginBonusSchedule(schedule []gamestate.LoginBonusDay) []gamestate.Log
 	return cloned
 }
 
-func New(state gamestate.State) (*Account, error) {
+func New(state gamestate.State, options ...AccountOption) (*Account, error) {
 	if err := gamestate.ValidateItemShopProgress(state.ItemShopPurchases, state.ItemShopPeriods); err != nil {
 		return nil, err
 	}
@@ -297,7 +319,6 @@ func New(state gamestate.State) (*Account, error) {
 			state.User.Level < 1 || state.User.Level > policy.MaxLevel ||
 			state.User.Experience < 0 || state.User.NowLevelExperience < 0 ||
 			state.User.BPMax != policy.BattlePointMaximum(state.User.Level) ||
-			state.User.FriendMax != policy.FriendMaximum(state.User.Level) ||
 			!slices.Equal(state.User.Jobs, policy.JobsAtLevel(state.User.Level)) {
 			return nil, errors.New("card store player progression state is invalid")
 		}
@@ -419,17 +440,11 @@ func New(state gamestate.State) (*Account, error) {
 		avatarDefaultDecks:          cloneIntMatrix(state.AvatarDefaultDecks),
 		avatarCompletions:           cloneAvatarCompletions(state.AvatarSeriesCompletions),
 		avatarShopPolicy:            state.AvatarShopPolicy,
-		cardTemplates:               make(map[int]CardInfo, len(cards)+len(containerCards)+len(state.CardTemplates)),
-		cardDefinitions:             make(map[int]gamestate.Card, len(state.CardTemplates)),
 		deckRankPolicy:              state.DeckRankPolicy,
 		highestDeckRank:             state.User.ArthurRank,
 		lastHomeDeckRank:            state.User.LastHomeDeckRank,
-		cardCategoryProfiles:        append([]gamestate.CardCategoryProfile(nil), state.CardCategoryProfiles...),
-		cardGroupProfiles:           cloneCardGroupProfiles(state.CardGroupProfiles),
-		cardExperience:              cloneCardExperienceTables(state.CardExperienceTables),
 		cardProgression:             state.CardProgressionPolicy,
-		cardLoveRules:               make(map[int]cardLoveRule, len(state.CardTemplates)),
-		cardDevelopmentRules:        make(map[int]cardDevelopmentRule, len(state.CardTemplates)),
+		alchemistStarter:            state.AlchemistStarterDeck,
 		cardDevelopmentPolicy:       state.CardDevelopmentPolicy,
 		teamBattleFameBonus:         cloneTeamBattleFameBonusPolicy(state.TeamBattleFameBonusPolicy),
 		teamBattleHostBonus:         cloneTeamBattleHostBonusPolicy(state.TeamBattleHostBonusPolicy),
@@ -442,10 +457,10 @@ func New(state gamestate.State) (*Account, error) {
 		supportDeckRules:            append([]gamestate.SupportDeckSlotUnlockRule(nil), state.SupportDeckSlotUnlockRules...),
 		supportUnlockedSlots:        append([]int8(nil), state.SupportDeck.UnlockSlotNums...),
 		cardCollectionIDs:           cardCollectionIDs,
-		cardCollectionPages:         append([][10]int(nil), state.CardCollectionPages...),
 		cardCollectionLoveMaxIDs:    make(map[int]struct{}),
 		buddySlots:                  buddySlots,
-		missions:                    cloneMissions(state.Engagement.Missions),
+		missionVisits:               state.Engagement.Visits,
+		missions:                    make(map[int]gamestate.MissionProgress, len(state.Engagement.Missions)),
 		presents:                    clonePresents(state.Engagement.Presents),
 		presentHistories:            clonePresents(state.Engagement.Histories),
 		popupReadIDs:                make(map[int]struct{}, len(state.Engagement.PopupReadIDs)),
@@ -465,7 +480,7 @@ func New(state gamestate.State) (*Account, error) {
 		currentLevelExperience:      state.User.NowLevelExperience,
 		nextLevelExperience:         state.User.NextLevelExperience,
 		currentJobs:                 append([]gamestate.JobParameter(nil), state.User.Jobs...),
-		currentFriendMax:            state.User.FriendMax,
+		currentFollowMax:            state.User.FollowMax,
 		playerProgression:           state.PlayerProgressionPolicy,
 		currentName:                 state.User.Name,
 		currentComment:              state.User.Comment,
@@ -489,6 +504,7 @@ func New(state gamestate.State) (*Account, error) {
 		tradeShopProfiles:           make(map[int]gamestate.TradeShopProfile, len(state.TradeShopProfiles)),
 		tradeShopPurchases:          make(map[int]int, len(state.TradeShopPurchases)),
 		teamBattleScores:            cloneTeamBattleScores(state.TeamBattleScores),
+		teamBattleSoloScores:        cloneTeamBattleScores(state.TeamBattleSoloScores),
 		localShop:                   cloneLocalShop(state.LocalShop),
 		itemShopTabs:                cloneItemShopTabs(state.ItemShopTabs),
 		itemShopPurchases:           maps.Clone(state.ItemShopPurchases),
@@ -496,7 +512,7 @@ func New(state gamestate.State) (*Account, error) {
 		gachas:                      CloneGachaProfiles(state.Gachas),
 		operatorGachaPlays:          maps.Clone(state.OperatorGachaPlays),
 		gachaSelections:             make(map[int][]gamestate.Reward, len(state.GachaSelections)),
-		gachaDailyClaims:            make(map[int]string, len(state.GachaDailyClaims)),
+		gachaDailyClaims:            make(map[int]gamestate.GachaDailyClaim, len(state.GachaDailyClaims)),
 		bp:                          state.User.BP,
 		bpMax:                       state.User.BPMax,
 		bpRecoveryInterval:          time.Duration(state.BattlePoint.RecoverySeconds) * time.Second,
@@ -509,6 +525,8 @@ func New(state gamestate.State) (*Account, error) {
 		activeMainStoryID:           state.Navigation.MainStoryID,
 		activeMainStoryCN:           state.Navigation.MainStoryCN,
 		activeSubStoryID:            state.Navigation.SubStoryID,
+		activeSubStoryTowerID:       state.Navigation.SubStoryTowerID,
+		activeSubStoryTowerFloor:    state.Navigation.SubStoryTowerFloor,
 		pendingStageAreaID:          state.Navigation.StageAreaID,
 		ap:                          state.User.AP,
 		apMax:                       state.User.APMax,
@@ -520,7 +538,6 @@ func New(state gamestate.State) (*Account, error) {
 		exploreStages:               cloneExploreStages(exploreStages),
 		exploreStageCursor:          state.Explore.StageCursor,
 		exploreActiveStage:          state.Explore.ActiveStageID,
-		followMax:                   state.Friends.FollowMax,
 		storyMainParts:              cloneStoryMainParts(state.Story.MainParts),
 		cnStoryMainParts:            cloneStoryMainParts(state.Story.CNMainParts),
 		storySubCharacters:          cloneStorySubCharacters(state.Story.SubCharacters),
@@ -530,7 +547,6 @@ func New(state gamestate.State) (*Account, error) {
 		mainQuest:                   append(json.RawMessage(nil), state.MainQuest...),
 		stageQuests:                 stageQuests,
 		defaultStageQuestAreaID:     defaultStageQuestAreaID,
-		teamBattleSolo:              append(json.RawMessage(nil), state.TeamBattleSolo...),
 		disabledTeamBattleBossIDs:   state.DisabledTeamBattleBossIDs,
 		teamBattleScheduleSoloPush:  make(map[int]struct{}, len(state.TeamBattleSchedule.SoloPushGroupIDs)),
 		teamBattleScheduleMultiPush: make(map[int]struct{}, len(state.TeamBattleSchedule.MultiPushGroupIDs)),
@@ -540,6 +556,24 @@ func New(state gamestate.State) (*Account, error) {
 		towerQuestProfiles:          make(map[int]gamestate.TowerQuestProfile, len(state.TowerQuestProfiles)),
 		towerQuestProgress:          make(map[int]gamestate.TowerQuestProgress, len(state.TowerQuestProgress)),
 	}
+	var dependencies accountOptions
+	for _, option := range options {
+		option(&dependencies)
+	}
+	result.alchemistMain = dependencies.alchemistMain
+	result.combatDefinitions = dependencies.combatDefinitions
+	if dependencies.cardCatalog == nil {
+		var err error
+		dependencies.cardCatalog, err = NewCardCatalog(state)
+		if err != nil {
+			return nil, err
+		}
+	}
+	result.teamBattleSolo, err = newBattleCatalogState(state.TeamBattleSolo, dependencies.battleCatalog)
+	if err != nil {
+		return nil, fmt.Errorf("prepare battle catalog: %w", err)
+	}
+	result.useCardCatalog(dependencies.cardCatalog)
 	result.collectionRewardIDs = make(map[[2]int]struct{}, len(state.CollectionRewards))
 	result.nextUniqueID = max(1, state.InventorySequence.Card)
 	result.nextSphereUniqueID = max(1, state.InventorySequence.Sphere)
@@ -552,6 +586,11 @@ func New(state gamestate.State) (*Account, error) {
 	}
 	result.burstProgress = state.BurstProgress
 	result.storyTeamBattleSession = state.StoryTeamBattleSession
+	result.questStoryCleared = make(map[int]bool, len(state.Story.QuestClearedIDs))
+	for _, id := range state.Story.QuestClearedIDs {
+		result.questStoryCleared[id] = true
+	}
+	result.questStorySections = state.MainQuestReadingSections
 	result.reconcileOnboardingFeatureUnlocksLocked()
 	for _, template := range state.StackCardTemplates {
 		if template.CardID <= 0 || template.Num != 0 || template.AddExperience <= 0 || template.BaseAddPrice < 0 {
@@ -584,6 +623,13 @@ func New(state gamestate.State) (*Account, error) {
 			return nil, fmt.Errorf("popup read state repeats ID %d", popupID)
 		}
 		result.popupReadIDs[popupID] = struct{}{}
+	}
+	for _, mission := range state.Engagement.Missions {
+		if _, duplicate := result.missions[mission.Info.MissionID]; duplicate {
+			return nil, errors.New("mission IDs must be unique")
+		}
+		mission.Info.MatchedTargets = append([]int(nil), mission.Info.MatchedTargets...)
+		result.missions[mission.Info.MissionID] = mission.Info
 	}
 	for _, profile := range state.TowerQuestProfiles {
 		if _, duplicate := result.towerQuestProfiles[profile.TowerID]; duplicate {
@@ -642,24 +688,24 @@ func New(state gamestate.State) (*Account, error) {
 		result.teamBattleStartReceipts = append(result.teamBattleStartReceipts, receipt)
 	}
 	for _, receipt := range state.TeamBattleResultReceipts {
-		if receipt.RoomID <= 0 || receipt.ClaimedAtUnix <= 0 || len(receipt.Response) == 0 || !json.Valid(receipt.Response) {
+		if receipt.RoomID <= 0 || receipt.ClaimedAtUnix <= 0 || (len(receipt.Snapshot) != 0 && !json.Valid(receipt.Snapshot)) {
 			return nil, errors.New("card store team battle result receipt is invalid")
 		}
 		if _, duplicate := result.teamBattleReceipts[receipt.RoomID]; duplicate {
 			return nil, errors.New("card store team battle result receipt room is duplicated")
 		}
-		receipt.Response = append(json.RawMessage(nil), receipt.Response...)
+		receipt.Snapshot = append(json.RawMessage(nil), receipt.Snapshot...)
 		result.teamBattleReceipts[receipt.RoomID] = receipt
 	}
 	for _, receipt := range state.TeamBattleSoloResultReceipts {
 		if !isLowerSHA256Digest(receipt.RequestSHA256) || receipt.BossID <= 0 || receipt.ClaimedAtUnix <= 0 ||
-			len(receipt.Response) == 0 || !json.Valid(receipt.Response) {
+			(len(receipt.Snapshot) != 0 && !json.Valid(receipt.Snapshot)) {
 			return nil, errors.New("card store solo team battle result receipt is invalid")
 		}
 		if _, duplicate := result.teamBattleSoloReceipts[receipt.RequestSHA256]; duplicate {
 			return nil, errors.New("card store solo team battle result receipt digest is duplicated")
 		}
-		receipt.Response = append(json.RawMessage(nil), receipt.Response...)
+		receipt.Snapshot = append(json.RawMessage(nil), receipt.Snapshot...)
 		result.teamBattleSoloReceipts[receipt.RequestSHA256] = receipt
 	}
 	if receipt := state.ExploreResultReceipt; receipt != nil {
@@ -744,9 +790,11 @@ func New(state gamestate.State) (*Account, error) {
 		}
 		profile := findGachaProfile(result.gachas, selection.GachaID)
 		if profile == nil {
-			return nil, fmt.Errorf("card store gacha selection %d has no profile", selection.GachaID)
-		}
-		if err := validateGachaSelection(*profile, selection.Rewards); err != nil {
+			if selection.GachaID < gamestate.OperatorGachaFirstID {
+				return nil, fmt.Errorf("card store gacha selection %d has no profile", selection.GachaID)
+			}
+			// The published operator profile is attached after loading the account.
+		} else if err := validateGachaSelection(*profile, selection.Rewards); err != nil {
 			return nil, err
 		}
 		result.gachaSelections[selection.GachaID] = cloneRewards(selection.Rewards)
@@ -757,13 +805,16 @@ func New(state gamestate.State) (*Account, error) {
 		}
 		profile := findGachaProfile(result.gachas, claim.GachaID)
 		operator := claim.GachaID >= gamestate.OperatorGachaFirstID && (profile == nil || profile.PublicationKey == "operator")
-		if (profile == nil || !profile.DailyFirstFree) && !operator {
+		if (profile == nil && !operator) || claim.PlayCount < 0 || claim.PlayCount > math.MaxInt32 {
 			return nil, fmt.Errorf("card store gacha daily claim %d has no daily profile", claim.GachaID)
 		}
 		if _, err := time.Parse("2006-01-02", claim.Day); err != nil {
 			return nil, fmt.Errorf("card store gacha daily claim %d has an invalid day", claim.GachaID)
 		}
-		result.gachaDailyClaims[claim.GachaID] = claim.Day
+		if claim.PlayCount == 0 {
+			claim.PlayCount, claim.FreeClaimed = 1, true
+		}
+		result.gachaDailyClaims[claim.GachaID] = claim
 	}
 	for _, definition := range state.SphereDefinitions {
 		if _, duplicate := result.sphereDefinitions[definition.SphereID]; duplicate {
@@ -874,14 +925,16 @@ func New(state gamestate.State) (*Account, error) {
 	}
 	for towerID, profile := range result.towerQuestProfiles {
 		progress, exists := result.towerQuestProgress[towerID]
-		_, itemExists := result.itemDefinitions[profile.ItemID]
-		if !exists || !itemExists || progress.Floor < 0 || progress.Floor > len(profile.Floors) ||
+		if !exists || progress.Floor < 0 || progress.Floor > len(profile.Floors) ||
 			progress.LoseCount < 0 || progress.LoseCount >= profile.LoseCountMax {
 			return nil, fmt.Errorf("card store tower profile %d is incomplete", towerID)
 		}
-	}
-	if result.followMax < 1 {
-		return nil, errors.New("friend store capacity is invalid")
+		for _, floor := range profile.Floors {
+			_, itemExists := result.itemDefinitions[floor.ItemID]
+			if !floor.ValidEntryCost() || floor.ItemID > 0 && !itemExists {
+				return nil, fmt.Errorf("card store tower floor %d:%d has an invalid cost", towerID, floor.Floor)
+			}
+		}
 	}
 	if state.Explore.StartedAtUnix > 0 {
 		result.exploreStartedAt = time.Unix(state.Explore.StartedAtUnix, 0)
@@ -901,42 +954,6 @@ func New(state gamestate.State) (*Account, error) {
 			result.bpNextRecovery = time.Unix(state.BattlePoint.NextRecoveryUnix, 0)
 		} else {
 			result.bpNextRecovery = time.Now().Add(result.bpRecoveryInterval)
-		}
-	}
-	for _, persisted := range state.CardTemplates {
-		if persisted.LoveMax < 0 {
-			return nil, fmt.Errorf("card template %d has an invalid love maximum", persisted.CardID)
-		}
-		card := CardInfo{
-			UniqueID:      persisted.UniqueID,
-			CardID:        persisted.CardID,
-			Level:         persisted.Level,
-			LevelMax:      persisted.LevelMax,
-			Experience:    persisted.Experience,
-			NowLevelEXP:   persisted.NowLevelExperience,
-			Love:          persisted.Love,
-			LoveMax:       persisted.LoveMax,
-			SkillLevels:   append([]int16(nil), persisted.SkillLevels...),
-			HP:            persisted.HP,
-			Attack:        persisted.Attack,
-			Magic:         persisted.Magic,
-			Mind:          persisted.Mind,
-			NextLevelEXP:  persisted.NextLevelExperience,
-			AddExperience: persisted.AddExperience,
-			BaseAddPrice:  persisted.BaseAddPrice,
-			IsLock:        0,
-			Fame:          persisted.Fame,
-			Slot:          0,
-		}
-		result.cardTemplates[card.CardID] = card
-		result.cardDefinitions[card.CardID] = persisted
-		result.cardLoveRules[card.CardID] = cardLoveRule{
-			Max: persisted.LoveMax, Premium: persisted.PremiumRarity,
-		}
-		result.cardDevelopmentRules[card.CardID] = cardDevelopmentRule{
-			FameMax: persisted.FameMax, DevelopmentType: persisted.DevelopmentType,
-			DecomposeRadix: persisted.DecomposeRadix, DevelopRadix: persisted.DevelopRadix,
-			AcquisitionText: persisted.AcquisitionText,
 		}
 	}
 	if result.cardDevelopmentPolicy.TimeEveryFameSeconds <= 0 ||
@@ -1176,11 +1193,20 @@ func New(state gamestate.State) (*Account, error) {
 		return nil, fmt.Errorf("complete training sword unlocks: %w", err)
 	}
 	result.initialStateRepair = repairedDecks || len(result.unlockedFeatureIDs) != featureCount
+	owned := ownedCardIDs(result.cards)
 	for _, deck := range result.decks {
-		if err := result.validateDeck(deck); err != nil {
+		if err := result.validateStoredDeck(deck, owned); err != nil {
 			return nil, fmt.Errorf("validate initial deck: %w", err)
 		}
 	}
+	result.missionCatalog = dependencies.missions
+	if result.missionCatalog == nil {
+		result.missionCatalog, err = NewMissionCatalog(state.MissionDefinitions)
+		if err != nil {
+			return nil, err
+		}
+	}
+	result.markAllMissionMetricsLocked()
 	if err := result.validateEngagementLocked(); err != nil {
 		return nil, fmt.Errorf("validate mission and present state: %w", err)
 	}

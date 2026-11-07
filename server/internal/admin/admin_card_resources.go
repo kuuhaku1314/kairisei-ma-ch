@@ -10,9 +10,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
+	"kairisei.local/server/battlecontent"
 	"kairisei.local/server/internal/masterdata"
 	"kairisei.local/server/internal/protocol"
 )
@@ -36,20 +36,6 @@ func loadAdminCardResources(master masterdata.CardRuntimeMaster, masterPath, ass
 	if err := json.Unmarshal(master.Source, &provenance); err != nil {
 		return nil, err
 	}
-	content, err := os.ReadFile(filepath.Join(filepath.Dir(masterPath), "cn602-card-master", "card.csv"))
-	if err != nil {
-		return nil, err
-	}
-	digest := sha256.Sum256(content)
-	verified := false
-	for _, source := range provenance.Files {
-		if filepath.Base(filepath.FromSlash(source.Path)) == "card.csv" && source.Bytes == len(content) && source.SHA256 == hex.EncodeToString(digest[:]) {
-			verified = true
-		}
-	}
-	if !verified {
-		return nil, errors.New("admin card source differs from the runtime master receipt")
-	}
 	file, err := os.Open(assetMapPath)
 	if err != nil {
 		return nil, err
@@ -67,38 +53,52 @@ func loadAdminCardResources(master masterdata.CardRuntimeMaster, masterPath, ass
 	for _, asset := range assets.CatalogAssets {
 		names[strings.ToLower(asset.Name)] = true
 	}
-	lines := bufio.NewScanner(strings.NewReader(strings.TrimPrefix(string(content), "\ufeff")))
-	lines.Buffer(make([]byte, 4096), 4*1024*1024)
-	if !lines.Scan() {
-		return nil, errors.New("admin card source has no header")
-	}
-	header := protocol.SplitCSVLine(lines.Text())
-	if len(header) <= 36 || header[36] != "PictID" {
-		return nil, errors.New("admin card PictID column differs")
-	}
 	resources := make(map[int]adminCardResource)
-	// Use the same physical-line dialect as CardDataContainer / battle master.
-	for lines.Scan() {
-		row := protocol.SplitCSVLine(lines.Text())
-		if len(row) <= 36 {
-			continue
-		}
-		id, err := strconv.Atoi(row[0])
-		if err != nil {
-			continue
-		}
-		pict, err := strconv.Atoi(row[36])
-		if err != nil {
-			return nil, fmt.Errorf("card %d has invalid PictID", id)
-		}
-		if _, duplicate := resources[id]; duplicate {
-			return nil, fmt.Errorf("duplicate card identity %d", id)
-		}
-		ready := pict >= 10000000 && names[fmt.Sprintf("chr10_%08d", pict)] && names[fmt.Sprintf("chr20_%08d", pict)]
-		resources[id] = adminCardResource{Name: strings.TrimSpace(row[5]), PictID: pict, Ready: ready}
+	tables := []string{"card.csv"}
+	if master.AlchemistStarterDeck != nil {
+		tables = append(tables, "card_alchemist.csv")
 	}
-	if err := lines.Err(); err != nil {
-		return nil, err
+	for _, name := range tables {
+		content, err := os.ReadFile(filepath.Join(filepath.Dir(masterPath), "cn602-card-master", name))
+		if err != nil {
+			return nil, err
+		}
+		digest := sha256.Sum256(content)
+		verified := false
+		for _, source := range provenance.Files {
+			if filepath.Base(filepath.FromSlash(source.Path)) == name && source.Bytes == len(content) && source.SHA256 == hex.EncodeToString(digest[:]) {
+				verified = true
+			}
+		}
+		if !verified {
+			return nil, fmt.Errorf("admin card source %s differs from the runtime master receipt", name)
+		}
+		lines := bufio.NewScanner(strings.NewReader(strings.TrimPrefix(string(content), "\ufeff")))
+		lines.Buffer(make([]byte, 4096), 4*1024*1024)
+		if !lines.Scan() {
+			return nil, errors.New("admin card source has no header")
+		}
+		header := protocol.SplitCSVLine(lines.Text())
+		if err := battlecontent.ValidateCardPresentationHeader(header); err != nil {
+			return nil, err
+		}
+		// Use the same physical-line dialect as CardDataContainer / battle master.
+		err = battlecontent.ReadCardData(strings.NewReader(string(content)), func(row []string) error {
+			card, err := battlecontent.ParseCardPresentation(row)
+			if err != nil {
+				return err
+			}
+			if _, duplicate := resources[card.ID]; duplicate {
+				return fmt.Errorf("duplicate card identity %d", card.ID)
+			}
+			pict := card.PictureID
+			ready := pict >= 10000000 && names[fmt.Sprintf("chr10_%08d", pict)] && names[fmt.Sprintf("chr20_%08d", pict)]
+			resources[card.ID] = adminCardResource{Name: card.Name, PictID: pict, Ready: ready}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 	for _, card := range master.CardTemplates {
 		if _, ok := resources[card.CardID]; !ok {

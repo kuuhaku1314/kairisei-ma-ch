@@ -95,5 +95,6 @@ func (images cardImages) serveHTTP(writer http.ResponseWriter, request *http.Req
 	writer.Header().Set("Content-Type", "image/png")
 	writer.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	writer.Header().Set("ETag", `"`+file.SHA256+`"`)
+	allowResourceTransfer(writer, file.Bytes)
 	http.ServeFile(writer, request, file.SourcePath)
 }

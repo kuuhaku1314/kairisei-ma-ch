@@ -49,7 +49,7 @@ func (a *API) friendSearch(
 		a.writeStoreError(writer, err)
 		return
 	}
-	relations, err := a.localAccountFriendRelations()
+	relations, err := a.friendPointAccounts.FindFriendPointAccountByInviteID(a.initialState.User.UserID, payload.InviteID)
 	if err != nil {
 		writeError(writer, http.StatusInternalServerError, err.Error())
 		return
@@ -71,8 +71,7 @@ func (a *API) followShow(
 	writer http.ResponseWriter,
 	_ *http.Request,
 ) {
-	followMax := a.account.FollowMaximum()
-	relations, err := a.localAccountFriendRelations()
+	relations, err := a.friendPointAccounts.ListFollowedFriendPointAccounts(a.initialState.User.UserID)
 	if err != nil {
 		writeError(writer, http.StatusInternalServerError, err.Error())
 		return
@@ -87,8 +86,7 @@ func (a *API) followShow(
 		}
 	}
 	a.writeProtocol(writer, map[string]any{
-		"follow_max": followMax,
-		"friends":    friendPayloads(friends),
+		"friends": friendPayloads(friends),
 	})
 }
 
@@ -103,7 +101,7 @@ func (a *API) followerShow(
 		a.writeStoreError(writer, err)
 		return
 	}
-	relations, err := a.localAccountFriendRelations()
+	relations, total, err := a.friendPointAccounts.ListFollowerFriendPointAccounts(a.initialState.User.UserID, a.account.FollowerDisplayLimit())
 	if err != nil {
 		writeError(writer, http.StatusInternalServerError, err.Error())
 		return
@@ -120,7 +118,7 @@ func (a *API) followerShow(
 	friends := friendPayloads(followerFriends)
 	a.writeProtocol(writer, map[string]any{
 		"friends":      friends,
-		"follower_num": len(friends),
+		"follower_num": total,
 		"page_max":     1,
 	})
 }
@@ -142,7 +140,6 @@ func (a *API) followAdd(writer http.ResponseWriter, request *http.Request) {
 		a.initialState.User.UserID,
 		payload.UserIDs,
 		followMax,
-		a.account.FriendMaximum(),
 	)
 	if err != nil {
 		var followErr *game.FollowAddError
@@ -310,7 +307,7 @@ func (a *API) userProfileShow(
 		)
 		return
 	}
-	relations, err := a.localAccountFriendRelations()
+	relations, err := a.friendPointAccounts.LoadFriendPointAccountRelations(a.initialState.User.UserID, []int{payload.UserID})
 	if err != nil {
 		writeError(writer, http.StatusInternalServerError, err.Error())
 		return

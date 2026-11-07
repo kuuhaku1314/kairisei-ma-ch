@@ -30,8 +30,9 @@ func (s *Server) tryStartLoadedBattle(roomID int64) error {
 	}
 	spec := RoomSpec{
 		ScorePolicy:  current.scorePolicy,
-		EnemyPartyID: current.enemyPartyID, CostInitial: current.costInitial,
+		EnemyPartyID: current.enemyPartyID, EnemyType: current.enemyType, CostInitial: current.costInitial,
 		ContinueAllowed: current.continueAllowed,
+		AwakeTakeover:   current.awakeTakeover,
 		HoldMax:         current.holdMax, BurstGaugeInitial: current.burstGaugeInitial, Seed: current.seed,
 		Drops: append([]BattleDrop(nil), current.drops...),
 	}
@@ -102,7 +103,7 @@ func (s *Server) authorizeBattleStart(roomID int64, state RoomState, checkOnly b
 		broadcastRoomFrames(s, roomID, deliveries)
 		return errors.New("multiplayer start requires at least two real players")
 	}
-	if !ok || current.State != state || current.hostCostPaid || hub.startAuthorizer == nil {
+	if !ok || current.closing || current.State != state || current.hostCostPaid || hub.startAuthorizer == nil {
 		session.Unlock()
 		return nil
 	}

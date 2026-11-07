@@ -13,6 +13,9 @@ import (
 // profile uses it to commit its SQLite save snapshot.
 type StatePersister func(gamestate.State) error
 
+// Snapshot prepares a coherent save, including natural recovery and deck-rank
+// progress. It is commit preparation, not a pure display query; callers hold
+// the account transaction lock and publish only after persistence succeeds.
 func (s *Account) Snapshot(base gamestate.State) gamestate.State {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -22,6 +25,7 @@ func (s *Account) Snapshot(base gamestate.State) gamestate.State {
 func (s *Account) snapshotLocked(base gamestate.State) gamestate.State {
 	s.refreshDeckRanksLocked()
 	now := time.Now()
+	s.refreshStateMissionsLocked(s.missionTimeLocked(now))
 	s.refreshAPLocked(now)
 	s.refreshBattlePointsLocked(now)
 
@@ -29,12 +33,15 @@ func (s *Account) snapshotLocked(base gamestate.State) gamestate.State {
 	state.InventorySequence = gamestate.InventorySequenceState{Card: s.nextUniqueID, Sphere: s.nextSphereUniqueID, Buddy: s.nextBuddyUniqueID}
 	state.BurstProgress = s.burstProgress
 	state.StoryTeamBattleSession = s.storyTeamBattleSession
+	state.Story.QuestClearedIDs = s.questStoryClearedIDsLocked()
 	state.Navigation = gamestate.NavigationState{
 		MainStoryID: s.activeMainStoryID, MainStoryCN: s.activeMainStoryCN,
 		SubStoryID: s.activeSubStoryID, StageAreaID: s.pendingStageAreaID,
+		SubStoryTowerID: s.activeSubStoryTowerID, SubStoryTowerFloor: s.activeSubStoryTowerFloor,
 	}
 	state.LocalShop = cloneLocalShop(s.localShop)
 	state.TeamBattleScores = cloneTeamBattleScores(s.teamBattleScores)
+	state.TeamBattleSoloScores = cloneTeamBattleScores(s.teamBattleSoloScores)
 	state.User.ActiveArthurType = int(s.currentActiveArthur)
 	state.User.ArthurRank = s.highestDeckRank
 	state.User.LastHomeDeckRank = s.lastHomeDeckRank
@@ -47,7 +54,7 @@ func (s *Account) snapshotLocked(base gamestate.State) gamestate.State {
 	state.User.NowLevelExperience = s.currentLevelExperience
 	state.User.NextLevelExperience = s.nextLevelExperience
 	state.User.Jobs = append([]gamestate.JobParameter(nil), s.currentJobs...)
-	state.User.FriendMax = s.currentFriendMax
+	state.User.FollowMax = s.currentFollowMax
 	state.User.Name = s.currentName
 	state.User.Comment = s.currentComment
 	state.User.NaviID = s.currentNaviID
@@ -99,11 +106,11 @@ func (s *Account) snapshotLocked(base gamestate.State) gamestate.State {
 		return state.GachaSelections[left].GachaID < state.GachaSelections[right].GachaID
 	})
 	state.GachaDailyClaims = make([]gamestate.GachaDailyClaim, 0, len(s.gachaDailyClaims))
-	for gachaID, day := range s.gachaDailyClaims {
-		state.GachaDailyClaims = append(state.GachaDailyClaims, gamestate.GachaDailyClaim{
-			GachaID: gachaID,
-			Day:     day,
-		})
+	gachaDay := gachaLocalDayKey(now)
+	for _, claim := range s.gachaDailyClaims {
+		if claim.Day == gachaDay {
+			state.GachaDailyClaims = append(state.GachaDailyClaims, claim)
+		}
 	}
 	sort.Slice(state.GachaDailyClaims, func(left, right int) bool {
 		return state.GachaDailyClaims[left].GachaID < state.GachaDailyClaims[right].GachaID
@@ -154,14 +161,8 @@ func (s *Account) snapshotLocked(base gamestate.State) gamestate.State {
 		state.Explore.APNextRecoveryUnix = s.apNextRecovery.Unix()
 	}
 
-	baseCards := make(map[int64]gamestate.Card, len(base.Cards)+len(base.ContainerCards))
-	for _, inventory := range [][]gamestate.Card{base.Cards, base.ContainerCards} {
-		for _, card := range inventory {
-			baseCards[card.UniqueID] = card
-		}
-	}
-	state.Cards = snapshotCards(s.cards, baseCards, s.cardDefinitions)
-	state.ContainerCards = snapshotCards(s.containerCards, baseCards, s.cardDefinitions)
+	state.Cards = snapshotCards(s.cards, s.cardDefinitions)
+	state.ContainerCards = snapshotCards(s.containerCards, s.cardDefinitions)
 	state.StackCards = append([]gamestate.CardStack(nil), s.stackCards...)
 	state.CardDevelopment = gamestate.CardDevelopmentState{Stive: s.stive}
 	if s.cardFameTraining != nil {
@@ -215,13 +216,13 @@ func (s *Account) snapshotLocked(base gamestate.State) gamestate.State {
 	}
 	sort.Ints(state.Honors.HonorIDs)
 	state.Honors.DeckHonorIDs = append([]int(nil), s.deckHonorIDs...)
-	state.Friends.FollowMax = s.followMax
 	state.Story.MainParts = cloneStoryMainParts(s.storyMainParts)
 	state.Story.CNMainParts = cloneStoryMainParts(s.cnStoryMainParts)
 	state.Story.SubCharacters = cloneStorySubCharacters(s.storySubCharacters)
 	state.Story.Events = cloneStoryEvents(s.storyEvents)
 	state.Engagement.Initialized = true
-	state.Engagement.Missions = cloneMissions(s.missions)
+	state.Engagement.Missions = s.snapshotMissionsLocked()
+	state.Engagement.Visits = s.missionVisits
 	state.Engagement.Presents = clonePresents(s.presents)
 	state.Engagement.Histories = clonePresents(s.presentHistories)
 	state.Engagement.PopupReadIDs = make([]int, 0, len(s.popupReadIDs))
@@ -252,7 +253,7 @@ func (s *Account) snapshotLocked(base gamestate.State) gamestate.State {
 			)
 		}
 	}
-	state.TeamBattleSolo = append([]byte(nil), s.teamBattleSolo...)
+	state.TeamBattleSolo = append([]byte(nil), s.teamBattleSolo.saved()...)
 	state.ActiveTeamBattle = snapshotTeamBattleContext(s.activeBattle)
 	state.TeamBattleStartReceipts = append([]gamestate.TeamBattleStartReceipt(nil), s.teamBattleStartReceipts...)
 	state.TeamBattleContinueReceipts = append([]gamestate.TeamBattleContinueReceipt(nil), s.teamBattleContinueReceipts...)
@@ -268,7 +269,7 @@ func (s *Account) snapshotLocked(base gamestate.State) gamestate.State {
 	sort.Ints(state.TeamBattleSchedule.MultiPushGroupIDs)
 	state.TeamBattleResultReceipts = make([]gamestate.TeamBattleResultReceipt, 0, len(s.teamBattleReceipts))
 	for _, receipt := range s.teamBattleReceipts {
-		receipt.Response = append([]byte(nil), receipt.Response...)
+		receipt.Snapshot = append([]byte(nil), receipt.Snapshot...)
 		state.TeamBattleResultReceipts = append(state.TeamBattleResultReceipts, receipt)
 	}
 	sort.Slice(state.TeamBattleResultReceipts, func(left, right int) bool {
@@ -280,7 +281,7 @@ func (s *Account) snapshotLocked(base gamestate.State) gamestate.State {
 		len(s.teamBattleSoloReceipts),
 	)
 	for _, receipt := range s.teamBattleSoloReceipts {
-		receipt.Response = append([]byte(nil), receipt.Response...)
+		receipt.Snapshot = append([]byte(nil), receipt.Snapshot...)
 		state.TeamBattleSoloResultReceipts = append(state.TeamBattleSoloResultReceipts, receipt)
 	}
 	sort.Slice(state.TeamBattleSoloResultReceipts, func(left, right int) bool {
@@ -313,16 +314,13 @@ func (s *Account) snapshotLocked(base gamestate.State) gamestate.State {
 
 func snapshotCards(
 	cards []CardInfo,
-	baseCards map[int64]gamestate.Card,
 	definitions map[int]gamestate.Card,
 ) []gamestate.Card {
 	result := make([]gamestate.Card, len(cards))
 	for index, card := range cards {
-		persisted, exists := definitions[card.CardID]
-		if !exists {
-			persisted = baseCards[card.UniqueID]
-		}
+		persisted := definitions[card.CardID]
 		persisted.UniqueID = card.UniqueID
+		persisted.CreateTime = card.CreateTime
 		persisted.CardID = card.CardID
 		persisted.Level = card.Level
 		persisted.LevelMax = card.LevelMax

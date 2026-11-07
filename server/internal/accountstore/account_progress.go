@@ -12,6 +12,7 @@ import (
 // Only identities and player progress cross the persistence boundary. Names,
 // artwork, costs, enemy definitions and reward lineups come from the catalog.
 type catalogProgress struct {
+	BossBuffUntil map[int]int64                          `json:"boss_buff_until,omitempty"`
 	GachaPlays    map[int]int                            `json:"gacha_plays,omitempty"`
 	ShopPurchases map[int]int                            `json:"shop_purchases,omitempty"`
 	ShopPeriods   map[int]gamestate.ItemShopPeriodCounts `json:"shop_periods,omitempty"`
@@ -21,13 +22,15 @@ type catalogProgress struct {
 	CNMainStory   map[int]int                            `json:"cn_main_story,omitempty"`
 	SubStory      map[int]int                            `json:"sub_story,omitempty"`
 	EventStory    map[int]int                            `json:"event_story,omitempty"`
+	QuestStory    []int                                  `json:"quest_story,omitempty"`
 }
 
 func collectCatalogProgress(state gamestate.State) (catalogProgress, error) {
 	p := catalogProgress{
-		GachaPlays: map[int]int{}, ShopPurchases: map[int]int{}, BossStates: map[int]int{},
+		GachaPlays: map[int]int{}, ShopPurchases: map[int]int{}, BossStates: map[int]int{}, BossBuffUntil: map[int]int64{},
 		MainStory: map[int]int{}, CNMainStory: map[int]int{}, SubStory: map[int]int{}, EventStory: map[int]int{},
 	}
+	p.QuestStory = append([]int(nil), state.Story.QuestClearedIDs...)
 	listed := make(map[int]bool, len(state.Gachas))
 	for _, gacha := range state.Gachas {
 		listed[gacha.GachaID] = true
@@ -64,12 +67,21 @@ func collectCatalogProgress(state gamestate.State) (catalogProgress, error) {
 		if len(solo[category]) == 0 {
 			continue
 		}
-		var groups []masterdata.BattleGroupIdentity
+		var groups []struct {
+			Bosses []struct {
+				BossID int   `json:"0"`
+				State  int   `json:"10"`
+				Until  int64 `json:"16"`
+			} `json:"10"`
+		}
 		if err := json.Unmarshal(solo[category], &groups); err != nil {
 			return p, fmt.Errorf("decode battle progress category %s: %w", category, err)
 		}
 		for _, group := range groups {
 			for _, boss := range group.Bosses {
+				if boss.Until > p.BossBuffUntil[boss.BossID] {
+					p.BossBuffUntil[boss.BossID] = boss.Until
+				}
 				if boss.State > p.BossStates[boss.BossID] {
 					p.BossStates[boss.BossID] = boss.State
 				}
@@ -168,6 +180,9 @@ func (p catalogProgress) apply(state *gamestate.State) error {
 						return err
 					}
 					boss["10"] = json.RawMessage(fmt.Sprint(p.BossStates[id]))
+					if until := p.BossBuffUntil[id]; until > 0 {
+						boss["16"] = json.RawMessage(fmt.Sprint(until))
+					}
 				}
 				encoded, err := json.Marshal(bosses)
 				if err != nil {
@@ -267,5 +282,6 @@ func (p catalogProgress) apply(state *gamestate.State) error {
 		}
 	}
 	state.Story = story
+	state.Story.QuestClearedIDs = append([]int(nil), p.QuestStory...)
 	return nil
 }

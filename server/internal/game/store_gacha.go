@@ -2,11 +2,11 @@ package game
 
 import (
 	"crypto/rand"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
 	"math/big"
+	"sort"
 	"time"
 
 	"kairisei.local/server/internal/gamestate"
@@ -26,10 +26,12 @@ func (s *Account) HomeBannerGachaID(now time.Time) int {
 	defer s.mu.RUnlock()
 	selected := gamestate.GachaProfile{}
 	groupPlays := s.gachaGroupPlaysLocked()
+	dailyPlays := s.gachaDailyGroupPlaysLocked(gachaLocalDayKey(now))
 	for _, gacha := range s.gachas {
 		gacha.GroupPlayCount = groupPlays[gacha.GroupID]
+		gacha.DailyGroupPlays = dailyPlays[gacha.GroupID]
 		gacha = gacha.CurrentStep()
-		if gacha.Exhausted() || !s.gachaScheduledLocked(gacha.GachaID) || gacha.GachaType != 0 || gacha.PayType != 3 ||
+		if gacha.Exhausted() || gacha.DailyExhausted() || !s.gachaScheduledLocked(gacha.GachaID) || gacha.GachaType != 0 || gacha.PayType != 3 ||
 			gacha.CardNum <= 1 || gacha.CardNumMax <= 1 ||
 			int64(gacha.EndTime) <= now.Unix() {
 			continue
@@ -77,53 +79,87 @@ func (s *Account) VisibleGachasLocked() []gamestate.GachaProfile {
 			candidates = append(candidates, gacha)
 		}
 	}
-	// Preserve one affordable single-draw payment per profession; the native
-	// profession picker must receive all the distinct profession choices.
+	// The native list has one single-draw button per profession. Resolve its
+	// payment without hiding another profession or an affordable alternative.
 	key := func(g gamestate.GachaProfile) [2]int { return [2]int{g.GroupID, int(g.ArthurType)} }
-	preferredSingles := make(map[[2]int]int)
-	for _, payType := range []int{4, 2, 3, 6} {
-		for _, gacha := range candidates {
-			if gacha.CardNumMax != 1 || gacha.PayType != payType {
-				continue
-			}
-			if _, exists := preferredSingles[key(gacha)]; exists {
-				continue
-			}
-			if payType == 4 && s.items[gacha.PayTypeID].Num < gacha.Price {
-				continue
-			}
-			preferredSingles[key(gacha)] = gacha.GachaID
-		}
-	}
-	// A group whose only single-draw payment is an item must remain visible
-	// even when the account does not own that item. The stock client uses that
-	// row to open ItemLackTips (notably item 9010 / idx 8). The preference pass
-	// above may still replace an unavailable ticket row when the same group has
-	// an actually usable crystal or FP single-draw alternative.
+	type singleChoice struct{ id, rank int }
+	preferredSingles := make(map[[2]int]singleChoice)
+	now := time.Now()
+	dayKey := gachaLocalDayKey(now)
+	dailyPlays := s.gachaDailyGroupPlaysLocked(dayKey)
 	for _, gacha := range candidates {
 		if gacha.CardNumMax != 1 {
 			continue
 		}
-		if _, exists := preferredSingles[key(gacha)]; exists {
-			continue
+		group := key(gacha)
+		gacha.DailyGroupPlays = dailyPlays[gacha.GroupID]
+		rank := s.gachaSinglePaymentRankLocked(gacha, now.Unix(), dayKey)
+		if current, exists := preferredSingles[group]; !exists || rank < current.rank {
+			preferredSingles[group] = singleChoice{id: gacha.GachaID, rank: rank}
 		}
-		preferredSingles[key(gacha)] = gacha.GachaID
 	}
 
 	visible := make([]gamestate.GachaProfile, 0, len(s.gachas))
+	groupOrder := make(map[int]int)
 	for _, gacha := range candidates {
-		if gacha.CardNumMax == 1 && preferredSingles[key(gacha)] != gacha.GachaID {
+		if _, exists := groupOrder[gacha.GroupID]; !exists {
+			groupOrder[gacha.GroupID] = len(groupOrder)
+		}
+		if gacha.CardNumMax == 1 && preferredSingles[key(gacha)].id != gacha.GachaID {
 			continue
 		}
 		visible = append(visible, gacha)
 	}
+	// The native list reads the first two rows and shows both only when their
+	// draw counts increase. A fallback single may appear after the multi-draw.
+	sort.SliceStable(visible, func(i, j int) bool {
+		left, right := visible[i], visible[j]
+		if left.GroupID != right.GroupID {
+			return groupOrder[left.GroupID] < groupOrder[right.GroupID]
+		}
+		return left.CardNum < right.CardNum
+	})
 	result := CloneGachaProfiles(visible)
-	dayKey := gachaLocalDayKey(time.Now())
 	for index := range result {
-		result[index].DailyFirstAvailable = result[index].DailyFirstFree &&
-			s.gachaDailyClaims[result[index].GachaID] != dayKey
+		gacha := &result[index]
+		gacha.DailyGroupPlays = dailyPlays[gacha.GroupID]
+		claim := s.gachaDailyClaims[gacha.GachaID]
+		gacha.DailyFirstAvailable = gacha.DailyFirstFree && !gacha.DailyExhausted() && (claim.Day != dayKey || !claim.FreeClaimed)
 	}
 	return result
+}
+
+func (s *Account) gachaSinglePaymentRankLocked(gacha gamestate.GachaProfile, now int64, dayKey string) int {
+	claim := s.gachaDailyClaims[gacha.GachaID]
+	if gacha.DailyFirstFree && !gacha.DailyExhausted() && (claim.Day != dayKey || !claim.FreeClaimed) {
+		return 0
+	}
+	// Keep a fallback visible for the client's insufficient-currency dialog.
+	switch gacha.PayType {
+	case 4:
+		item := s.items[gacha.PayTypeID]
+		if item.Num >= gacha.Price && (item.LimitTime <= 0 || now < int64(item.LimitTime)) {
+			return 1
+		}
+		return 8
+	case 2:
+		if s.friendPoint >= gacha.Price {
+			return 2
+		}
+		return 5
+	case 3:
+		if int64(s.coin)+int64(s.coinFree) >= int64(gacha.Price) {
+			return 3
+		}
+		return 6
+	case 6:
+		if s.coin >= gacha.Price {
+			return 4
+		}
+		return 7
+	default:
+		return 9
+	}
 }
 
 func isOnboardingGachaID(gachaID int) bool {
@@ -185,8 +221,20 @@ func (s *Account) gachaGroupPlaysLocked() map[int]int {
 	return result
 }
 
+func (s *Account) gachaDailyGroupPlaysLocked(day string) map[int]int {
+	counts := make(map[int]int)
+	for _, profile := range s.gachas {
+		if claim := s.gachaDailyClaims[profile.GachaID]; claim.Day == day {
+			counts[profile.GroupID] = int(min(int64(math.MaxInt32), int64(counts[profile.GroupID])+int64(claim.PlayCount)))
+		}
+	}
+	return counts
+}
+
+var gachaBusinessZone = time.FixedZone("CN local service day", 8*60*60)
+
 func gachaLocalDayKey(now time.Time) string {
-	return now.In(time.FixedZone("CN local service day", 8*60*60)).Format("2006-01-02")
+	return now.In(gachaBusinessZone).Format("2006-01-02")
 }
 
 type GachaLineupEntry struct {
@@ -287,6 +335,9 @@ func validateGachaSelection(gacha gamestate.GachaProfile, rewards []gamestate.Re
 	if len(rewards) != gacha.UserSelectMax {
 		return errors.New("gacha user-select lineup has an invalid length")
 	}
+	if len(rewards) == 0 {
+		return nil
+	}
 	allowed := make(map[int]struct{}, len(gacha.CardIDs))
 	for _, cardID := range gacha.CardIDs {
 		allowed[cardID] = struct{}{}
@@ -317,30 +368,11 @@ func cloneRewards(source []gamestate.Reward) []gamestate.Reward {
 	return result
 }
 
-func cloneTowerQuestProfile(source gamestate.TowerQuestProfile) gamestate.TowerQuestProfile {
-	result := source
-	result.Ranks = append([]gamestate.TowerQuestRankProfile(nil), source.Ranks...)
-	result.Floors = make([]gamestate.TowerQuestFloorProfile, len(source.Floors))
-	for index, floor := range source.Floors {
-		floor.Boss = append(json.RawMessage(nil), floor.Boss...)
-		floor.ClearRewards = cloneRewards(floor.ClearRewards)
-		result.Floors[index] = floor
-	}
-	return result
-}
-
-func cloneTowerQuestProgress(source gamestate.TowerQuestProgress) gamestate.TowerQuestProgress {
-	result := source
-	result.ClearedFloors = append([]int(nil), source.ClearedFloors...)
-	return result
-}
-
 type gachaPlayResult struct {
 	Gachas       []gamestate.GachaProfile
 	Item         gamestate.Item
 	Reward       PresentReceiveResult
 	Expectancy   int
-	Gifts        []gamestate.Reward
 	PresentGifts []gamestate.Reward
 }
 
@@ -388,7 +420,7 @@ func (s *Account) PlayItemGacha(itemID int, playCount int) (itemGachaPlayResult,
 	for play := 0; play < playCount; play++ {
 		rewards = append(rewards, profile.Rewards...)
 		if len(profile.RewardPool) > 0 {
-			reward, err := drawWeightedReward(profile.RewardPool)
+			reward, err := drawWeightedReward(profile.RewardPool, 0)
 			if err != nil {
 				return itemGachaPlayResult{}, err
 			}
@@ -443,11 +475,21 @@ func (s *Account) PlayGacha(
 		(isOnboardingGachaID(gachaID) && gacha.PlayCount != 0) {
 		return gachaPlayResult{}, ErrGachaUnavailable
 	}
+	dayKey := gachaLocalDayKey(time.Now())
+	if gacha.DailyPlayMax > 0 {
+		gacha.DailyGroupPlays = s.gachaDailyGroupPlaysLocked(dayKey)[gacha.GroupID]
+		if gacha.DailyExhausted() {
+			return gachaPlayResult{}, errGachaDailyLimit
+		}
+	}
 	if err := validateGachaSelection(*gacha, selectedRewards); err != nil {
 		return gachaPlayResult{}, err
 	}
-	dayKey := gachaLocalDayKey(time.Now())
-	dailyFree := gacha.DailyFirstFree && s.gachaDailyClaims[gachaID] != dayKey
+	claim := s.gachaDailyClaims[gachaID]
+	if claim.Day != dayKey {
+		claim = gamestate.GachaDailyClaim{GachaID: gachaID, Day: dayKey}
+	}
+	dailyFree := gacha.DailyFirstFree && !claim.FreeClaimed
 	drawCount := gacha.CardNum
 	paymentCost := gacha.Price
 	if dailyFree {
@@ -525,7 +567,7 @@ func (s *Account) PlayGacha(
 	rewards := make([]gamestate.Reward, drawCount)
 	for draw := range rewards {
 		if len(gacha.RewardPool) > 0 {
-			reward, err := drawWeightedReward(gacha.RewardPool)
+			reward, err := drawWeightedReward(gacha.RewardPool, 0)
 			if err != nil {
 				return gachaPlayResult{}, err
 			}
@@ -549,9 +591,22 @@ func (s *Account) PlayGacha(
 		}
 	}
 	gifts := gacha.CurrentGifts()
-	allRewards := append(cloneRewards(rewards), gifts...)
-	if err := s.validateSettlementRewardsLocked(allRewards); err != nil {
+	for _, rule := range gacha.CurrentRandomGifts() {
+		reward, err := drawWeightedReward(rule.Pool, rule.EmptyWeight)
+		if err != nil {
+			return gachaPlayResult{}, err
+		}
+		if reward.Num > 0 {
+			gifts = append(gifts, reward)
+		}
+	}
+	if err := s.validateSettlementRewardsLocked(rewards); err != nil {
 		return gachaPlayResult{}, err
+	}
+	for _, gift := range gifts {
+		if err := s.validateRewardLocked(gift); err != nil {
+			return gachaPlayResult{}, err
+		}
 	}
 
 	switch gacha.PayType {
@@ -568,29 +623,26 @@ func (s *Account) PlayGacha(
 		s.coin -= paymentCost
 	}
 	s.gachas[index].PlayCount++
-	if dailyFree {
-		s.gachaDailyClaims[gachaID] = dayKey
+	if s.gachaDailyClaims == nil {
+		s.gachaDailyClaims = make(map[int]gamestate.GachaDailyClaim)
 	}
+	claim.PlayCount = min(math.MaxInt32, claim.PlayCount+1)
+	claim.FreeClaimed = claim.FreeClaimed || dailyFree
+	s.gachaDailyClaims[gachaID] = claim
 	if len(selectedRewards) > 0 {
 		s.gachaSelections[gachaID] = cloneRewards(selectedRewards)
 	}
 	result := PresentReceiveResult{}
-	for _, reward := range allRewards {
+	for _, reward := range rewards {
 		if err := s.applyRewardOrPresentLocked(reward, &result, "扭蛋奖励"); err != nil {
 			return gachaPlayResult{}, err
 		}
 	}
-	directGifts, presentGifts := []gamestate.Reward{}, []gamestate.Reward{}
-	for _, gift := range result.Rewards[len(rewards):] {
-		if gift.InPresentBox {
-			presentGifts = append(presentGifts, gift.Reward)
-		} else {
-			directGifts = append(directGifts, gift.Reward)
-		}
+	// The client announces gifts as mail separately from the draw results.
+	presentGifts := make([]gamestate.Reward, 0, len(gifts))
+	for _, gift := range gifts {
+		presentGifts = append(presentGifts, s.appendRewardPresentLocked(gift, "扭蛋附赠", ""))
 	}
-	// Gift inventory updates share the transaction but have their own original
-	// client display; do not also animate them as ordinary draw results.
-	result.Rewards = result.Rewards[:len(rewards)]
 	if paidItem.ItemID != 0 {
 		paidItem = s.items[paidItem.ItemID]
 	}
@@ -602,7 +654,6 @@ func (s *Account) PlayGacha(
 		Item:         paidItem,
 		Reward:       result,
 		Expectancy:   s.gachaMixedResultExpectancy(rewards),
-		Gifts:        directGifts,
 		PresentGifts: presentGifts,
 	}, nil
 }

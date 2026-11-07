@@ -8,17 +8,23 @@ import (
 	"slices"
 )
 
-const SaveDatabaseSchemaVersion = 3
+const SaveDatabaseSchemaVersion = 9
+
+const loginBlockColumn = "login_block_until_unix INTEGER CHECK (login_block_until_unix IS NULL OR (typeof(login_block_until_unix) = 'integer' AND login_block_until_unix >= 0))"
 
 var fixedStateTableColumns = map[string][]string{
+	"cn_account_creation_daily": {"day", "source_ip", "created_count"},
+	"cn_boss_score_rank":        {"boss_id", "mode", "user_id", "best_score", "best_grade", "best_at_unix"},
+	"cn_gift_code":              {"code_id", "batch_id", "canonical", "enabled"},
+	"cn_gift_redemption":        {"code_id", "scope", "user_id", "batch_id", "claim_group", "claimed_at", "present_ids", "reward_revision"},
 	"cn_battle_clear_daily":     {"day", "boss_id", "mode", "user_id", "arthur_type", "clear_count", "completed_at", "event_key", "decks_json", "decks_sha256"},
 	"cn_account_balance":        {"user_id", "gold", "coin", "coin_free", "friend_point", "pvp_point"},
-	"cn_account_card":           {"user_id", "unique_id", "slot", "card_id", "level", "experience", "now_exp", "next_exp", "love", "fame", "is_lock", "hp", "attack", "magic", "mind", "base_add_price", "skill_levels", "sort_order", "row_sha256"},
+	"cn_account_card":           {"user_id", "unique_id", "slot", "card_id", "level", "experience", "now_exp", "next_exp", "love", "fame", "is_lock", "hp", "attack", "magic", "mind", "base_add_price", "skill_levels", "sort_order", "row_sha256", "create_time"},
 	"cn_account_item":           {"user_id", "item_id", "num", "limit_time", "sort_order", "row_sha256"},
 	"cn_account_stack_card":     {"user_id", "card_id", "num", "hp", "attack", "magic", "mind", "add_exp", "base_add_price", "material_type", "sort_order", "row_sha256"},
 	"cn_account_present":        {"user_id", "present_id", "history", "issued_at_unix", "add_elapsed_sec", "limit_time", "state", "reason", "title", "comment", "url", "auto_fusion_used", "auto_loveup_used", "admin_key", "rewards_json", "sort_order", "row_sha256"},
 	"cn_save_snapshot":          {"singleton", "schema_version", "revision", "updated_utc", "payload_json", "payload_sha256"},
-	"cn_local_account":          {"user_id", "login_uuid", "session_key", "created_utc", "last_login_utc"},
+	"cn_local_account":          {"user_id", "login_uuid", "session_key", "created_utc", "last_login_utc", "login_block_until_unix"},
 	"cn_account_snapshot":       {"user_id", "schema_version", "revision", "updated_utc", "payload_json", "payload_sha256"},
 	"cn_account_projection":     {"user_id", "schema_version", "snapshot_revision", "updated_utc", "payload_json", "payload_sha256"},
 	"cn_multiplayer_runtime":    {"singleton", "next_room_id"},
@@ -31,8 +37,22 @@ var fixedStateTableColumns = map[string][]string{
 	"cn_local_account_follow":   {"follower_user_id", "followed_user_id", "created_utc"},
 }
 
-func validateFixedStateSchema(transaction *sql.Tx) error {
+func validateFixedStateSchema(transaction *sql.Tx, version int) error {
 	for table, expectedColumns := range fixedStateTableColumns {
+		if version < 5 && (table == "cn_gift_code" || table == "cn_gift_redemption") ||
+			version < 6 && table == "cn_boss_score_rank" ||
+			version < 8 && table == "cn_account_creation_daily" {
+			continue
+		}
+		if version == 3 && table == "cn_account_card" {
+			expectedColumns = expectedColumns[:len(expectedColumns)-1]
+		}
+		if version < 9 && table == "cn_local_account" {
+			expectedColumns = expectedColumns[:len(expectedColumns)-1]
+		}
+		if version == 6 && table == "cn_boss_score_rank" {
+			expectedColumns = []string{"boss_id", "user_id", "best_score", "best_grade", "best_at_unix"}
+		}
 		rows, err := transaction.Query(`PRAGMA table_info(` + table + `)`)
 		if err != nil {
 			return fmt.Errorf("inspect CN state table %s: %w", table, err)
@@ -57,6 +77,16 @@ func validateFixedStateSchema(transaction *sql.Tx) error {
 				return fmt.Errorf("scan CN state table %s: %w", table, err)
 			}
 			actualColumns = append(actualColumns, name)
+			if table == "cn_account_creation_daily" {
+				wantType, wantPK := "TEXT", columnID+1
+				if columnID == 2 {
+					wantType, wantPK = "INTEGER", 0
+				}
+				if dataType != wantType || notNull != 1 || primaryKey != wantPK {
+					_ = rows.Close()
+					return fmt.Errorf("CN account creation column %s has invalid type, nullability or primary key", name)
+				}
+			}
 		}
 		if err := rows.Err(); err != nil {
 			_ = rows.Close()
@@ -74,12 +104,20 @@ func validateFixedStateSchema(transaction *sql.Tx) error {
 			)
 		}
 	}
-	for _, index := range []string{
+	indexes := []string{
 		"cn_friend_point_rental_owner_event",
 		"cn_local_account_follow_inbound",
+		"cn_local_account_follow_recent",
 		"cn_local_account_recent_login",
 		"cn_account_projection_recent_update",
-	} {
+	}
+	if version >= 5 {
+		indexes = append(indexes, "cn_gift_code_batch", "cn_gift_redemption_batch")
+	}
+	if version >= 6 {
+		indexes = append(indexes, "cn_boss_score_rank_order")
+	}
+	for _, index := range indexes {
 		var count int
 		if err := transaction.QueryRow(
 			`SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = ?`,
@@ -127,21 +165,74 @@ func initializeSaveSchema(transaction *sql.Tx) error {
 	if err := transaction.QueryRow(`PRAGMA user_version`).Scan(&userVersion); err != nil {
 		return fmt.Errorf("read CN SQLite schema version: %w", err)
 	}
-	if userVersion != 0 && userVersion != SaveDatabaseSchemaVersion {
+	if userVersion != 0 && (userVersion < 3 || userVersion > SaveDatabaseSchemaVersion) {
 		return fmt.Errorf(
 			"unsupported CN state database schema version %d, want %d",
 			userVersion,
 			SaveDatabaseSchemaVersion,
 		)
 	}
-	if userVersion == SaveDatabaseSchemaVersion {
+	if userVersion != 0 {
+		if userVersion < 8 {
+			var collisions int
+			if err := transaction.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name = 'cn_account_creation_daily'`).Scan(&collisions); err != nil {
+				return err
+			}
+			if collisions != 0 {
+				return errors.New("CN account creation table unexpectedly exists before schema version 8")
+			}
+		}
 		if _, err := transaction.Exec(battleClearStatisticsSchema); err != nil {
 			return err
 		}
 		if _, err := transaction.Exec(partnerRecencyIndexes); err != nil {
 			return fmt.Errorf("create CN partner recency indexes: %w", err)
 		}
-		return validateFixedStateSchema(transaction)
+		if err := validateFixedStateSchema(transaction, userVersion); err != nil {
+			return err
+		}
+		if userVersion == 3 {
+			// Old cards have no recorded acquisition date. Preserve that unknown
+			// value instead of assigning the migration time to the whole inventory.
+			if _, err := transaction.Exec(`ALTER TABLE cn_account_card ADD COLUMN create_time INTEGER NOT NULL DEFAULT 0 CHECK(create_time >= 0)`); err != nil {
+				return fmt.Errorf("add CN card acquisition time: %w", err)
+			}
+		}
+		if userVersion < 5 {
+			if _, err := transaction.Exec(giftCodeSchema); err != nil {
+				return err
+			}
+		}
+		if userVersion < 6 {
+			if _, err := transaction.Exec(bossScoreRankingSchema); err != nil {
+				return err
+			}
+		} else if userVersion == 6 {
+			if _, err := transaction.Exec(`ALTER TABLE cn_boss_score_rank RENAME TO cn_boss_score_rank_v6;
+DROP INDEX cn_boss_score_rank_order;` + bossScoreRankingSchema + `
+INSERT INTO cn_boss_score_rank(boss_id,mode,user_id,best_score,best_grade,best_at_unix)
+ SELECT boss_id,1,user_id,best_score,best_grade,best_at_unix FROM cn_boss_score_rank_v6;
+DROP TABLE cn_boss_score_rank_v6;`); err != nil {
+				return fmt.Errorf("separate solo and multiplayer boss scores: %w", err)
+			}
+		}
+		if userVersion < 8 {
+			if _, err := transaction.Exec(accountCreationDailySchema); err != nil {
+				return fmt.Errorf("create CN account creation quota schema: %w", err)
+			}
+		}
+		if userVersion < 9 {
+			if _, err := transaction.Exec(`ALTER TABLE cn_local_account ADD COLUMN ` + loginBlockColumn); err != nil {
+				return fmt.Errorf("add CN account login block: %w", err)
+			}
+		}
+		if userVersion < SaveDatabaseSchemaVersion {
+			if _, err := transaction.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, SaveDatabaseSchemaVersion)); err != nil {
+				return err
+			}
+			return validateFixedStateSchema(transaction, SaveDatabaseSchemaVersion)
+		}
+		return nil
 	}
 	// Version zero is accepted only for a new, empty database. Never merge an
 	// unversioned or older schema into the current one.
@@ -167,7 +258,8 @@ func initializeSaveSchema(transaction *sql.Tx) error {
 		login_uuid TEXT NOT NULL UNIQUE,
 		session_key TEXT NOT NULL UNIQUE,
 		created_utc TEXT NOT NULL,
-		last_login_utc TEXT NOT NULL
+		last_login_utc TEXT NOT NULL,
+		` + loginBlockColumn + `
 	)`); err != nil {
 		return fmt.Errorf("create CN local account schema: %w", err)
 	}
@@ -265,6 +357,15 @@ func initializeSaveSchema(transaction *sql.Tx) error {
 		return fmt.Errorf("create CN local-account follow inbound index: %w", err)
 	}
 	if userVersion == 0 {
+		if _, err := transaction.Exec(accountCreationDailySchema); err != nil {
+			return fmt.Errorf("create CN account creation quota schema: %w", err)
+		}
+		if _, err := transaction.Exec(giftCodeSchema); err != nil {
+			return err
+		}
+		if _, err := transaction.Exec(bossScoreRankingSchema); err != nil {
+			return err
+		}
 		if _, err := transaction.Exec(accountRowsSchema); err != nil {
 			return err
 		}
@@ -281,7 +382,7 @@ func initializeSaveSchema(transaction *sql.Tx) error {
 	if _, err := transaction.Exec(partnerRecencyIndexes); err != nil {
 		return fmt.Errorf("create CN partner recency indexes: %w", err)
 	}
-	return validateFixedStateSchema(transaction)
+	return validateFixedStateSchema(transaction, SaveDatabaseSchemaVersion)
 }
 
 // Existing timestamp columns remain authoritative. These additive indexes also
@@ -290,7 +391,9 @@ const partnerRecencyIndexes = `
 CREATE INDEX IF NOT EXISTS cn_local_account_recent_login
  ON cn_local_account (julianday(last_login_utc) DESC, user_id DESC);
 CREATE INDEX IF NOT EXISTS cn_account_projection_recent_update
- ON cn_account_projection (julianday(updated_utc) DESC, user_id DESC);`
+ ON cn_account_projection (julianday(updated_utc) DESC, user_id DESC);
+CREATE INDEX IF NOT EXISTS cn_local_account_follow_recent
+ ON cn_local_account_follow (followed_user_id, julianday(created_utc) DESC, follower_user_id DESC);`
 
 // These are account-owned records. Card names and growth definitions remain
 // in the runtime master; changing one card never rewrites the other cards.
@@ -308,6 +411,7 @@ CREATE TABLE cn_account_card (
  love INTEGER NOT NULL, fame INTEGER NOT NULL, is_lock INTEGER NOT NULL CHECK(is_lock IN (0,1)),
  hp INTEGER NOT NULL, attack INTEGER NOT NULL, magic INTEGER NOT NULL, mind INTEGER NOT NULL,
  base_add_price INTEGER NOT NULL, skill_levels TEXT NOT NULL, sort_order INTEGER NOT NULL, row_sha256 TEXT NOT NULL,
+ create_time INTEGER NOT NULL DEFAULT 0 CHECK(create_time >= 0),
  PRIMARY KEY(user_id, unique_id));
 CREATE TABLE cn_account_item (
  user_id INTEGER NOT NULL REFERENCES cn_account_balance(user_id) ON DELETE CASCADE,
@@ -335,3 +439,10 @@ const accountCredentialsSchema = `CREATE TABLE cn_account_credentials (
 		password_hash BLOB NOT NULL CHECK(length(password_hash) = 32),
 		iterations INTEGER NOT NULL CHECK(iterations = 600000),
 		updated_utc TEXT NOT NULL)`
+
+const accountCreationDailySchema = `CREATE TABLE cn_account_creation_daily (
+ day TEXT NOT NULL,
+ source_ip TEXT NOT NULL,
+ created_count INTEGER NOT NULL CHECK(typeof(created_count) = 'integer' AND created_count >= 0),
+ PRIMARY KEY(day, source_ip)
+) WITHOUT ROWID;`

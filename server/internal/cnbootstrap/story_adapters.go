@@ -108,22 +108,28 @@ func cnBootstrapStorySubShow(businessHandler http.Handler) http.HandlerFunc {
 }
 
 func cnBootstrapStorySubStart(businessHandler http.Handler) http.HandlerFunc {
-	return cnPayloadAdapter(
-		businessHandler,
-		"StorySubStart",
-		"/StorySubStart",
-		[]string{"story_subid"},
-		func(method map[string]json.RawMessage) (any, error) {
-			return map[string]any{
-				"seed":                rawOrZero(method["seed"]),
-				"hp":                  rawOrZero(method["hp"]),
-				"hp_max":              rawOrZero(method["hp_max"]),
-				"cost_initial":        rawOrZero(method["cost_initial"]),
-				"burst_gauge_initial": rawOrZero(method["burst_gauge_initial"]),
-				"hold_max":            rawOrZero(method["hold_max"]),
-			}, nil
-		},
-	)
+	return func(writer http.ResponseWriter, request *http.Request) {
+		// Modern tower reads add towerid/floor. The business decoder owns the
+		// paired field contract; ordinary CN sub-story requests still have one ID.
+		payload, err := readCNSessionPayload(request, "StorySubStart")
+		if err != nil {
+			http.Error(writer, err.Error(), http.StatusUnauthorized)
+			return
+		}
+		forwardCNBusiness(writer, adaptCNBusinessRequest(request, http.MethodPost, "/StorySubStart", payload), businessHandler,
+			func(content []byte) ([]byte, error) {
+				return adaptCNProtocolMethod(content, func(method map[string]json.RawMessage) (any, error) {
+					return map[string]any{
+						"seed":                rawOrZero(method["seed"]),
+						"hp":                  rawOrZero(method["hp"]),
+						"hp_max":              rawOrZero(method["hp_max"]),
+						"cost_initial":        rawOrZero(method["cost_initial"]),
+						"burst_gauge_initial": rawOrZero(method["burst_gauge_initial"]),
+						"hold_max":            rawOrZero(method["hold_max"]),
+					}, nil
+				})
+			})
+	}
 }
 
 func cnBootstrapStorySubEnd(businessHandler http.Handler) http.HandlerFunc {

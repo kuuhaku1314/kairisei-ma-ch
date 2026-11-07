@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -21,8 +22,11 @@ type AdminGachaConfig struct {
 	PayTypeID    int                        `json:"pay_typeid,omitempty"`
 	GachaID      int                        `json:"gacha_id"`
 	Name         string                     `json:"name"`
+	OddsMessage  string                     `json:"odds_msg,omitempty"` // One optional probability-page description shared by the pool.
 	Price        int                        `json:"price"`
 	PlayCountMax int                        `json:"play_count_max,omitempty"`
+	DailyPlayMax int                        `json:"play_count_1day_max,omitempty"`
+	CategoryNum  int                        `json:"category_num,omitempty"` // The game-list entry, initially the pool's own.
 	StartUnix    int64                      `json:"start_unix"`
 	EndUnix      int64                      `json:"end_unix"`
 	CardIDs      []int                      `json:"card_ids"`
@@ -34,24 +38,70 @@ type AdminGachaConfig struct {
 	// Closed hides this draw method while the pool stays open through its other methods (「扭蛋发布」 opens the
 	// pool itself). A new key: the retired "disabled" field of older documents must not close anything.
 	Closed bool `json:"closed,omitempty"`
+
+	RandomGifts []gamestate.GachaRandomGiftRule `json:"random_gifts,omitempty"`
+}
+
+type gachaEditorCategory struct {
+	ID     int    `json:"id"`
+	Name   string `json:"name"`
+	PictID int    `json:"pictid,omitempty"`
+}
+
+// Existing category IDs keep their meaning. The client resolves the image
+// separately by pictid and reserves category 90 for the exchange scene.
+var gachaEditorCategories = []gachaEditorCategory{
+	{1, "限定扭蛋", 1},
+	{4, "超级扭蛋", 2},
+	{2, "外敌币扭蛋", 3},
+	{15, "扭蛋券扭蛋", 4},
+	{3, "友情点扭蛋", 5},
+	{6, "骑士币扭蛋", 6},
+	{10, "属性扭蛋", 7},
+	{8, "新手扭蛋", 8},
+	{11, "炼金扭蛋", 9},
+	{12, "四亚瑟扭蛋", 10},
+	{gamestate.MainQuestGachaCategory, "主线剧情扭蛋", 11},
+}
+
+func gachaEditorCategoryByID(id int) (gachaEditorCategory, bool) {
+	for _, category := range gachaEditorCategories {
+		if category.ID == id {
+			return category, true
+		}
+	}
+	return gachaEditorCategory{}, false
 }
 
 func AdminGachaConfigFromProfile(profile gamestate.GachaProfile) AdminGachaConfig {
 	profile = gamestate.CloneGachas([]gamestate.GachaProfile{profile})[0]
-	return AdminGachaConfig{GachaID: profile.GachaID, Name: profile.Name, Price: profile.Price, PlayCountMax: profile.PlayCountMax, CardIDs: append([]int{}, profile.CardIDs...), Weights: append([]int{}, profile.CardWeights...), RewardPool: profile.RewardPool, Steps: profile.Steps, CardFames: profile.CardFames, CoverPath: profile.CoverPath}
+	return AdminGachaConfig{GachaID: profile.GachaID, Name: profile.Name, OddsMessage: profile.OddsMessage, PayType: profile.PayType, PayTypeID: profile.PayTypeID, Price: profile.Price,
+		PlayCountMax: profile.PlayCountMax, DailyPlayMax: profile.DailyPlayMax, CategoryNum: profile.CategoryNum, RandomGifts: profile.RandomGifts,
+		CardIDs: append([]int{}, profile.CardIDs...), Weights: append([]int{}, profile.CardWeights...), RewardPool: profile.RewardPool, Steps: profile.Steps, CardFames: profile.CardFames, CoverPath: profile.CoverPath}
+}
+
+func applyGachaPayment(base *gamestate.GachaProfile, config AdminGachaConfig) {
+	if config.PayType == 0 {
+		return
+	}
+	if base.PayType == 2 && config.PayType != 2 {
+		base.CardNumMax = base.CardNum
+		base.DailyFirstFree = false
+	}
+	base.PayType, base.PayTypeID = config.PayType, config.PayTypeID
 }
 
 func adminConfiguredGacha(base gamestate.GachaProfile, config AdminGachaConfig) game.GachaConfiguration {
+	base.RandomGifts = config.RandomGifts
 	base = gamestate.CloneGachas([]gamestate.GachaProfile{base})[0]
-	if config.PayType != 0 {
-		if base.PayType == 2 && config.PayType != 2 {
-			base.CardNumMax = base.CardNum
-			base.DailyFirstFree = false
-		}
-		base.PayType, base.PayTypeID = config.PayType, config.PayTypeID
-	}
+	applyGachaPayment(&base, config)
 	base.Name, base.Price = config.Name, config.Price
 	base.PlayCountMax = config.PlayCountMax
+	base.DailyPlayMax = config.DailyPlayMax
+	if category, ok := gachaEditorCategoryByID(config.CategoryNum); ok && category.ID != 0 {
+		base.CategoryNum, base.CategoryPictID = category.ID, category.PictID
+	}
+	base.OddsMessage = config.OddsMessage
 	payment := map[int]string{2: "友情点", 3: "水晶", 4: fmt.Sprintf("物品 %d", base.PayTypeID), 6: "付费水晶"}[base.PayType]
 	base.BuyMessage = fmt.Sprintf("消耗 %d %s 抽取 %d 张卡牌吗？", config.Price, payment, base.CardNum)
 	if base.PayType == 2 && base.CardNumMax > base.CardNum {
@@ -70,7 +120,7 @@ func adminConfiguredGacha(base gamestate.GachaProfile, config AdminGachaConfig) 
 			base.CardFames[id] = fame
 		}
 	}
-	if len(base.RewardPool) > 0 {
+	if len(base.RewardPool) > 0 || len(config.RewardPool) > 0 || len(base.Steps) > 0 {
 		base.RewardPool, base.Steps = config.RewardPool, config.Steps
 		base.BuyMessage = fmt.Sprintf("消耗 %d %s 抽取 %d 次吗？", config.Price, payment, base.CardNum)
 		base.SubMessage = "本地复刻；阶段费用、奖励概率及赠礼见详情。"
@@ -103,16 +153,6 @@ func validateAdminGachaPayment(catalog map[string]AdminCatalogEntry, config Admi
 	return nil
 }
 
-func (operations *Operations) prepareGachas(handler http.Handler) {
-	configurator, ok := handler.(game.GachaConfigurator)
-	if !ok {
-		return
-	}
-	operations.configMu.RLock()
-	defer operations.configMu.RUnlock()
-	configurator.ApplyGachaConfiguration(operations.gachaRevision, operations.gachaConfigurations)
-}
-
 func (operations *Operations) reloadGachaConfigurations() error {
 	configs, revision, err := operations.readGachaConfigurations()
 	if err != nil {
@@ -136,24 +176,18 @@ func (operations *Operations) readGachaConfigurations() ([]game.GachaConfigurati
 		if err != nil {
 			return nil, 0, err
 		}
-		_, custom := operations.customGachas[id]
-		if doc.Revision == 0 && !custom {
+		if doc.Revision == 0 {
 			continue
 		}
-		// Operator pools always carry a configuration so accounts can append (or hide) them.
+		// Draft-only operator pools may be empty; they do not enter player state.
 		config := AdminGachaConfigFromProfile(operations.gachaBases[id])
-		if doc.Revision > 0 {
-			if err := json.Unmarshal(doc.Payload, &config); err != nil {
-				return nil, 0, err
-			}
+		if err := json.Unmarshal(doc.Payload, &config); err != nil {
+			return nil, 0, err
 		}
 		if config.GachaID != id {
 			return nil, 0, errors.New("gacha operation identity mismatch")
 		}
 		configured := operations.configuredGacha(id, config)
-		if custom && doc.Revision == 0 {
-			configured.Disabled = true
-		}
 		configs = append(configs, configured)
 		revision += uint64(doc.Revision)
 	}
@@ -179,6 +213,9 @@ func (admin *API) validateStoredGachas() error {
 		edit := AdminGachaConfigFromProfile(config.Profile)
 		edit.StartUnix, edit.EndUnix = config.StartUnix, config.EndUnix
 		edit.PayType, edit.PayTypeID = config.Profile.PayType, config.Profile.PayTypeID
+		if base := admin.operations.gachaBases[edit.GachaID]; config.Profile.CategoryNum != base.CategoryNum {
+			edit.CategoryNum = config.Profile.CategoryNum
+		}
 		preview, err := admin.validateGachaConfig(edit)
 		if err != nil {
 			return err
@@ -207,17 +244,30 @@ func (admin *API) validateGachaConfig(config AdminGachaConfig) (map[string]any, 
 	if strings.TrimSpace(config.Name) == "" || len([]rune(config.Name)) > 60 || config.Price < 1 || config.Price > 10000000 {
 		return nil, errors.New("名称须为 1–60 字；价格须为 1–10000000 的整数")
 	}
+	if len([]rune(config.OddsMessage)) > 1000 {
+		return nil, errors.New("概率页说明最多1000字")
+	}
 	if config.PlayCountMax < 0 || config.PlayCountMax > 1000000 {
 		return nil, errors.New("每名玩家累计限抽次数须为0–1000000，0表示不限，1表示一次性")
+	}
+	if config.DailyPlayMax < 0 || config.DailyPlayMax > 1000000 {
+		return nil, errors.New("每名玩家每日限抽次数须为0–1000000，0表示不限")
+	}
+	// A listed entry, or the pool's own one even when the editor does not list it.
+	if _, ok := gachaEditorCategoryByID(config.CategoryNum); !ok && config.CategoryNum != admin.operations.gachaBases[config.GachaID].CategoryNum {
+		return nil, errors.New("请选择客户端支持的扭蛋分类")
+	}
+	if err := admin.validateRandomGachaGifts(config.RandomGifts); err != nil {
+		return nil, err
 	}
 	if config.StartUnix < 0 || config.EndUnix < 0 || config.StartUnix > 2147483647 || config.EndUnix > 2147483647 || (config.EndUnix != 0 && config.EndUnix <= config.StartUnix) {
 		return nil, errors.New("排期无效：结束时间须晚于开始时间且早于 2038-01-19")
 	}
-	if len(base.RewardPool) > 0 {
+	if admin.operations.mixedGacha(config.GachaID) {
 		if len(config.CardFames) > 0 {
 			return nil, errors.New("混合奖励卡池不能设置抽出名声")
 		}
-		return ValidateMixedGachaConfig(admin.catalogByKey, base, config)
+		return validateMixedGachaConfig(admin.catalogByKey, base, config, admin.operations.ownedGachaRule(config.GachaID) != nil)
 	}
 	if len(config.RewardPool) > 0 || len(config.Steps) > 0 {
 		return nil, errors.New("普通卡池不能附加混合奖励规则")
@@ -278,7 +328,7 @@ func (admin *API) validateGachaConfig(config AdminGachaConfig) (map[string]any, 
 	}
 	warnings := []string{}
 	if base.UnownedOnly {
-		warnings = append(warnings, "仅可配置六星扭蛋初始卡；实际概率会排除玩家图鉴已获得的同系卡后重新计算，全部获得后隐藏此池")
+		warnings = append(warnings, "仅可配置六星卡牌；实际概率会排除玩家图鉴已获得的同系卡后重新计算，全部获得后隐藏此池")
 	}
 	if len(blocked) > 0 {
 		warnings = append(warnings, "部分卡牌尚未进入当前运行资源清单，可以保存草稿，发布前须完成资源闭包")
@@ -290,6 +340,25 @@ func (admin *API) validateGachaConfig(config AdminGachaConfig) (map[string]any, 
 		warnings = append(warnings, "友情点连抽按余额决定抽数，价格为每抽价格；每日首次免费规则保持不变")
 	}
 	return map[string]any{"config": config, "base": profile, "odds_scaled": odds, "odds_scale": 100000, "rarities": rarities, "blocked_card_ids": blocked, "publishable": len(blocked) == 0, "warnings": warnings, "stages": stages}, nil
+}
+
+func (admin *API) validateRandomGachaGifts(gifts []gamestate.GachaRandomGiftRule) error {
+	if err := gamestate.ValidateGachaRandomGifts(gifts); err != nil {
+		return err
+	}
+	for i, gift := range gifts {
+		for _, entry := range gift.Pool {
+			r := entry.Reward
+			canonical, _, err := admin.mailReward(AdminMailRequest{RewardType: r.Type, RewardTypeID: r.RewardTypeID, Quantity: r.Num, CardLevel: int(r.CardLevel), CardFame: int(r.CardFame), CardLove: r.CardLove})
+			if err != nil {
+				return fmt.Errorf("第%d组随机附赠：%w", i+1, err)
+			}
+			if !reflect.DeepEqual(canonical, r) {
+				return fmt.Errorf("第%d组随机附赠：奖励成长字段与目录不符", i+1)
+			}
+		}
+	}
+	return nil
 }
 
 func (admin *API) gachaEditorList(writer http.ResponseWriter, request *http.Request) {
@@ -315,10 +384,10 @@ func (admin *API) gachaEditorList(writer http.ResponseWriter, request *http.Requ
 			}
 		}
 		pool, custom := admin.operations.customGachas[id]
-		rows = append(rows, map[string]any{"gacha_id": id, "config": config, "base": base, "live": live, "draft": draft, "custom": custom, "deleted": pool.Deleted, "template_id": pool.TemplateID, "banner_url": "/gacha-assets/" + base.BannerKey + ".png"})
+		rows = append(rows, map[string]any{"gacha_id": id, "config": config, "base": base, "live": live, "draft": draft, "custom": custom, "deleted": pool.Deleted, "template_id": pool.TemplateID, "rule": pool.Rule, "banner_url": "/gacha-assets/" + base.BannerKey + ".png"})
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i]["gacha_id"].(int) < rows[j]["gacha_id"].(int) })
-	WriteAdminJSON(writer, 200, map[string]any{"state": "PASS", "pools": rows, "custom_revision": admin.operations.customGachaRevision, "rule_templates": admin.gachaRuleTemplates()})
+	WriteAdminJSON(writer, 200, map[string]any{"state": "PASS", "pools": rows, "custom_revision": admin.operations.customGachaRevision, "rule_types": gachaRuleTypes(), "max_draw_counts": maxGachaDrawCounts, "categories": gachaEditorCategories})
 }
 
 func (admin *API) gachaEditorAction(writer http.ResponseWriter, request *http.Request) {
@@ -362,6 +431,10 @@ func (admin *API) gachaEditorAction(writer http.ResponseWriter, request *http.Re
 			WriteAdminError(writer, 400, "此卡池包含多种抽法，请重新加载页面后整池发布")
 			return
 		}
+		if body.Config.Closed {
+			WriteAdminError(writer, 400, "至少开放一种抽法；要关闭整个卡池请在「扭蛋发布」操作")
+			return
+		}
 	}
 	preview, err := admin.validateGachaConfig(body.Config)
 	if err != nil {
@@ -395,6 +468,7 @@ func (admin *API) gachaEditorAction(writer http.ResponseWriter, request *http.Re
 	}
 	if action == "publish" {
 		admin.operations.applyPublishedGacha(body.Config)
+		admin.operations.publishRuntimeLocked()
 	}
 	result := map[string]any{"state": "PASS", "document": docs[0], "preview": preview}
 	if action == "publish" {

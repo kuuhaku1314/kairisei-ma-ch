@@ -31,15 +31,11 @@ func (s *Account) battleCardSourcesLocked(profiles []gamestate.TeamBattleRewardP
 	if len(profiles) == 0 {
 		return nil
 	}
-	tutorialNormal := s.onboarding.ConfigVersion == cnOnboardingConfigVersion && s.onboarding.Step == 0
-	tutorialActivity := s.onboarding.ConfigVersion == cnOnboardingConfigVersion && s.onboarding.Step == cnOnboardingStepCount-1
-	var lists map[string]json.RawMessage
-	if len(s.teamBattleSolo) > 0 {
-		projected, err := projectCNTeamBattlePublication(s.teamBattleSolo, s.stageQuests, s.teamBattleLimitedGroupIDs, tutorialNormal, tutorialActivity)
+	var catalog *TeamBattleCatalog
+	if s.teamBattleSolo != nil && s.teamBattleSolo.definitions != nil {
+		var err error
+		catalog, err = s.teamBattleCatalogLocked()
 		if err != nil {
-			return err
-		}
-		if err := json.Unmarshal(projected, &lists); err != nil {
 			return err
 		}
 	}
@@ -51,51 +47,48 @@ func (s *Account) battleCardSourcesLocked(profiles []gamestate.TeamBattleRewardP
 		multi bool
 	}
 	destinations := map[int][]destination{}
-	for _, key := range []string{"9", "10", "11", "12"} {
-		if len(lists[key]) == 0 {
-			continue
-		}
-		var groups []struct {
-			ID        int    `json:"0"`
-			StageType int    `json:"1"`
-			Name      string `json:"4"`
-			AreaID    int    `json:"9"`
-			Bosses    []struct {
-				ID         int    `json:"0"`
-				OnlyMyDeck int    `json:"1"`
-				StartRule  int    `json:"24"`
-				Difficulty string `json:"4"`
-				State      int    `json:"10"`
-				Locked     int    `json:"26"`
-			} `json:"10"`
-		}
-		if err := json.Unmarshal(lists[key], &groups); err != nil {
-			return err
-		}
-		for _, group := range groups {
-			if key != "9" && allowedGroups != nil && !gamestate.IsBurstQuestGroup(group.ID) {
-				if _, allowed := allowedGroups[group.ID]; !allowed {
-					continue
+	if catalog != nil {
+		for _, key := range teamBattleCategoryKeys {
+			for _, group := range catalog.groups[key] {
+				if key != "9" && allowedGroups != nil {
+					if _, allowed := allowedGroups[group.id]; !allowed {
+						continue
+					}
 				}
-			}
-			for _, boss := range group.Bosses {
-				if boss.Locked != 0 || s.disabledTeamBattleBossIDs[boss.ID] {
-					continue
+				name, _ := group.fields["4"].(string)
+				stage, _ := teamBattleCatalogInteger(group.fields["1"])
+				for _, boss := range group.bosses {
+					locked, _ := teamBattleCatalogInteger(boss.fields["26"])
+					if locked != 0 || s.disabledTeamBattleBossIDs[boss.id] {
+						continue
+					}
+					difficulty, _ := boss.fields["4"].(string)
+					entry := howToGetCardEntry{Type: 10, ContentID: boss.id, Text: strings.TrimSpace(name + " " + difficulty)}
+					if stageType := gamestate.BattleStageType(stage); stageType == gamestate.BattleStageAlchemist || stageType == gamestate.BattleStageAlchemistSP {
+						entry.Subtype, entry.ContentID = 4, group.id // ALCHEMIST
+					} else if group.areaID >= cnNormalQuestAreaMin && group.areaID <= cnNormalQuestAreaMax {
+						entry.Subtype, entry.ContentID = 5, group.areaID // MAINQUEST
+					} else if group.areaID > 0 {
+						entry.Subtype, entry.ContentID = 3, group.areaID // STAGE
+					}
+					only, err := teamBattleCatalogInteger(boss.fields["1"])
+					if err != nil {
+						return err
+					}
+					start, err := teamBattleCatalogInteger(boss.fields["24"])
+					if err != nil {
+						return err
+					}
+					state, _ := teamBattleCatalogInteger(boss.fields["10"])
+					rules := TeamBattleEntryRules{OnlyMyDeck: int(only), StartRule: int(start), StageType: gamestate.BattleStageType(stage)}
+					destinations[boss.id] = append(destinations[boss.id], destination{entry: entry, clear: state >= 2, area: group.areaID, multi: rules.AllowsMultiplayer()})
 				}
-				entry := howToGetCardEntry{Type: 10, ContentID: boss.ID, Text: strings.TrimSpace(group.Name + " " + boss.Difficulty)}
-				if group.AreaID > 0 {
-					// CONFIRMED: subtype 2 calls StageMgr.SetReturnParam(areaid).
-					// Other battle entries pass bossid to TeamSlSt.InitializePage.
-					entry.Subtype, entry.ContentID = 2, group.AreaID
-				}
-				rules := teamBattleEntryRules{OnlyMyDeck: boss.OnlyMyDeck, StartRule: boss.StartRule, StageType: group.StageType}
-				destinations[boss.ID] = append(destinations[boss.ID], destination{entry: entry, clear: boss.State >= 2, area: group.AreaID, multi: rules.AllowsMultiplayer()})
 			}
 		}
 	}
 	for id, tower := range s.towerQuestProfiles {
 		progress, exists := s.towerQuestProgress[id]
-		if !tower.ClientEntryPublished || !exists {
+		if !s.towerOpenLocked(id) || !exists {
 			continue
 		}
 		for _, floor := range tower.Floors {
@@ -108,7 +101,11 @@ func (s *Account) battleCardSourcesLocked(profiles []gamestate.TeamBattleRewardP
 			if s.disabledTeamBattleBossIDs[boss.ID] {
 				continue
 			}
-			entry := howToGetCardEntry{Type: 10, Subtype: 1, ContentID: id, Text: fmt.Sprintf("%s 第%d层", tower.Name, floor.Floor)}
+			subtype := 1 // TOWER
+			if tower.StageType == gamestate.BattleStageAlchemist || tower.StageType == gamestate.BattleStageAlchemistSP {
+				subtype = 4 // ALCHEMIST
+			}
+			entry := howToGetCardEntry{Type: 10, Subtype: subtype, ContentID: id, Text: fmt.Sprintf("%s 第%d层", tower.Name, floor.Floor)}
 			destinations[boss.ID] = append(destinations[boss.ID], destination{entry: entry, tower: id, clear: slices.Contains(progress.ClearedFloors, floor.Floor)})
 		}
 	}
@@ -247,11 +244,17 @@ func (s *Account) exchangeCardSourcesLocked(sources cardSourceIndex) {
 }
 
 func (s *Account) missionCardSourcesLocked(sources cardSourceIndex) {
-	now := time.Now().Unix()
-	for _, mission := range s.missions {
-		if mission.Info.State == 2 || (mission.Info.ClearLimitTime > 0 && int64(mission.Info.ClearLimitTime) <= now) {
+	if s.missionCatalog == nil {
+		return
+	}
+	now := s.missionTimeLocked(time.Now()).Unix()
+	for id, definition := range s.missionCatalog.definitions {
+		progress := s.missionProgressLocked(definition, now)
+		if !s.missionAvailableLocked(definition, progress, now) || progress.State == 2 {
 			continue
 		}
-		sources.addReward(mission.RewardPresent.Reward, howToGetCardEntry{Type: 9, ContentID: mission.Info.MissionID, Text: mission.Info.Title})
+		for _, reward := range definition.Rewards {
+			sources.addReward(reward, howToGetCardEntry{Type: 9, ContentID: id, Text: definition.Title})
+		}
 	}
 }

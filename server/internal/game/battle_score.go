@@ -1,6 +1,44 @@
 package game
 
-import "kairisei.local/server/internal/gamestate"
+import (
+	"time"
+
+	"kairisei.local/server/internal/gamestate"
+)
+
+func (settlement *teamBattleSettlement) setSoloRankingScore(policy *gamestate.TeamBattleScorePolicy, report TeamBattleDropReport, bossID int) {
+	if !report.SoloChallenge || !report.ScoreVerified || policy == nil || policy.SourceState != "LOCAL_POLICY_DAMAGE_SCORE" {
+		return
+	}
+	for _, partner := range settlement.Context.SelectedPartners {
+		if !partner.IsSelf {
+			return
+		}
+	}
+	score, grade := VerifiedTeamBattleDamageScore(policy, report.ScoreDamage)
+	if score > 0 {
+		settlement.RankingScore = &gamestate.BossScoreResult{BossID: bossID, Score: score, Grade: grade, AchievedAt: time.Now().Unix()}
+	}
+}
+
+// VerifiedTeamBattleDamageScore uses the same frozen score policy as the
+// settlement. The caller accepts either a completed authoritative room or a
+// validated solo report; the client never chooses the scoring multiplier.
+func VerifiedTeamBattleDamageScore(p *gamestate.TeamBattleScorePolicy, damage int64) (int64, int) {
+	score := damage * int64(p.Rate) / 100
+	return score, teamBattleScoreGrade(p, score)
+}
+
+func teamBattleScoreGrade(p *gamestate.TeamBattleScorePolicy, score int64) int {
+	grade := 0
+	for i, g := range p.Grades {
+		if score < g.Score {
+			break
+		}
+		grade = i
+	}
+	return grade
+}
 
 func cloneTeamBattleScores(source map[int]gamestate.TeamBattleScoreProgress) map[int]gamestate.TeamBattleScoreProgress {
 	result := make(map[int]gamestate.TeamBattleScoreProgress, len(source))
@@ -22,11 +60,7 @@ func planTeamBattleScore(p *gamestate.TeamBattleScorePolicy, progress gamestate.
 	rate := max(100, min(900, 900-(turns-p.BestTurn)*100))
 	damage := p.BaseScore
 	if p.SourceState == "LOCAL_POLICY_DAMAGE_SCORE" {
-		if report.SoloChallenge {
-			// Native result UI calculates damage*rate/100. The highest threshold
-			// is a local clear score, not a claim about the player's damage.
-			damage, rate = p.Grades[len(p.Grades)-1].Score, 100
-		} else if report.ScoreVerified {
+		if report.ScoreVerified {
 			damage, rate = report.ScoreDamage, p.Rate
 		} else {
 			return progress, nil, nil
@@ -36,12 +70,11 @@ func planTeamBattleScore(p *gamestate.TeamBattleScorePolicy, progress gamestate.
 	previousHighScore := progress.HighScore
 	progress.HighScore = max(progress.HighScore, score)
 	rewards := []gamestate.Reward{}
-	grade := 0
+	grade := teamBattleScoreGrade(p, score)
 	for i, g := range p.Grades {
 		if score < g.Score {
 			break
 		}
-		grade = i
 		mask := uint16(1) << i
 		if progress.Claimed&mask == 0 {
 			rewards = append(rewards, g.RewardList()...)
@@ -51,10 +84,23 @@ func planTeamBattleScore(p *gamestate.TeamBattleScorePolicy, progress gamestate.
 	return progress, rewards, []any{map[string]any{"damage": damage, "rate": rate, "grade": grade, "high_score": previousHighScore}}
 }
 
-func (s *Account) ScoreLineup(bossID int, profiles []gamestate.TeamBattleRewardProfile) (int64, []any) {
+func (s *Account) battleScoresLocked(solo bool) map[int]gamestate.TeamBattleScoreProgress {
+	if solo {
+		if s.teamBattleSoloScores == nil {
+			s.teamBattleSoloScores = map[int]gamestate.TeamBattleScoreProgress{}
+		}
+		return s.teamBattleSoloScores
+	}
+	if s.teamBattleScores == nil {
+		s.teamBattleScores = map[int]gamestate.TeamBattleScoreProgress{}
+	}
+	return s.teamBattleScores
+}
+
+func (s *Account) ScoreLineup(bossID int, profiles []gamestate.TeamBattleRewardProfile, mode gamestate.BattleScoreMode) (int64, []any) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	progress := s.teamBattleScores[bossID]
+	progress := s.battleScoresLocked(mode == gamestate.BattleScoreSolo)[bossID]
 	var policy *gamestate.TeamBattleScorePolicy
 	for _, profile := range profiles {
 		if profile.BossID == bossID && profile.StageQuestAreaID == 0 && profile.TowerID == 0 {

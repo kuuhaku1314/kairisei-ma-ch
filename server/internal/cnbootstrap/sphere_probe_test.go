@@ -31,7 +31,7 @@ func auditCompleteSpheres(t *testing.T, handler http.Handler, savePath, seedPath
 	})
 	testfixture.AttachProbeCardCatalog(t, storage, cards)
 	accounts := testfixture.TestAccountRepository(t, storage)
-	identity, err := accounts.ResolveLogin("00000000-0000-4000-8480-000000000001")
+	identity, err := accounts.ResolveInternalLogin("00000000-0000-4000-8480-000000000001")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,11 +104,14 @@ func auditCompleteSpheres(t *testing.T, handler http.Handler, savePath, seedPath
 		}
 	}
 	deck := state.Decks[0]
-	call("/CardDeckSet", map[string]any{"decks": []any{map[string]any{
-		"arthur_type": deck.ArthurType, "idx": deck.Index, "job_type": deck.JobType, "leader_card_idx": deck.LeaderCardIndex,
-		"card_uniqid": deck.CardUniqueIDs, "support_card_uniqid": deck.SupportCardUniqueIDs, "sphr_uniqid": []int64{base.UniqueID, 0, 0},
-		"buddy_uniqid": deck.BuddyUniqueIDs, "name": deck.Name, "is_active": deck.IsActive, "is_rental": deck.IsRental,
-	}}}, 0)
+	setSphereDeck := func(ids []int64) {
+		call("/CardDeckSet", map[string]any{"decks": []any{map[string]any{
+			"arthur_type": deck.ArthurType, "idx": deck.Index, "job_type": deck.JobType, "leader_card_idx": deck.LeaderCardIndex,
+			"card_uniqid": deck.CardUniqueIDs, "support_card_uniqid": deck.SupportCardUniqueIDs, "sphr_uniqid": ids,
+			"buddy_uniqid": deck.BuddyUniqueIDs, "name": deck.Name, "is_active": deck.IsActive, "is_rental": deck.IsRental,
+		}}}, 0)
+	}
+	setSphereDeck([]int64{base.UniqueID, 0, 0})
 	lock := func(id int64, locked bool) {
 		route := "/SphrUnlock"
 		if locked {
@@ -162,6 +165,11 @@ func auditCompleteSpheres(t *testing.T, handler http.Handler, savePath, seedPath
 	call("/SphrEvolution", map[string]any{"base_uniqid": base.UniqueID, "add_uniqid": 0, "add_cardid": 20006001}, -1200)
 	call("/SphrShow", nil, 0)
 	lock(base.UniqueID, false)
+	call("/SphrSell", map[string]any{"uniqids": []int64{base.UniqueID}}, -1)
+	if state = load(); len(state.Spheres) != 1 || state.Decks[0].SphereUniqueIDs[0] != base.UniqueID {
+		t.Fatal("equipped sphere rejection changed ownership or deck reference")
+	}
+	setSphereDeck([]int64{0, 0, 0})
 	call("/SphrSell", map[string]any{"uniqids": []int64{base.UniqueID}}, 0)
 	state = load()
 	if len(state.Spheres) != 0 || state.Decks[0].SphereUniqueIDs[0] != 0 {
@@ -194,7 +202,7 @@ func auditCompleteSpheres(t *testing.T, handler http.Handler, savePath, seedPath
 		t.Fatal("50 sphere sale did not persist")
 	}
 	// A second account starts over capacity before its handler is loaded.
-	identity, err = accounts.ResolveLogin("00000000-0000-4000-8485-000000000002")
+	identity, err = accounts.ResolveInternalLogin("00000000-0000-4000-8485-000000000002")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,6 +213,12 @@ func auditCompleteSpheres(t *testing.T, handler http.Handler, savePath, seedPath
 	state.Onboarding.Step = masterdata.OnboardingStepCount
 	state.User.Name = "InventoryTest"
 	state.User.CardContainerMax = 4000 // An existing larger capacity must survive.
+	// This account tests capacity, not equipped-item consumption. The seed's
+	// buddy IDs must not accidentally refer to the replacement inventory below.
+	for i := range state.Decks {
+		state.Decks[i].BuddyUniqueIDs = make([]int64, len(state.Decks[i].BuddyUniqueIDs))
+		state.Decks[i].SphereUniqueIDs = make([]int64, len(state.Decks[i].SphereUniqueIDs))
+	}
 	state.Buddies = nil
 	if len(cards.BuddySeedTemplates) == 0 {
 		t.Fatal("missing buddy template")
@@ -245,7 +259,9 @@ func auditCompleteSpheres(t *testing.T, handler http.Handler, savePath, seedPath
 	if len(load().Buddies) != gamestate.BuddyCapacityDefault+2 {
 		t.Fatal("same-ID buddy copies lost on load")
 	}
-	call("/BuddySell", map[string]any{"uniqids": []int64{1}}, 0)
+	// Connect may equip the first matching initial sword. Sell a spare copy;
+	// capacity overflow must not bypass the equipped-item protection either.
+	call("/BuddySell", map[string]any{"uniqids": []int64{gamestate.BuddyCapacityDefault + 2}}, 0)
 	if len(load().Buddies) != gamestate.BuddyCapacityDefault+1 {
 		t.Fatal("over-capacity buddy sale failed")
 	}

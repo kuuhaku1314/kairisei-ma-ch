@@ -19,6 +19,7 @@ import (
 type CDNObject struct {
 	Key        string `json:"key"`
 	Source     string `json:"source"`
+	SourceRoot string `json:"source_root,omitempty"`
 	Bytes      int64  `json:"bytes"`
 	SHA256     string `json:"sha256"`
 	SourcePath string `json:"-"`
@@ -27,21 +28,40 @@ type CDNObject struct {
 type cdnObject = CDNObject
 
 type CDNManifest struct {
-	SchemaVersion     int         `json:"schema_version"`
-	ResourceSetSHA256 string      `json:"resource_set_sha256"`
-	Files             []CDNObject `json:"files"`
-	Root              string      `json:"-"`
+	SchemaVersion     int                  `json:"schema_version"`
+	ResourceSetSHA256 string               `json:"resource_set_sha256"`
+	Files             []CDNObject          `json:"files"`
+	SourceRoots       map[string]string    `json:"source_roots,omitempty"`
+	PlatformContents  []CDNPlatformContent `json:"platform_contents,omitempty"`
+	Root              string               `json:"-"`
+}
+
+type CDNPlatformContent struct {
+	Platform      string `json:"platform"`
+	UnityVersion  string `json:"unity_version"`
+	ContentID     string `json:"content_id"`
+	ProfileSHA256 string `json:"profile_sha256"`
+}
+
+// ReadOnlyRoots includes the independently built platform artifacts. Neither
+// exported mappings nor CDN activation config may overwrite any input root.
+func (manifest CDNManifest) ReadOnlyRoots() []string {
+	roots := []string{manifest.Root}
+	for _, root := range manifest.SourceRoots {
+		roots = append(roots, root)
+	}
+	return roots
 }
 
 // ExportCDNManifest uses the very same catalog and CPK version/alias builders as
 // login downloads. Only delivery payloads are exported, never account or master
 // files. File hashes are inherited from the complete verified resource set;
 // the sync tool checks the bytes before uploading a missing object.
-func ExportCDNManifest(manifestPath, outputPath string) error {
+func ExportCDNManifest(manifestPath, outputPath string, platformProfiles ...string) error {
 	if manifestPath == "" || outputPath == "" {
 		return errors.New("CDN export requires -resource-set and -export-cdn-manifest")
 	}
-	result, err := BuildCDNManifest(manifestPath)
+	result, err := BuildCDNManifest(manifestPath, platformProfiles...)
 	if err != nil {
 		return err
 	}
@@ -54,8 +74,10 @@ func ExportCDNManifest(manifestPath, outputPath string) error {
 		return err
 	}
 	outputAbsolute = filepath.Join(outputParent, filepath.Base(outputAbsolute))
-	if relative, err := filepath.Rel(result.Root, outputAbsolute); err == nil && filepath.IsLocal(relative) {
-		return errors.New("CDN manifest output must be outside the read-only resource set")
+	for _, root := range result.ReadOnlyRoots() {
+		if relative, err := filepath.Rel(root, outputAbsolute); err == nil && filepath.IsLocal(relative) {
+			return errors.New("CDN manifest output must be outside the read-only resource inputs")
+		}
 	}
 	output, err := os.OpenFile(outputAbsolute, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
@@ -68,9 +90,9 @@ func ExportCDNManifest(manifestPath, outputPath string) error {
 
 // BuildCDNManifest also supplies resolved local paths for the built-in uploader.
 // It does not write files, open a database, or start any network listeners.
-func BuildCDNManifest(manifestPath string) (result CDNManifest, err error) {
-	if manifestPath == "" {
-		return result, errors.New("CDN requires a complete resource-set.json")
+func BuildCDNManifest(manifestPath string, platformProfiles ...string) (result CDNManifest, err error) {
+	if manifestPath == "" || len(platformProfiles) == 0 {
+		return result, errors.New("CDN requires a complete resource-set.json and platform delivery profiles")
 	}
 	absolute, err := filepath.Abs(manifestPath)
 	if err != nil {
@@ -110,7 +132,8 @@ func BuildCDNManifest(manifestPath string) (result CDNManifest, err error) {
 		return result, errors.New("CDN export requires a complete CN resource set")
 	}
 	inputs := make(map[string]string)
-	for _, key := range []string{"cn-patch-root", "cn-asset-map", "cn-cpk-root", "cn-cpk-aliases", "cn-image-root"} {
+	inputKeys := []string{"cn-cpk-root", "cn-cpk-aliases", "cn-image-root"}
+	for _, key := range inputKeys {
 		inputs[key], err = cdnSourcePath(root, manifest.Entrypoints[key])
 		if err != nil {
 			return result, fmt.Errorf("CDN entrypoint %s: %w", key, err)
@@ -159,19 +182,10 @@ func BuildCDNManifest(manifestPath string) (result CDNManifest, err error) {
 		objects[key] = entry
 		return nil
 	}
-	patchRoot := inputs["cn-patch-root"]
-	catalog, err := buildCN602Catalog([]string{patchRoot}, inputs["cn-asset-map"])
+	sourceRoots := map[string]string{"resources": root}
+	platformContents, err := appendPlatformCDN(objects, sourceRoots, platformProfiles)
 	if err != nil {
 		return result, err
-	}
-	patchDelivery, err := cnPatchDeliveryFromCatalog(catalog)
-	if err != nil {
-		return result, err
-	}
-	for _, file := range patchDelivery {
-		if err := add("patch/Android/patch/"+file.Name+".v"+file.CRC, filepath.Join(patchRoot, filepath.FromSlash(file.Name)), file.Size); err != nil {
-			return result, err
-		}
 	}
 	cpkRoot := inputs["cn-cpk-root"]
 	aliases, err := cpk.LoadAliases(cpkRoot, inputs["cn-cpk-aliases"])
@@ -202,6 +216,9 @@ func BuildCDNManifest(manifestPath string) (result CDNManifest, err error) {
 	}
 	files := make([]cdnObject, 0, len(objects))
 	for _, object := range objects {
+		if object.SourceRoot == "" {
+			object.SourceRoot = "resources"
+		}
 		files = append(files, object)
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].Key < files[j].Key })
@@ -209,7 +226,38 @@ func BuildCDNManifest(manifestPath string) (result CDNManifest, err error) {
 	if len(files) == 0 {
 		return result, errors.New("empty CDN delivery manifest")
 	}
-	return CDNManifest{SchemaVersion: 1, ResourceSetSHA256: hex.EncodeToString(digest[:]), Files: files, Root: root}, nil
+	return CDNManifest{SchemaVersion: 2, ResourceSetSHA256: hex.EncodeToString(digest[:]), Files: files,
+		SourceRoots: sourceRoots, PlatformContents: platformContents, Root: root}, nil
+}
+
+func appendPlatformCDN(objects map[string]cdnObject, roots map[string]string, profiles []string) ([]CDNPlatformContent, error) {
+	deliveries, err := loadPlatformDeliveries(profiles)
+	if err != nil {
+		return nil, err
+	}
+	contents := make([]CDNPlatformContent, 0, len(deliveries))
+	for _, delivery := range deliveries {
+		identity := delivery.platform + "/" + delivery.unityVersion + "/" + delivery.contentID
+		contents = append(contents, CDNPlatformContent{delivery.platform, delivery.unityVersion, delivery.contentID, delivery.profileSHA})
+		for name, object := range delivery.objects {
+			key := "content/" + identity + "/" + name
+			if _, exists := objects[key]; exists {
+				return nil, fmt.Errorf("duplicate platform CDN key %q", key)
+			}
+			sourceRoot := identity + "/" + object.sourceRoot
+			roots[sourceRoot] = object.root
+			file := object.file
+			relative, err := filepath.Rel(object.root, file.path)
+			if err != nil || !filepath.IsLocal(relative) {
+				return nil, fmt.Errorf("platform CDN artifact escapes its source root: %q", name)
+			}
+			objects[key] = cdnObject{Key: key, Source: filepath.ToSlash(relative), SourceRoot: sourceRoot, SourcePath: file.path, Bytes: file.size, SHA256: file.sha}
+		}
+	}
+	sort.Slice(contents, func(i, j int) bool {
+		return platformKey(contents[i].Platform, contents[i].UnityVersion) < platformKey(contents[j].Platform, contents[j].UnityVersion)
+	})
+	return contents, nil
 }
 
 // Download identities include metadata even when it is not itself downloaded.

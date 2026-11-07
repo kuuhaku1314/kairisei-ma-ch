@@ -7,7 +7,7 @@ import (
 )
 
 func validateCardCollection(master CardRuntimeMaster) error {
-	if len(master.CardCollectionPages) == 0 || len(master.CardCollectionPages) > 1000 {
+	if len(master.CardCollectionPages) == 0 || len(master.CardCollectionPages) > len(master.CardTemplates)+len(master.StackCardTemplates) {
 		return fmt.Errorf("CN card collection page count is invalid")
 	}
 	known := make(map[int]bool, len(master.CardTemplates)+len(master.StackCardTemplates))

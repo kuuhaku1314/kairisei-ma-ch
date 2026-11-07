@@ -15,7 +15,7 @@ func newComebackToken() (string, error) {
 
 func (c *clientConn) handleComeback(payload string) error {
 	fields := splitCSV(payload)
-	if len(fields) != 4 {
+	if len(fields) != 4 && (len(fields) != 5 || fields[4] != "2") {
 		return c.writeComebackRejected()
 	}
 	userID, err := parsePositiveInt(fields[0])
@@ -34,9 +34,24 @@ func (c *clientConn) handleComeback(payload string) error {
 		return c.writeComebackRejected()
 	}
 
+	if len(fields) == 5 {
+		c.recoveryVersion = recoveryProtocolVersion
+	}
 	hub := c.server.hub
 	session := hub.lockRoomSession(roomID)
+	for session.room != nil && session.room.completionDone != nil {
+		done := session.room.completionDone
+		session.Unlock()
+		<-done
+		session = hub.lockRoomSession(roomID)
+	}
 	defer session.Unlock()
+	hub.mu.RLock()
+	if hub.maintenance {
+		hub.mu.RUnlock()
+		session.Unlock()
+		return c.writeComebackRejected()
+	}
 	now := time.Now()
 	current, exists := session.room, session.room != nil
 	memberType := roomMemberTypeForUser(current, userID)
@@ -44,10 +59,18 @@ func (c *clientConn) handleComeback(payload string) error {
 	if exists && current != nil {
 		deadline, disconnected = current.disconnectedUntil[memberType]
 	}
-	valid := exists && current.State == RoomStateBattle &&
-		memberType >= 1 && disconnected && deadline.After(now) && current.connections[memberType] == nil &&
-		current.comebackTokens[memberType] == fields[2]
+	var replaced *clientConn
+	if exists && memberType >= 1 {
+		replaced = current.connections[memberType]
+	}
+	valid := exists && current.State == RoomStateBattle && memberType >= 1 &&
+		(replaced != nil && !replaced.retired || replaced == nil && disconnected && deadline.After(now)) &&
+		validRecoveryToken(current.comebackTokens[memberType], current.pendingComebackTokens[memberType], fields[2])
 	if valid {
+		if !recoveryMemberAlive(current, memberType) {
+			hub.mu.RUnlock()
+			return c.rejectKnockedOutRecovery(session, "ComebackResult", false)
+		}
 		current.connections[memberType] = c
 		delete(current.gameNextFinished, memberType)
 		delete(current.disconnectedUntil, memberType)
@@ -55,7 +78,11 @@ func (c *clientConn) handleComeback(payload string) error {
 		c.memberType = memberType
 		c.userID = userID
 		c.comebackPending = true
+		if c.recoveryVersion == recoveryProtocolVersion {
+			c.setRecoveryDeadline(now.Add(comebackLifetime))
+		}
 		c.completedComeback = false
+		hub.mu.RUnlock()
 		delivery := c.reserveFramesLocked([]battleFrame{{"ComebackResult", joinCSV("0", "")}})
 		session.Unlock()
 
@@ -65,6 +92,10 @@ func (c *clientConn) handleComeback(payload string) error {
 			"member_type", memberType,
 			"user_id", userID,
 		)
+		if replaced != nil {
+			_ = replaced.conn.Close()
+			_ = replaced.close(true)
+		}
 		return delivery.send()
 	}
 
@@ -75,10 +106,16 @@ func (c *clientConn) handleComeback(payload string) error {
 	if completedExists && completed != nil {
 		deadline, disconnected = completed.disconnectedUntil[memberType]
 	}
+	replaced = nil
+	if completedExists && memberType >= 1 {
+		replaced = completed.comebackConnections[memberType]
+	}
 	completedValid := completedExists && completed.expiresAt.After(now) && completed.terminalEngine != nil &&
 		completed.terminalBattleEndType != 0 && memberType >= 1 && disconnected && deadline.After(now) &&
-		completed.comebackConnections[memberType] == nil && completed.comebackTokens[memberType] == fields[2]
+		(replaced == nil || !replaced.retired) &&
+		validRecoveryToken(completed.comebackTokens[memberType], completed.pendingComebackTokens[memberType], fields[2])
 	if !completedValid {
+		hub.mu.RUnlock()
 		session.Unlock()
 		return c.writeComebackRejected()
 	}
@@ -87,7 +124,11 @@ func (c *clientConn) handleComeback(payload string) error {
 	c.memberType = memberType
 	c.userID = userID
 	c.comebackPending = true
+	if c.recoveryVersion == recoveryProtocolVersion {
+		c.setRecoveryDeadline(now.Add(comebackLifetime))
+	}
 	c.completedComeback = true
+	hub.mu.RUnlock()
 	delivery := c.reserveFramesLocked([]battleFrame{{"ComebackResult", joinCSV("0", "")}})
 	session.Unlock()
 
@@ -97,6 +138,10 @@ func (c *clientConn) handleComeback(payload string) error {
 		"member_type", memberType,
 		"user_id", userID,
 	)
+	if replaced != nil {
+		_ = replaced.conn.Close()
+		_ = replaced.close(true)
+	}
 	return delivery.send()
 }
 
@@ -117,7 +162,8 @@ func (c *clientConn) handleReadyToComeback(payload string) error {
 		session.Unlock()
 		return c.writeFrame("RoomComebackFailed", joinCSV("-1", "local room comeback is not pending"))
 	}
-	if c.completedComeback {
+	if c.completedComeback || session.completed != nil && session.completed.comebackConnections[c.memberType] == c {
+		c.completedComeback = true
 		session.Unlock()
 		return c.handleReadyToCompletedComeback()
 	}
@@ -126,6 +172,9 @@ func (c *clientConn) handleReadyToComeback(payload string) error {
 	if !exists || current.State != RoomStateBattle || current.connections[c.memberType] != c {
 		session.Unlock()
 		return c.writeFrame("RoomComebackFailed", joinCSV("-1", "local room comeback state is unavailable"))
+	}
+	if !recoveryMemberAlive(current, c.memberType) {
+		return c.rejectKnockedOutRecovery(session, "RoomComebackFailed", true)
 	}
 	if current.engine == nil {
 		// The original client is already in battle when it sends LoadingFinish.
@@ -148,7 +197,7 @@ func (c *clientConn) handleReadyToComeback(payload string) error {
 		session.Unlock()
 		return err
 	}
-	rotatedToken, err := newComebackToken()
+	rotatedToken, err := c.prepareRecoveryToken(&current.pendingComebackTokens)
 	if err != nil {
 		session.Unlock()
 		return err
@@ -166,6 +215,9 @@ func (c *clientConn) handleReadyToComeback(payload string) error {
 	// newlines and would otherwise destroy the RoomComeback tail contract.
 	response := joinCSV(strconv.Itoa(battleIndex), strconv.Itoa(progress), rotatedToken) + "," + resultPayload
 	frames := []battleFrame{{"RoomComeback", response}}
+	if c.recoveryVersion == recoveryProtocolVersion {
+		frames = append(frames, recoveryStateFrame(current, memberType, rotatedToken))
+	}
 	if state := current.continuation; state != nil {
 		if state.presentation != nil {
 			if state.payerUserID == c.userID {
@@ -178,7 +230,7 @@ func (c *clientConn) handleReadyToComeback(payload string) error {
 	}
 	if current.userPhaseStarted && !current.userAttackStarted && !nextPending {
 		for slot := 1; slot <= maxRoomMembers; slot++ {
-			if _, submitted := current.engine.selectedPlays[slot]; submitted {
+			if current.engine.HasSubmission(slot) {
 				// RoomComeback already restores committed cards; a stale plan
 				// would clear their decided state in the original consumer.
 				continue
@@ -206,7 +258,7 @@ func (c *clientConn) handleReadyToComeback(payload string) error {
 	c.loadingComebackReady = false
 	session.Unlock()
 	snapshotErr := delivery.send()
-	if snapshotErr == nil {
+	if snapshotErr == nil && c.recoveryVersion != recoveryProtocolVersion {
 		session = hub.lockRoomSession(roomID)
 		defer session.Unlock()
 		if latest := session.room; latest != nil && latest.connections[memberType] == c {
@@ -239,22 +291,10 @@ func (c *clientConn) handleReadyToComeback(payload string) error {
 	// already waiting at a direction barrier, count the recovered member as
 	// having consumed that snapshot; otherwise increasing connections here
 	// would leave the room permanently one Finish short.
-	switch acknowledgement {
-	case "GameStartFinish":
-		return c.handleGameStartFinish()
-	case "TurnPhaseFinish":
-		return c.handleTurnPhaseFinish()
-	case "UserAttackFinish":
-		return c.handleUserAttackFinish()
-	case "ChaliceSphrExecUserPhaseFinish":
-		return c.handleChaliceSphrExecUserPhaseFinish()
-	case "EnemyPhaseFinish":
-		return c.handleEnemyPhaseFinish()
-	case "ChaliceSphrExecEnemyPhaseFinish":
-		return c.handleChaliceSphrExecEnemyPhaseFinish()
-	default:
+	if c.recoveryVersion == recoveryProtocolVersion {
 		return nil
 	}
+	return c.acknowledgeRecoveryPhase(acknowledgement)
 }
 
 func (c *clientConn) handleReadyToCompletedComeback() error {
@@ -277,7 +317,7 @@ func (c *clientConn) handleReadyToCompletedComeback() error {
 		session.Unlock()
 		return err
 	}
-	rotatedToken, err := newComebackToken()
+	rotatedToken, err := c.prepareRecoveryToken(&completed.pendingComebackTokens)
 	if err != nil {
 		session.Unlock()
 		return err
@@ -290,12 +330,16 @@ func (c *clientConn) handleReadyToCompletedComeback() error {
 	// BattleResultCmdTeamFunction.execComeback explicitly extracts a queued
 	// RecvApiGameEnd after the RecvRoomComeback snapshot. Preserve that order,
 	// then let the client choose its victory result or defeat return flow.
-	delivery := c.reserveFramesLocked([]battleFrame{{"RoomComeback", response}})
+	frames := []battleFrame{{"RoomComeback", response}}
+	if c.recoveryVersion == recoveryProtocolVersion {
+		frames = append(frames, battleFrame{"RoomRecoveryState", joinCSV(rotatedToken, "0", "0", "1")})
+	}
+	delivery := c.reserveFramesLocked(frames)
 	terminalDelivery := c.reserveFramesLocked([]battleFrame{
 		{"ApiGameEnd", joinCSV("2", strconv.Itoa(endType))}, {"GameClose", ""}})
 	session.Unlock()
 	snapshotErr := delivery.send()
-	if snapshotErr == nil {
+	if snapshotErr == nil && c.recoveryVersion != recoveryProtocolVersion {
 		session = hub.lockRoomSession(roomID)
 		defer session.Unlock()
 		if latest := session.completed; latest != nil && latest.comebackConnections[memberType] == c {
@@ -317,8 +361,11 @@ func (c *clientConn) handleReadyToCompletedComeback() error {
 		// The restored client can still be in the final direction. Retain only
 		// its live interaction identity until it closes or reaches the deadline.
 		c.setFinishingDeadline(time.Now().Add(battleInteractionLifetime))
-		delete(latest.comebackTokens, memberType)
-		delete(latest.disconnectedUntil, memberType)
+		if c.recoveryVersion != recoveryProtocolVersion {
+			delete(latest.comebackTokens, memberType)
+			delete(latest.pendingComebackTokens, memberType)
+			delete(latest.disconnectedUntil, memberType)
+		}
 		c.comebackPending = false
 		c.completedComeback = false
 	}
@@ -398,7 +445,8 @@ func (s *Server) scheduleComebackExpiry(roomID int64, memberType int, deadline t
 		}
 		delete(current.disconnectedUntil, memberType)
 		delete(current.comebackTokens, memberType)
-		released := len(current.connections) == 0 && len(current.disconnectedUntil) == 0
+		delete(current.pendingComebackTokens, memberType)
+		released := len(current.connections) == 0 && len(current.disconnectedUntil) == 0 && current.pendingCompletion == nil
 		if released {
 			hub.removeRoom(current)
 		}

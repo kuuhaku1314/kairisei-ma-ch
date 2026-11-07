@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"kairisei.local/server/internal/gamestate"
@@ -36,10 +37,13 @@ type accountIdentity struct {
 }
 
 type Accounts struct {
-	storage  *Database
-	mu       sync.Mutex
-	battleMu sync.Mutex
-	battles  map[int]*accountBattleSession
+	creation     atomic.Pointer[creationGuard]
+	giftMu       sync.Mutex
+	giftAttempts map[int]time.Time
+	storage      *Database
+	mu           sync.Mutex
+	battleMu     sync.Mutex
+	battles      map[int]*accountBattleSession
 }
 
 var ErrInvalidSession = errors.New("CN account session is invalid")
@@ -93,6 +97,19 @@ func (accounts *Accounts) RememberBattle(userID int, active *gamestate.TeamBattl
 			delete(accounts.battles, userID)
 		}
 	})
+}
+
+// Caller has drained account writers and will evict their cached handlers.
+// These are serving-lifetime runs, never settled receipts or login sessions.
+func (accounts *Accounts) DiscardUnsettledBattles() int {
+	accounts.battleMu.Lock()
+	defer accounts.battleMu.Unlock()
+	count := len(accounts.battles)
+	for _, session := range accounts.battles {
+		session.timer.Stop()
+	}
+	clear(accounts.battles)
+	return count
 }
 
 func NewAccounts(storage *Database) (*Accounts, error) {
@@ -310,7 +327,7 @@ func (accounts *Accounts) ensureSystemPartnerAccounts(transaction *sql.Tx) error
 			[]uint{uint(arthurType - 1)},
 			state.User.UnlockedFeatureIDs...,
 		)
-		state.User.TutorialFlag = (int64(1) << 26) - 1
+		state.User.TutorialFlag = (int64(1) << gamestate.TutorialFlagCount) - 1
 		state.Onboarding = gamestate.OnboardingState{
 			ConfigVersion: masterdata.OnboardingConfigVersion,
 			Step:          masterdata.OnboardingStepCount,
@@ -319,7 +336,7 @@ func (accounts *Accounts) ensureSystemPartnerAccounts(transaction *sql.Tx) error
 		if err != nil {
 			return fmt.Errorf("encode CN system-partner account %d: %w", userID, err)
 		}
-		if err := writeAccountRows(transaction, state); err != nil {
+		if err := writeSnapshotRows(transaction, state, content); err != nil {
 			return err
 		}
 		digest := sha256.Sum256(content)
@@ -365,17 +382,24 @@ func (accounts *Accounts) ensureSystemPartnerAccounts(transaction *sql.Tx) error
 	return nil
 }
 
-func (accounts *Accounts) ResolveLogin(loginUUID string) (accountIdentity, error) {
-	return accounts.ResolveLoginContext(context.Background(), loginUUID)
+// ResolveInternalLogin is for trusted fixtures and internal provisioning only.
+// Client routes must use ResolveClientLogin with a validated network source.
+func (accounts *Accounts) ResolveInternalLogin(loginUUID string) (accountIdentity, error) {
+	return accounts.resolveLogin(context.Background(), loginUUID, nil)
 }
 
-func (accounts *Accounts) ResolveLoginContext(ctx context.Context, loginUUID string) (accountIdentity, error) {
+func (accounts *Accounts) resolveLogin(ctx context.Context, loginUUID string, admission *creationAdmission) (accountIdentity, error) {
 	if err := ctx.Err(); err != nil {
 		return accountIdentity{}, err
 	}
 	loginUUID = strings.ToLower(strings.TrimSpace(loginUUID))
 	if !validLoginUUID(loginUUID) {
 		return accountIdentity{}, errors.New("CN login UUID is invalid")
+	}
+	if admission != nil {
+		if err := accounts.precheckCreation(ctx, loginUUID, admission); err != nil {
+			return accountIdentity{}, err
+		}
 	}
 	accounts.mu.Lock()
 	defer accounts.mu.Unlock()
@@ -398,8 +422,11 @@ func (accounts *Accounts) ResolveLoginContext(ctx context.Context, loginUUID str
 		}
 	}()
 
-	identity, err := accounts.resolveLoginTransaction(ctx, transaction, loginUUID, true)
+	identity, err := accounts.resolveLoginTransaction(ctx, transaction, loginUUID, true, admission)
 	if err != nil {
+		return accountIdentity{}, err
+	}
+	if err := ctx.Err(); err != nil {
 		return accountIdentity{}, err
 	}
 	if err := transaction.Commit(); err != nil {
@@ -410,19 +437,27 @@ func (accounts *Accounts) ResolveLoginContext(ctx context.Context, loginUUID str
 }
 
 // Caller owns accounts.mu and the transaction. Binding does not rotate an active game session.
-func (accounts *Accounts) resolveLoginTransaction(ctx context.Context, transaction *sql.Tx, loginUUID string, rotate bool) (accountIdentity, error) {
+func (accounts *Accounts) resolveLoginTransaction(ctx context.Context, transaction *sql.Tx, loginUUID string, rotate bool, admission *creationAdmission) (accountIdentity, error) {
 	var identity accountIdentity
+	var blockUntil sql.NullInt64
 	err := transaction.QueryRowContext(
 		ctx,
-		`SELECT user_id, login_uuid, session_key
+		`SELECT user_id, login_uuid, session_key, login_block_until_unix
 		 FROM cn_local_account WHERE login_uuid = ?`,
 		loginUUID,
-	).Scan(&identity.UserID, &identity.LoginUUID, &identity.SessionKey)
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	).Scan(&identity.UserID, &identity.LoginUUID, &identity.SessionKey, &blockUntil)
+	clock := time.Now().UTC()
+	now := clock.Format(time.RFC3339Nano)
 	if err == nil && !rotate {
 		return identity, nil
 	}
 	if err == nil {
+		if loginBlockActive(blockUntil, clock.Unix()) {
+			return accountIdentity{}, &LoginBlockedError{UntilUnix: blockUntil.Int64}
+		}
+		if admission != nil && !admission.guard.policy().LoginWhitelist.Allows(identity.UserID) {
+			return accountIdentity{}, ErrLoginWhitelist
+		}
 		sessionKey, err := newSessionKey()
 		if err != nil {
 			return accountIdentity{}, err
@@ -440,6 +475,11 @@ func (accounts *Accounts) resolveLoginTransaction(ctx context.Context, transacti
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return accountIdentity{}, fmt.Errorf("read CN local account: %w", err)
 	} else {
+		if admission != nil {
+			if err := admission.claim(ctx, transaction); err != nil {
+				return accountIdentity{}, err
+			}
+		}
 		var nextUserID int
 		if err := transaction.QueryRowContext(
 			ctx,
@@ -519,7 +559,7 @@ func (accounts *Accounts) insertSeedSnapshot(ctx context.Context, transaction *s
 	if err != nil {
 		return err
 	}
-	if err := writeAccountRows(transaction, state); err != nil {
+	if err := writeSnapshotRows(transaction, state, content); err != nil {
 		return err
 	}
 	digest := sha256.Sum256(content)
@@ -641,7 +681,7 @@ func (accounts *Accounts) persistAccountData(userID int, state gamestate.State, 
 }
 
 func writeAccountSnapshot(transaction *sql.Tx, userID int, state gamestate.State, content []byte, digestText, updatedUTC string, audit *AdminAudit) error {
-	if err := writeAccountRows(transaction, state); err != nil {
+	if err := writeSnapshotRows(transaction, state, content); err != nil {
 		return err
 	}
 	result, err := transaction.ExecContext(
@@ -682,10 +722,6 @@ func writeAccountSnapshot(transaction *sql.Tx, userID int, state gamestate.State
 // an in-memory multiplayer room.
 func (accounts *Accounts) ListPVPOpponents(userID int) ([]gamestate.State, error) {
 	return accounts.ListLocalAccountStates(userID, false)
-}
-
-func (accounts *Accounts) listFriendPointPartnerAccounts(userID int) ([]gamestate.State, error) {
-	return accounts.ListLocalAccountStates(userID, true)
 }
 
 func (accounts *Accounts) ListLocalAccountStates(

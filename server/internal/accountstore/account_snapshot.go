@@ -19,11 +19,13 @@ const maxAccountSnapshotBytes = 16 * 1024 * 1024
 // loaded from the versioned seed/runtime catalog, never copied into these rows.
 // Global operator changes remain in cn_global_operation.
 type accountSnapshot struct {
+	Components                     accountComponentHashes                    `json:"row_components,omitempty"`
 	InventorySequence              gamestate.InventorySequenceState          `json:"inventory_sequence,omitempty"`
 	BurstProgress                  [4]uint8                                  `json:"burst_progress"`
 	Navigation                     gamestate.NavigationState                 `json:"navigation,omitempty"`
 	SchemaVersion                  int                                       `json:"schema_version"`
 	TeamBattleScores               map[int]gamestate.TeamBattleScoreProgress `json:"team_battle_scores,omitempty"`
+	TeamBattleSoloScores           map[int]gamestate.TeamBattleScoreProgress `json:"team_battle_solo_scores,omitempty"`
 	LocalShop                      gamestate.LocalShopState                  `json:"local_shop,omitempty"`
 	User                           gamestate.User                            `json:"user"`
 	PlayerProgressionConfigVersion int                                       `json:"player_progression_config_version"`
@@ -98,6 +100,7 @@ func accountSnapshotFromState(state gamestate.State) (accountSnapshot, error) {
 		BurstProgress:                  state.BurstProgress,
 		SchemaVersion:                  saveSnapshotSchemaVersion,
 		TeamBattleScores:               state.TeamBattleScores,
+		TeamBattleSoloScores:           state.TeamBattleSoloScores,
 		LocalShop:                      state.LocalShop,
 		User:                           state.User,
 		PlayerProgressionConfigVersion: state.PlayerProgressionConfigVersion,
@@ -122,7 +125,7 @@ func accountSnapshotFromState(state gamestate.State) (accountSnapshot, error) {
 		Buddy:                          state.Buddy,
 		BuddyConfigVersion:             state.BuddyConfigVersion,
 		Buddies:                        state.Buddies,
-		Friends:                        gamestate.FriendCollectionState{FollowMax: state.Friends.FollowMax, Users: []gamestate.Friend{}},
+		Friends:                        gamestate.FriendCollectionState{Users: []gamestate.Friend{}},
 		Stamps:                         state.Stamps,
 		Honors:                         state.Honors,
 		ExploreConfigVersion:           state.ExploreConfigVersion,
@@ -161,6 +164,7 @@ func accountSnapshotFromState(state gamestate.State) (accountSnapshot, error) {
 func (snapshot accountSnapshot) applyAccountData(state *gamestate.State) {
 	state.InventorySequence = snapshot.InventorySequence
 	state.TeamBattleScores = snapshot.TeamBattleScores
+	state.TeamBattleSoloScores = snapshot.TeamBattleSoloScores
 	state.LocalShop = snapshot.LocalShop
 	state.User = snapshot.User
 	state.PlayerProgressionConfigVersion = snapshot.PlayerProgressionConfigVersion
@@ -235,6 +239,10 @@ func EncodeAccountMetadata(state gamestate.State) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	snapshot.Components, err = accountComponentDigests(state)
+	if err != nil {
+		return nil, err
+	}
 	type metadataUser struct {
 		gamestate.User
 		Gold        *int `json:"gold,omitempty"`
@@ -268,7 +276,6 @@ func DecodeAccountSnapshot(content []byte) (accountSnapshot, error) {
 		return snapshot, errors.New("CN account data is empty or exceeds the size limit")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(content))
-	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&snapshot); err != nil {
 		return snapshot, fmt.Errorf("decode CN account data: %w", err)
 	}

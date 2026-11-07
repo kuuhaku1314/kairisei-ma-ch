@@ -1,6 +1,7 @@
 package game
 
 import (
+	"kairisei.local/server/internal/gamestate"
 	"time"
 )
 
@@ -36,8 +37,9 @@ func (s *Account) applyPlayerExperienceLocked(amount int) {
 	if !leveledUp {
 		return
 	}
+	s.markMissionMetricLocked(gamestate.MissionPlayerLevel)
 	s.bpMax = policy.BattlePointMaximum(s.currentLevel)
-	s.currentFriendMax = policy.FriendMaximum(s.currentLevel)
+	s.currentFollowMax = policy.FollowMaximum(s.currentLevel)
 	s.currentJobs = policy.JobsAtLevel(s.currentLevel)
 	// Level-up always refills both point pools and resets their recovery clocks.
 	s.ap = s.apMax

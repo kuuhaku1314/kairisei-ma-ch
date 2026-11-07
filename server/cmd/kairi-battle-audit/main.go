@@ -19,8 +19,8 @@ func main() {
 
 func run(arguments []string) error {
 	flags := flag.NewFlagSet("kairi-battle-audit", flag.ContinueOnError)
-	cardMaster := flags.String("cn-combat-card-master", "", "official CN card.csv")
-	battleMasterRoot := flags.String("cn-combat-master-root", "", "official CN battle master directory")
+	cardMaster := flags.String("cn-combat-card-master", "", "configured card.csv")
+	battleMasterRoot := flags.String("cn-combat-master-root", "", "configured battle master directory")
 	if err := flags.Parse(arguments); err != nil {
 		return err
 	}
@@ -50,16 +50,14 @@ func run(arguments []string) error {
 		return err
 	}
 	return json.NewEncoder(os.Stdout).Encode(map[string]any{
-		"state":                   "PASS",
-		"source":                  "official-cn-battle-and-card-master",
-		"mode":                    "static-contract-and-memory-simulation",
-		"cards":                   len(catalog.Cards),
-		"spheres":                 len(catalog.Spheres),
-		"buddies":                 len(catalog.Buddies),
-		"player_skill_role_sets":  len(catalog.PlayerSkillRoles),
-		"burst_skill_role_sets":   len(catalog.BurstSkillRoles),
-		"support_skill_role_sets": len(catalog.SupportSkillRoles),
-		"enemy_skill_role_sets":   len(catalog.EnemySkillRoles),
-		"parameter_rules":         len(catalog.RoleParamRules),
+		"state":           "PASS",
+		"source":          "configured-battle-and-card-master",
+		"mode":            "static-contract-and-memory-simulation",
+		"cards":           len(catalog.Cards),
+		"spheres":         len(catalog.Spheres),
+		"buddies":         len(catalog.Buddies),
+		"skills":          len(catalog.Skills),
+		"skill_role_sets": len(catalog.SkillRoles),
+		"parameter_rules": len(catalog.RoleParamRules),
 	})
 }

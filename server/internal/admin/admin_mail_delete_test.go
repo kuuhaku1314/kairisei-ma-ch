@@ -20,7 +20,7 @@ import (
 
 func TestAdminMailDeleteAtomicRetryAndNoReward(t *testing.T) {
 	accounts := testfixture.NewFriendCapacityTestAccounts(t)
-	identity, err := accounts.ResolveLogin("00000000-0000-4000-8000-00000000a502")
+	identity, err := accounts.ResolveInternalLogin("00000000-0000-4000-8000-00000000a502")
 	if err != nil {
 		t.Fatal(err)
 	}

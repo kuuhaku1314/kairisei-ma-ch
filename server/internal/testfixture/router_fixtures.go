@@ -409,17 +409,6 @@ func WriteTestStoryMaster(t *testing.T, root string) string {
 				}},
 			}},
 		}},
-		"sub_character_container_contract": map[string]any{
-			"evidence": "PLACEHOLDER", "reason": "NO_OFFICIAL_OUTER_GROUPING_FIELDS",
-			"official_row_count": 1, "observed_row_widths": []int{3},
-			"meaningful_column_indexes": []int{0, 1}, "nonempty_additional_value_count": 0,
-			"managed_consumed_fields":   []string{"name", "pictid", "sections"},
-			"managed_unused_fields":     []string{"story_main_charaid"},
-			"published_container_count": 1,
-			"published_container": map[string]any{
-				"story_main_charaid": 1, "name": "角色剧情", "pictid": 0,
-			},
-		},
 		"sub_section_mappings": []map[string]any{{
 			"story_sub_sectionid": 10000010, "card_name": "Test Card",
 			"script_chapter": "Test Card", "story_ids": []int{20010110},

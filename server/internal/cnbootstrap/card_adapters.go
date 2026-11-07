@@ -41,16 +41,30 @@ func (writer *bufferedResponseWriter) Write(content []byte) (int, error) {
 
 func cnBootstrapCardShow2(businessHandler http.Handler) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		if err := requireCNSessionOnly(request, "CardShow2"); err != nil {
+		payload, err := readCNSessionPayload(request, "CardShow2")
+		if err != nil {
 			http.Error(writer, err.Error(), http.StatusUnauthorized)
 			return
 		}
-		forwardCNBusiness(
-			writer,
-			adaptCNBusinessRequest(request, http.MethodPost, "/CardShow2", []byte(`{"deck_info_type":0}`)),
-			businessHandler,
-			adaptCNCardShow2Response,
-		)
+		deckInfoType := 0
+		if len(payload) != 0 {
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal(payload, &fields); err != nil || fields == nil || len(fields) > 1 {
+				http.Error(writer, "invalid CN CardShow2 payload", http.StatusBadRequest)
+				return
+			}
+			if raw, exists := fields["0"]; exists {
+				if err := json.Unmarshal(raw, &deckInfoType); err != nil || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) || deckInfoType < 0 {
+					http.Error(writer, "invalid CN CardShow2 deck_info_type", http.StatusBadRequest)
+					return
+				}
+			} else if len(fields) != 0 {
+				http.Error(writer, "unexpected CN CardShow2 field", http.StatusBadRequest)
+				return
+			}
+		}
+		forward := []byte(`{"deck_info_type":` + strconv.Itoa(deckInfoType) + `}`)
+		businessHandler.ServeHTTP(writer, adaptCNBusinessRequest(request, http.MethodPost, "/CardShow2", forward))
 	}
 }
 
@@ -172,16 +186,11 @@ func cnBootstrapCardEvolution(businessHandler http.Handler) http.HandlerFunc {
 		payload, err := normalizeCNOptionalFields(
 			request,
 			"CardEvolution",
-			[]string{"base_uniqid", "to_cardid", "add_uniqids", "add_container_uniqids", "add_cardids"},
+			[]string{"base_uniqid", "to_cardid", "add_uniqids", "add_container_uniqids", "add_cardids", "add_itemids"},
 			[]string{"base_uniqid", "to_cardid"},
 		)
 		if err != nil {
 			http.Error(writer, err.Error(), http.StatusBadRequest)
-			return
-		}
-		payload, err = appendCNEmptyArrayFields(payload, "add_itemids")
-		if err != nil {
-			http.Error(writer, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		forwardCNBusiness(
@@ -234,20 +243,6 @@ func cnBootstrapCardDecompose(businessHandler http.Handler) http.HandlerFunc {
 	}
 }
 
-func appendCNEmptyArrayFields(payload []byte, names ...string) ([]byte, error) {
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(payload, &fields); err != nil {
-		return nil, err
-	}
-	for _, name := range names {
-		if _, exists := fields[name]; exists {
-			return nil, errors.New("internal CN field already exists: " + name)
-		}
-		fields[name] = json.RawMessage(`[]`)
-	}
-	return json.Marshal(fields)
-}
-
 func cnBootstrapCardSell(businessHandler http.Handler) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		payload, err := normalizeCNOptionalFields(
@@ -265,6 +260,26 @@ func cnBootstrapCardSell(businessHandler http.Handler) http.HandlerFunc {
 			adaptCNBusinessRequest(request, http.MethodPost, "/CardSell", payload),
 			businessHandler,
 			adaptCNCardSellResponse,
+		)
+	}
+}
+
+func cnBootstrapCardContainerSell(businessHandler http.Handler) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		payload, err := readCNSessionPayload(request, "CardContainerSell")
+		if err != nil {
+			http.Error(writer, err.Error(), http.StatusUnauthorized)
+			return
+		}
+		if err := requireCNExactFields(payload, "CardContainerSell", "uniqids"); err != nil {
+			http.Error(writer, err.Error(), http.StatusBadRequest)
+			return
+		}
+		forwardCNBusiness(
+			writer,
+			adaptCNBusinessRequest(request, http.MethodPost, "/CardContainerSell", payload),
+			businessHandler,
+			adaptCNCardContainerSellResponse,
 		)
 	}
 }
@@ -618,24 +633,6 @@ func forwardCNBusiness(
 	_, _ = writer.Write(content)
 }
 
-func adaptCNCardShow2Response(content []byte) ([]byte, error) {
-	return adaptCNProtocolMethod(content, func(method map[string]json.RawMessage) (any, error) {
-		cards, err := remapJSONArray(method["0"], cnCardInfoFieldMap)
-		if err != nil {
-			return nil, err
-		}
-		return map[string]any{
-			"0": int64(0),
-			"1": cards,
-			"2": rawOrEmptyArray(method["1"]),
-			"3": rawOrEmptyArray(method["2"]),
-			"4": rawOrEmptyArray(method["3"]),
-			"5": rawOrEmptyArray(method["4"]),
-			"6": rawOrZero(method["5"]),
-		}, nil
-	})
-}
-
 func adaptCNCardContainerShowResponse(content []byte) ([]byte, error) {
 	return adaptCNProtocolMethod(content, func(method map[string]json.RawMessage) (any, error) {
 		cards, err := remapJSONArray(method["0"], cnCardInfoFieldMap)
@@ -835,6 +832,16 @@ func adaptCNCardSellResponse(content []byte) ([]byte, error) {
 			"get_gold": rawOrZero(method["get_gold"]),
 			"gold":     rawOrZero(method["gold"]),
 			"decks":    decks,
+		}, nil
+	})
+}
+
+func adaptCNCardContainerSellResponse(content []byte) ([]byte, error) {
+	return adaptCNProtocolMethod(content, func(method map[string]json.RawMessage) (any, error) {
+		return map[string]any{
+			"card_container_num": rawOrZero(method["card_container_num"]),
+			"get_gold":           rawOrZero(method["get_gold"]),
+			"gold":               rawOrZero(method["gold"]),
 		}, nil
 	})
 }
@@ -1049,6 +1056,7 @@ var cnCardInfoFieldMap = map[string]string{
 	"5": "5", "6": "6", "7": "7", "8": "8", "9": "9",
 	"10": "10", "11": "13", "12": "14", "13": "15", "14": "16",
 	"15": "17", "16": "18", "17": "19", "18": "20", "19": "21",
+	"alchemist_param": "11", "summons_param": "12",
 }
 
 var cnCardInfoNamedFieldMap = map[string]string{
@@ -1057,6 +1065,7 @@ var cnCardInfoNamedFieldMap = map[string]string{
 	"mndp": "10", "next_lv_exp": "13", "now_lv_exp": "14", "add_exp": "15",
 	"base_add_price": "16", "is_lock": "17", "create_time": "18", "fame": "19",
 	"slot": "20", "passive": "21",
+	"alchemist_param": "11", "summons_param": "12",
 }
 
 var cnDeckInfoNamedFieldMap = map[string]string{

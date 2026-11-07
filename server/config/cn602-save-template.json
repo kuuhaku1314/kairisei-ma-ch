@@ -97,10 +97,10 @@
     "ap_max": 3,
     "bp": 20,
     "bp_max": 20,
-    "card_max": 6000,
+    "card_max": 10000,
     "card_container_max": 3000,
     "sphere_max": 500,
-    "friend_max": 20,
+    "friend_max": 100,
     "buddy_max": 500,
     "deck_max_per_arthur": 15,
     "deck_max_alchemist": 10,
@@ -403,7 +403,7 @@
     {
       "unique_id": 602000105,
       "card_id": 10121005,
-      "name": "炎夏型侠客亚瑟",
+      "name": "炎夏型盗贼亚瑟",
       "level": 60,
       "level_max": 60,
       "experience": 0,
@@ -944,7 +944,6 @@
   ],
   "profiles": [],
   "friends": {
-    "follow_max": 50,
     "users": []
   },
   "stamps": {
@@ -13616,9 +13615,9 @@
     },
     {
       "gachaid": 60201205,
-      "gacha_name": "福袋扭蛋·炎夏型侠客＆歌姬亚瑟",
+      "gacha_name": "福袋扭蛋·炎夏型盗贼＆歌姬亚瑟",
       "buymsg": "使用2480个水晶扭蛋币抽取50张骑士卡片吗？",
-      "submsg": "炎夏型 侠客＆歌姬亚瑟四职业合计3%；其余为五星基础卡",
+      "submsg": "炎夏型 盗贼＆歌姬亚瑟四职业合计3%；其余为五星基础卡",
       "category_num": 1,
       "category_pictid": 1,
       "order_num": 1,
@@ -88444,7 +88443,7 @@
       "seed": 60203002,
       "cost_initial": 3,
       "burst_gauge_initial": 0,
-      "hold_max": 5,
+      "hold_max": 6,
       "end_turn": 0
     }
   ],

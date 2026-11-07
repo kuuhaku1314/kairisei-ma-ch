@@ -1,6 +1,7 @@
 package cnbootstrap
 
 import (
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -20,9 +21,10 @@ func TestIsBulkResourceRequest(t *testing.T) {
 	}{
 		{http.MethodGet, "/local/resources/cpk/data.cpk", true},
 		{http.MethodGet, "//local/resources/cpk/data.cpk", true},
-		{http.MethodHead, "/local/version/current/CPK/cpk_file.csv", true},
+		{http.MethodHead, "/local/content/StandaloneWindows64/6000.3.26f1/current/CPK/cpk_file.csv", true},
 		{http.MethodPost, "/local/resources/cpk/data.cpk", false},
 		{http.MethodGet, "/HomeShow", false},
+		{http.MethodGet, "//local/content/windows/bundle", true},
 	}
 	for _, test := range tests {
 		request := &http.Request{Method: test.method, URL: &url.URL{Path: test.path}}
@@ -84,5 +86,40 @@ func TestRecorderRedactsSessionBody(t *testing.T) {
 	}
 	if redacted := redactCNRequestBody("///loginSDK.php", []byte(login)); redacted != "<login-redacted>" {
 		t.Fatalf("redacted repeated-slash login body = %q", redacted)
+	}
+}
+
+func TestRecorderCredentialsContainRoutingOnly(t *testing.T) {
+	for _, path := range []string{"/local/client/login", "//local/account/login", "///loginSDK.php", "/GiftCodeAd", "///GiftCodeAd"} {
+		t.Run(path, func(t *testing.T) {
+			logPath := filepath.Join(t.TempDir(), "requests.jsonl")
+			if err := os.WriteFile(logPath, nil, 0600); err != nil {
+				t.Fatal(err)
+			}
+			handler := (&recorder{path: logPath}).middleware(slog.New(slog.NewTextHandler(io.Discard, nil)))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, _ := io.ReadAll(r.Body)
+				if string(body) != "credential-secret" {
+					t.Error("recorder changed request")
+				}
+			}))
+			r := httptest.NewRequest(http.MethodPost, "http://local"+path+"?credential=secret", strings.NewReader("credential-secret"))
+			r.Header.Set("X-Credential", "secret")
+			handler.ServeHTTP(httptest.NewRecorder(), r)
+			data, err := os.ReadFile(logPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var entry capture
+			if err := json.Unmarshal(data, &entry); err != nil {
+				t.Fatal(err)
+			}
+			expected := "<login-redacted>"
+			if strings.HasSuffix(path, "GiftCodeAd") {
+				expected = "<gift-code-redacted>"
+			}
+			if entry.Body != expected || entry.BodySHA != "" || entry.BodyBytes != 0 || entry.Query != "" || len(entry.Headers) != 0 {
+				t.Fatalf("credentials leaked: %s", data)
+			}
+		})
 	}
 }

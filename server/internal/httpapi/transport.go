@@ -57,25 +57,32 @@ func (a *API) writeProtocolResponse(
 	writer http.ResponseWriter, method any, popups []gamestate.PopupProfile,
 	resultCode int, resultString string, resultAction int,
 ) {
+	if resultCode < 0 {
+		a.requestRejected = true
+	}
 	common := newCommonResponse(a.account.UnlockedFeatureState())
 	common.ResultCode = resultCode
 	common.ResultString = resultString
 	common.ResultErrorAction = resultAction
 	common.Revision = a.initialState.CatalogVersion
+	if resultCode == 0 && !a.requestRejected {
+		common.Missions = a.account.TakeMissionUpdates()
+	}
 	if len(common.Notifications) == 1 {
-		presents, _ := a.account.PresentState()
-		unreceived := 0
-		for _, present := range presents {
-			if present.State == 0 {
-				unreceived++
-			}
+		// The theater entry uses the high nibble. Leave both CN story badges clear.
+		if a.account.CNMainStoryAvailable() {
+			common.Notifications[0].IsStoryMainCN = 0x10
 		}
+		unreceived := a.account.UnreceivedPresentCount()
 		common.Notifications[0].PresentNum = int16(min(unreceived, math.MaxInt16))
 		_, pvpChallenge := a.account.PvpStatus()
 		common.Notifications[0].Challenge = pvpChallenge
 		common.Notifications[0].PVPReset.StartTime = a.pvpConfig.ResetStartTime
 		common.Notifications[0].PVPReset.EndTime = a.pvpConfig.ResetEndTime
-		if a.account.MissionState() {
+		mission := a.account.MissionNotice()
+		common.Notifications[0].MissionTotal = mission.TimedTotal
+		common.Notifications[0].MissionComplete = mission.TimedComplete
+		if mission.Claimable {
 			common.Notifications[0].MissionClearReceive = 1
 		}
 	}
@@ -172,6 +179,7 @@ func decodeExact(
 	request *http.Request,
 	expected []string,
 	target any,
+	optional ...string,
 ) error {
 	body, err := readBody(request)
 	if err != nil {
@@ -181,12 +189,22 @@ func decodeExact(
 	if err := json.Unmarshal(body, &fields); err != nil {
 		return fmt.Errorf("decode JSON object: %w", err)
 	}
-	if len(fields) != len(expected) {
+	if len(fields) < len(expected) || len(fields) > len(expected)+len(optional) {
 		return errors.New("request fields differ from the endpoint contract")
 	}
+	allowed := make(map[string]bool, len(expected)+len(optional))
 	for _, name := range expected {
 		if _, exists := fields[name]; !exists {
 			return fmt.Errorf("request is missing %s", name)
+		}
+		allowed[name] = true
+	}
+	for _, name := range optional {
+		allowed[name] = true
+	}
+	for name := range fields {
+		if !allowed[name] {
+			return errors.New("request fields differ from the endpoint contract")
 		}
 	}
 	if err := json.Unmarshal(body, target); err != nil {
@@ -255,6 +273,9 @@ func (a *API) logRequest(next http.Handler) http.Handler {
 			"path", request.URL.Path,
 			"status", capture.status,
 			"elapsed_ms", time.Since(started).Milliseconds(),
+		}
+		if userID := a.initialState.User.UserID; userID > 0 {
+			fields = append(fields, "user_id", userID)
 		}
 		if capture.errorText != "" {
 			fields = append(fields, "error", capture.errorText)

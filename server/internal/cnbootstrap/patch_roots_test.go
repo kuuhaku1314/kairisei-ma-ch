@@ -1,15 +1,13 @@
 package cnbootstrap
 
 import (
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func TestCNPatchFileCatalogAndHTTPShareSourcePriority(t *testing.T) {
+func TestOfflineCNPatchCatalogSourcePriority(t *testing.T) {
 	primary, fallback := t.TempDir(), t.TempDir()
 	const name = "model.dat"
 	if err := os.WriteFile(filepath.Join(primary, name), []byte("primary"), 0o600); err != nil {
@@ -32,11 +30,7 @@ func TestCNPatchFileCatalogAndHTTPShareSourcePriority(t *testing.T) {
 			if err != nil || info.Size() != int64(len(test.want)) {
 				t.Fatalf("catalog selection: %v, %v", info, err)
 			}
-			response := httptest.NewRecorder()
-			serveCNPatchFile(response, httptest.NewRequest(http.MethodGet, "/model.dat", nil), test.roots, name)
-			if response.Code != http.StatusOK || response.Body.String() != test.want {
-				t.Fatalf("HTTP selected %d %q", response.Code, response.Body.String())
-			}
+
 		})
 	}
 }

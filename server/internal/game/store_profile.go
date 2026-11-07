@@ -22,7 +22,7 @@ type playerProgressionState struct {
 	Experience          int
 	NowLevelExperience  int
 	NextLevelExperience int
-	FriendMax           int
+	FollowMax           int
 	Jobs                []gamestate.JobParameter
 }
 
@@ -34,7 +34,7 @@ func (s *Account) PlayerProgressionState() playerProgressionState {
 		Experience:          s.currentExperience,
 		NowLevelExperience:  s.currentLevelExperience,
 		NextLevelExperience: s.nextLevelExperience,
-		FriendMax:           s.currentFriendMax,
+		FollowMax:           s.currentFollowMax,
 		Jobs:                append([]gamestate.JobParameter(nil), s.currentJobs...),
 	}
 }
@@ -92,7 +92,20 @@ func (s *Account) activeArthurLeaderLocked() (int64, int, bool) {
 func (s *Account) SupportDeckState() (int, []int8) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.supportDeckSetCardNum, append([]int8(nil), s.supportUnlockedSlots...)
+	// Alchemist support slots are already fully configurable. Publish that
+	// derived count alongside the four persisted ordinary unlock counts.
+	counts := make([]int8, 5)
+	for index := range counts {
+		counts[index] = s.supportUnlockedForArthurLocked(int8(index + 1))
+	}
+	return s.supportDeckSetCardNum, counts
+}
+
+func (s *Account) supportUnlockedForArthurLocked(arthurType int8) int8 {
+	if arthurType == 5 {
+		return int8(s.supportSlotCapacity)
+	}
+	return s.supportUnlockedSlots[arthurType-1]
 }
 
 func (s *Account) CardCollectionState() []int {
@@ -174,8 +187,7 @@ func (s *Account) TutorialState() int64 {
 }
 
 func (s *Account) MergeTutorialFlag(flag int64) bool {
-	// CONFIRMED: the CN 6.0.2 TUTORIAL_FLAG enum has 26 real bit positions.
-	if flag < 0 || flag >= int64(1)<<26 {
+	if flag < 0 || flag >= int64(1)<<gamestate.TutorialFlagCount {
 		return false
 	}
 	s.mu.Lock()
@@ -276,15 +288,13 @@ const (
 func (s *Account) FollowMaximum() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	// Mutual friends are also follows. The global follow/follower ceiling
-	// must cover the configured maximum friendship capacity at higher levels.
-	return max(s.followMax, s.playerProgression.Friends.Maximum)
+	return s.currentFollowMax
 }
 
-func (s *Account) FriendMaximum() int {
+func (s *Account) FollowerDisplayLimit() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.currentFriendMax
+	return s.playerProgression.Friends.FollowerDisplayLimit
 }
 
 func (s *Account) StampState() ([]int, []int) {
@@ -382,11 +392,15 @@ func (s *Account) PurchaseNavi(id int8) error {
 	freeSpend := min(s.coinFree, price)
 	s.coinFree -= freeSpend
 	s.coin -= price - freeSpend
+	s.unlockNaviLocked(id)
+	return nil
+}
+
+func (s *Account) unlockNaviLocked(id int8) {
 	s.selectableNaviIDs[id] = struct{}{}
 	if id < 63 {
 		s.naviUnlockFlag |= int64(1) << uint(id)
 	}
-	return nil
 }
 
 func (s *Account) OptionState() (int, int) {

@@ -32,7 +32,7 @@ func auditCompleteBusinessRecovery(t *testing.T, handler http.Handler, savePath,
 	})
 	testfixture.AttachProbeCardCatalog(t, storage, cards)
 	accounts := testfixture.TestAccountRepository(t, storage)
-	identity, err := accounts.ResolveLogin("00000000-0000-4000-8482-000000000001")
+	identity, err := accounts.ResolveInternalLogin("00000000-0000-4000-8482-000000000001")
 	if err != nil {
 		t.Fatal(err)
 	}

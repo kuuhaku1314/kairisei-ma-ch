@@ -3,7 +3,6 @@ package cnbootstrap
 import (
 	"bufio"
 	"bytes"
-	"compress/gzip"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -22,8 +21,33 @@ import (
 	"kairisei.local/server/internal/accounthttp"
 	"kairisei.local/server/internal/accountstore"
 	"kairisei.local/server/internal/multiplayer"
+	"kairisei.local/server/internal/protocol"
 	"kairisei.local/server/internal/testfixture"
 )
+
+func TestGachaBannerVersionTracksImageBytes(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "banner.png")
+	if err := os.WriteFile(path, []byte("abc"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	paths := map[string]string{"local_friend": path}
+	before, err := gachaBannerVersions(path, paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+	if before[""] != want || before["local_friend"] != want {
+		t.Fatalf("image content version = %v", before)
+	}
+	if err := os.WriteFile(path, []byte("updated artwork"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	after, err := gachaBannerVersions(path, paths)
+	if err != nil || after["local_friend"] == before["local_friend"] {
+		t.Fatalf("same-path image update must change client cache key: %v, %v", after, err)
+	}
+}
 
 func newTestHandler(t *testing.T, root string, logPath string) http.Handler {
 	t.Helper()
@@ -58,25 +82,8 @@ func newTestHandler(t *testing.T, root string, logPath string) http.Handler {
 	if err := os.WriteFile(filepath.Join(cpkRoot, "alpha.cpk"), []byte("cpk!"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	patchRoot := filepath.Join(root, "patch")
-	menuPath := filepath.Join(patchRoot, "main_c", "scenes", "scene_Menu.dat")
-	if err := os.MkdirAll(filepath.Dir(menuPath), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(menuPath, []byte("menu"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	version := []byte("<version>,790\n<bundle_ver>,main_c/scenes/scene_Menu.dat,0,93936638\n")
-	for index := range version {
-		version[index] += cn602ScrambleKey[index%len(cn602ScrambleKey)]
-	}
-	if err := os.WriteFile(filepath.Join(patchRoot, "version.dat"), version, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	assetMapPath := writeTestAssetMap(t, root, version)
-	if err := os.WriteFile(filepath.Join(root, cn602HomeEventBannerFile), []byte("event-png"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	profile := writePlatformFixture(t, root, "StandaloneWindows64", []byte("menu"))
+	assetMapPath := writeTestAssetMap(t, root, []byte("Admin metadata fixture"))
 	for _, fileName := range cn602GachaBannerFiles {
 		if err := os.WriteFile(filepath.Join(root, fileName), []byte("png"), 0o600); err != nil {
 			t.Fatal(err)
@@ -97,7 +104,7 @@ func newTestHandler(t *testing.T, root string, logPath string) http.Handler {
 			CPKRoot:             cpkRoot,
 			ImageRoot:           writeTestCardImages(t, root),
 			CPKAliases:          writeTestCPKAliases(t, root),
-			PatchRoots:          []string{patchRoot},
+			PlatformDeliveries:  []string{profile},
 		},
 		Masters: MastersConfig{
 			Cards:             cardMasterPath,
@@ -125,8 +132,8 @@ func newTestHandler(t *testing.T, root string, logPath string) http.Handler {
 	}
 	loginRequest := httptest.NewRequest(
 		http.MethodPost,
-		"http://local/loginSDK.php",
-		strings.NewReader(`{"uuid":"00000000-0000-0000-0000-000000000001","clver":"`+cnMinimumClientVersion+`"}`),
+		"http://local/local/client/login",
+		strings.NewReader(`{"uuid":"00000000-0000-0000-0000-000000000001","clver":"`+cnMinimumClientVersion+`","resource_platform":"StandaloneWindows64","unity_version":"6000.3.26f1"}`),
 	)
 	loginResponse := httptest.NewRecorder()
 	handler.ServeHTTP(loginResponse, loginRequest)
@@ -288,8 +295,8 @@ func TestCaptureUnknownCNRequest(t *testing.T) {
 	if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {
 		t.Fatal(err)
 	}
-	if entry.Path != "/unimplemented.php" || entry.Query != "probe=1" ||
-		entry.Body != `{"uid":"local"}` {
+	if entry.Path != "/unimplemented.php" || entry.Query != "" ||
+		entry.Body != "<body-omitted>" || !entry.BodyOmitted || entry.BodyBytes != len(`{"uid":"local"}`) || entry.BodySHA == "" {
 		t.Fatalf("unexpected capture: %+v", entry)
 	}
 	if scanner.Scan() {
@@ -375,8 +382,11 @@ func TestCN602ModuleSwitchBootstrap(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
 		t.Fatal(err)
 	}
-	if payload.ResponseCode != 0 || payload.ModuleState != cn602LocalModuleSwitchState {
+	if payload.ResponseCode != 0 || payload.ModuleState != int64(protocol.DefaultModuleSwitches()) {
 		t.Fatalf("unexpected payload: %+v", payload)
+	}
+	if payload.ModuleState&(int64(1)<<7) == 0 {
+		t.Fatalf("Gift code module switch is closed: %d", payload.ModuleState)
 	}
 	if payload.ModuleState&(int64(1)<<31) == 0 {
 		t.Fatalf("Card development module switch is closed: %d", payload.ModuleState)
@@ -389,7 +399,7 @@ func TestCN602ModuleSwitchBootstrap(t *testing.T) {
 	}
 }
 
-func TestCN602LocalSDKLoginContract(t *testing.T) {
+func TestModernLocalLoginContract(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	logPath := filepath.Join(root, "requests.jsonl")
@@ -397,10 +407,21 @@ func TestCN602LocalSDKLoginContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := newTestHandler(t, root, logPath)
+	for _, retired := range []struct{ method, path string }{
+		{http.MethodPost, "/loginSDK.php"},
+		{http.MethodGet, "/local/version/default/Android/patch/catalog.dat"},
+		{http.MethodGet, "/local/resources/patch/Android/patch/main_c/menu.dat.v00000000"},
+	} {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(retired.method, retired.path, strings.NewReader(`{}`)))
+		if response.Code != http.StatusNotImplemented {
+			t.Fatalf("retired resource route %s remains active: %d", retired.path, response.Code)
+		}
+	}
 	request := httptest.NewRequest(
 		http.MethodPost,
-		"http://local//loginSDK.php",
-		strings.NewReader(`{"uuid":"00000000-0000-0000-0000-000000000001","clver":"`+cnMinimumClientVersion+`"}`),
+		"http://local//local/client/login",
+		strings.NewReader(`{"uuid":"00000000-0000-0000-0000-000000000001","clver":"`+cnMinimumClientVersion+`","resource_platform":"StandaloneWindows64","unity_version":"6000.3.26f1"}`),
 	)
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -469,6 +490,36 @@ func TestCN602BusinessRoutesRequirePersistedRandomSession(t *testing.T) {
 	if forged.Code != http.StatusOK || json.Unmarshal(bytes.Split(forged.Body.Bytes(), []byte{'\n'})[0], &rejected) != nil ||
 		rejected["res_code"] != float64(-3208) || rejected["res_err_action"] != float64(1) || rejected["res_is_del_savedata"] != float64(0) {
 		t.Fatalf("forged session status=%d body=%q", forged.Code, forged.Body.String())
+	}
+}
+
+func TestCNBossScoreRankingRouteRequiresSessionAndDispatches(t *testing.T) {
+	root := t.TempDir()
+	logPath := filepath.Join(root, "requests.jsonl")
+	if err := os.WriteFile(logPath, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	handler := newTestHandler(t, root, logPath)
+	const payload = `{"bossid":1,"mode":0,"offset":0,"limit":50}`
+	for _, test := range []struct {
+		name, body, message string
+		status              int
+	}{
+		{"personal", cn602LocalSession + payload, "invalid boss score ranking request", http.StatusBadRequest},
+		{"team", cn602LocalSession + strings.Replace(payload, `"mode":0`, `"mode":1`, 1), "invalid boss score ranking request", http.StatusBadRequest},
+		{"missing mode", cn602LocalSession + `{"bossid":1,"offset":0,"limit":50}`, "invalid CN BossScoreRankingShow payload", http.StatusBadRequest},
+		{"no session", payload, "invalid CN BossScoreRankingShow session", http.StatusUnauthorized},
+		{"forged session", "unregistered-session-key" + payload, `"res_code":-3208`, http.StatusOK},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, "/BossScoreRankingShow", strings.NewReader(test.body))
+			request.Header.Set(accounthttp.AccountUserHeader, strconv.Itoa(accountstore.PrimaryUserID))
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != test.status || !strings.Contains(response.Body.String(), test.message) {
+				t.Fatalf("ranking route status=%d body=%q", response.Code, response.Body.String())
+			}
+		})
 	}
 }
 
@@ -608,7 +659,7 @@ func TestCN602TutorialFlagRouteAndDTOAdapter(t *testing.T) {
 	handler.ServeHTTP(response, httptest.NewRequest(
 		http.MethodPost,
 		"http://local/TutorialFlag",
-		strings.NewReader(cn602LocalSession+`{"flag":67108863,"step":25}`),
+		strings.NewReader(cn602LocalSession+`{"flag":134217727,"step":26}`),
 	))
 	if response.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%q", response.Code, response.Body.String())
@@ -703,7 +754,7 @@ func TestCN602ItemShowSessionAdapter(t *testing.T) {
 	}
 }
 
-func TestCN602NoPaymentProductsAndLocalCatalog(t *testing.T) {
+func TestCN602NoPaymentProductsAndLocalBanners(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	logPath := filepath.Join(root, "requests.jsonl")
@@ -759,227 +810,6 @@ func TestCN602NoPaymentProductsAndLocalCatalog(t *testing.T) {
 		t.Fatalf("intro placeholder: status=%d headers=%v body=%x", intro.Code, intro.Header(), intro.Body.Bytes())
 	}
 
-	catalog := httptest.NewRecorder()
-	handler.ServeHTTP(catalog, httptest.NewRequest(
-		http.MethodGet,
-		"http://local/local/version/default/Android/patch/catalog.dat?v=1",
-		nil,
-	))
-	if catalog.Code != http.StatusOK {
-		t.Fatalf("catalog status=%d body=%q", catalog.Code, catalog.Body.String())
-	}
-	reader, err := gzip.NewReader(catalog.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	plain, err := io.ReadAll(reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := reader.Close(); err != nil {
-		t.Fatal(err)
-	}
-	for _, confirmedRow := range []string{
-		"<v>,790\n",
-		"<b>,main_c/scenes/scene_Menu.dat,93936638,00000000,4,N,1,0,1\n",
-		"<a>,scenes,Menu,,.prefab,main_c/scenes/scene_Menu.dat\n",
-	} {
-		if !strings.Contains(string(plain), confirmedRow) {
-			t.Fatalf("catalog is missing confirmed CN Menu row %q", confirmedRow)
-		}
-	}
-}
-
-func TestCN602OfficialPatchOverlayAndNimueDelivery(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	logPath := filepath.Join(root, "requests.jsonl")
-	if err := os.WriteFile(logPath, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	cpkRoot := filepath.Join(root, "CPK")
-	if err := os.Mkdir(cpkRoot, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	testfixture.WriteCPKVersions(t, cpkRoot)
-	if err := os.WriteFile(filepath.Join(cpkRoot, "alpha.cpk"), []byte("cpk!"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	primary := filepath.Join(root, "primary-patch")
-	supplement := filepath.Join(root, "supplement-patch")
-	nimuePath := filepath.Join(primary, "live2d", "live2d_nimue.dat")
-	menuPath := filepath.Join(supplement, "main_c", "scenes", "scene_Menu.dat")
-	containerPath := filepath.Join(primary, "main_c", "container.dat")
-	if err := os.MkdirAll(filepath.Dir(nimuePath), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Dir(menuPath), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Dir(containerPath), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(nimuePath, []byte("nimue"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(menuPath, []byte("menu"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(containerPath, []byte("container"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	version := []byte(
-		"<version>,790\n" +
-			"<bundle_ver>,main_c/scenes/scene_Menu.dat,0,93936638\n" +
-			"<bundle_ver>,main_c/container.dat,0,01020304\n" +
-			"<bundle_ver>,live2d/live2d_nimue.dat,0,2206394C\n",
-	)
-	for index := range version {
-		version[index] += cn602ScrambleKey[index%len(cn602ScrambleKey)]
-	}
-	for _, patchRoot := range []string{primary, supplement} {
-		if err := os.WriteFile(filepath.Join(patchRoot, "version.dat"), version, 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	assetMapPath := writeTestAssetMap(
-		t,
-		root,
-		version,
-		testAsset("scenes", "Menu", ".prefab", cn602MenuBundle),
-		testAsset("Live2D/nimue", "nimue.model.json", ".bytes", "live2d/live2d_nimue.dat"),
-		testAsset("Live2D/nimue/moc/nimue1024", "texture_00", ".png", "live2d/live2d_nimue.dat"),
-		testAsset("Container/card", "card.csv", ".txt", "main_c/container.dat"),
-		testAsset("Container/card", "card_base_category.csv", ".txt", "main_c/container.dat"),
-		testAsset("Container/skill", "skill_role_player.csv", ".txt", "main_c/container.dat"),
-		testAsset("Container/skill", "support_skill_role.csv", ".txt", "main_c/container.dat"),
-		testAsset("Container/skill", "burst_skill_role.csv", ".txt", "main_c/container.dat"),
-		testAsset("Container/skill", "skill_role_enemy.csv", ".txt", "main_c/container.dat"),
-		testAsset("Container/skill", "skill_player.csv", ".txt", "main_c/container.dat"),
-		testAsset("Container/skill", "support_skill.csv", ".txt", "main_c/container.dat"),
-		testAsset("Container/skill", "burst_skill.csv", ".txt", "main_c/container.dat"),
-		testAsset("Container/skill", "skill_enemy.csv", ".txt", "main_c/container.dat"),
-		testAsset("Container/card", "card_loveup_price.csv", ".txt", "main_c/container.dat"),
-		testAsset("Container/enemy", "enemy.csv", ".txt", "main_c/container.dat"),
-		testAsset("Container/icon", "buff_icon.csv", ".txt", "main_c/container.dat"),
-	)
-	if err := os.WriteFile(filepath.Join(root, cn602HomeEventBannerFile), []byte("event-png"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	for _, fileName := range cn602GachaBannerFiles {
-		if err := os.WriteFile(filepath.Join(root, fileName), []byte("png"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	cardMasterPath := testfixture.WriteTestCardMaster(t, root)
-	handler, err := newProtocolTestHandler(t, Config{
-		Persistence: PersistenceConfig{
-			RequestLog: logPath,
-			SavePath:   testfixture.WriteTestSave(t, root),
-			SeedPath:   filepath.Join("..", "..", "config", "cn602-save-template.json"),
-		},
-		Resources: ResourcesConfig{
-			AssetMap:            assetMapPath,
-			GachaBanner:         assetMapPath,
-			FiveStarGachaBanner: assetMapPath,
-			HomeBanner:          assetMapPath,
-			CPKRoot:             cpkRoot,
-			ImageRoot:           writeTestCardImages(t, root),
-			CPKAliases:          writeTestCPKAliases(t, root),
-			PatchRoots:          []string{primary, supplement},
-		},
-		Masters: MastersConfig{
-			Cards:             cardMasterPath,
-			Explore:           testfixture.WriteTestExploreMaster(t, root),
-			Story:             testfixture.WriteTestStoryMaster(t, root),
-			Battle:            "",
-			Navi:              testfixture.WriteTestNaviMaster(t, root),
-			Items:             testfixture.WriteTestItemMaster(t, root),
-			Avatar:            testfixture.WriteTestAvatarMaster(t, root),
-			Stamps:            testfixture.WriteTestStampMaster(t, root),
-			Honors:            testfixture.WriteTestHonorMaster(t, root),
-			PlayerProgression: filepath.Join("..", "..", "config", "cn602-player-progression-runtime.json"),
-			LoginBonus:        filepath.Join("..", "..", "config", "cn602-login-bonus-runtime.json"),
-		},
-		Network: NetworkConfig{
-			AdvertiseHost: "10.0.2.2",
-			HTTPPort:      18081,
-			BattleSV:      multiplayer.Endpoint{Host: "10.0.2.2", Port: uint16(18081 + 1)},
-		},
-		Logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Multiplayer: multiplayer.NewHub(),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	catalog := httptest.NewRecorder()
-	handler.ServeHTTP(catalog, httptest.NewRequest(
-		http.MethodGet,
-		"http://local/local/version/default/Android/patch/catalog.dat",
-		nil,
-	))
-	reader, err := gzip.NewReader(catalog.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	plain, err := io.ReadAll(reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := reader.Close(); err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{
-		"<b>,main_c/scenes/scene_Menu.dat,93936638,00000000,4,N,1,0,1\n",
-		"<b>,live2d/live2d_nimue.dat,2206394C,00000000,5,N,1,0,1\n",
-		"<a>,Live2D/nimue,nimue.model.json,,.bytes,live2d/live2d_nimue.dat\n",
-		"<a>,Live2D/nimue/moc/nimue1024,texture_00,,.png,live2d/live2d_nimue.dat\n",
-		"<a>,Container/card,card.csv,,.txt,main_c/container.dat\n",
-		"<a>,Container/card,card_base_category.csv,,.txt,main_c/container.dat\n",
-		"<a>,Container/skill,skill_role_player.csv,,.txt,main_c/container.dat\n",
-		"<a>,Container/skill,support_skill_role.csv,,.txt,main_c/container.dat\n",
-		"<a>,Container/skill,burst_skill_role.csv,,.txt,main_c/container.dat\n",
-		"<a>,Container/skill,skill_role_enemy.csv,,.txt,main_c/container.dat\n",
-		"<a>,Container/skill,skill_player.csv,,.txt,main_c/container.dat\n",
-		"<a>,Container/skill,support_skill.csv,,.txt,main_c/container.dat\n",
-		"<a>,Container/skill,burst_skill.csv,,.txt,main_c/container.dat\n",
-		"<a>,Container/skill,skill_enemy.csv,,.txt,main_c/container.dat\n",
-		"<a>,Container/card,card_loveup_price.csv,,.txt,main_c/container.dat\n",
-		"<a>,Container/enemy,enemy.csv,,.txt,main_c/container.dat\n",
-		"<a>,Container/icon,buff_icon.csv,,.txt,main_c/container.dat\n",
-	} {
-		if !strings.Contains(string(plain), want) {
-			t.Fatalf("catalog is missing overlay row %q", want)
-		}
-	}
-	if count := strings.Count(string(plain), "<a>,Container/card,card.csv,,.txt,main_c/container.dat\n"); count != 1 {
-		t.Fatalf("catalog contains card.csv %d times, want exactly once", count)
-	}
-
-	for _, test := range []struct {
-		path string
-		want string
-	}{
-		{path: "/local/version/default/Android/patch/live2d/live2d_nimue.dat", want: "nimue"},
-		{path: "/local/version/default/Android/patch/main_c/scenes/scene_Menu.dat", want: "menu"},
-		{path: "/local/resources/patch/Android/patch/live2d/live2d_nimue.dat.v2206394C", want: "nimue"},
-	} {
-		response := httptest.NewRecorder()
-		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "http://local"+test.path, nil))
-		if response.Code != http.StatusOK || response.Body.String() != test.want {
-			t.Fatalf("%s: status=%d body=%q", test.path, response.Code, response.Body.String())
-		}
-	}
-	head := httptest.NewRecorder()
-	handler.ServeHTTP(head, httptest.NewRequest(
-		http.MethodHead,
-		"http://local/local/resources/patch/Android/patch/live2d/live2d_nimue.dat.v2206394C",
-		nil,
-	))
-	if head.Code != http.StatusOK || head.Body.Len() != 0 || head.Header().Get("Content-Length") != "5" {
-		t.Fatalf("versioned HEAD: status=%d length=%q body=%q", head.Code, head.Header().Get("Content-Length"), head.Body.String())
-	}
 }
 
 func TestCN602PushNoOpAndPreloadedCPKList(t *testing.T) {
@@ -1004,7 +834,7 @@ func TestCN602PushNoOpAndPreloadedCPKList(t *testing.T) {
 	cpk := httptest.NewRecorder()
 	handler.ServeHTTP(cpk, httptest.NewRequest(
 		http.MethodGet,
-		"http://local/local/version/default/CPK/cpk_file.csv?v=790",
+		"http://local/local/content/StandaloneWindows64/6000.3.26f1/current/CPK/cpk_file.csv?v=790",
 		nil,
 	))
 	const want = "# cpk_name,type,id,file_size_mb,download_type,size_bytes\nalpha.cpk,NONE,0,0.000004,ALL,4\n"
@@ -1015,7 +845,7 @@ func TestCN602PushNoOpAndPreloadedCPKList(t *testing.T) {
 	patchState := httptest.NewRecorder()
 	handler.ServeHTTP(patchState, httptest.NewRequest(
 		http.MethodGet,
-		"http://local/local/version/default/CPK/cpk_patch.txt?v=790",
+		"http://local/local/content/StandaloneWindows64/6000.3.26f1/current/CPK/cpk_patch.txt?v=790",
 		nil,
 	))
 	if patchState.Code != http.StatusOK || patchState.Body.String() != "alpha.cpk,1\n" {

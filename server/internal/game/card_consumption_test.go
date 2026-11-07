@@ -23,6 +23,10 @@ func TestCardDecomposeZeroDustAndRejectedTargets(t *testing.T) {
 	for _, radix := range []int{0, 20} {
 		for _, kind := range []int{cardDecomposeFame, cardDecomposeCard} {
 			s := makeAccount(radix)
+			if kind == cardDecomposeCard {
+				s.decks[0].CardUniqueIDs[1] = 0
+				s.decks[0].SupportCardUniqueIDs[0] = 0
+			}
 			balance, decks, err := s.DecomposeCard(2, kind)
 			if err != nil {
 				t.Fatalf("radix=%d kind=%d: %v", radix, kind, err)
@@ -33,7 +37,7 @@ func TestCardDecomposeZeroDustAndRejectedTargets(t *testing.T) {
 				if len(s.cards) != 2 || s.cards[1].Fame != 1 || len(decks) != 0 || s.decks[0].CardUniqueIDs[1] != 2 {
 					t.Fatal("fame decomposition changed card ownership or decks")
 				}
-			} else if len(s.cards) != 1 || len(decks) != 1 || s.decks[0].CardUniqueIDs[1] != 0 || s.decks[0].SupportCardUniqueIDs[0] != 0 {
+			} else if len(s.cards) != 1 || len(decks) != 0 || s.decks[0].CardUniqueIDs[1] != 0 || s.decks[0].SupportCardUniqueIDs[0] != 0 {
 				t.Fatal("card decomposition left card or deck references")
 			}
 			if balance != 123+radix*consumed || s.gold != 100000 {
@@ -41,10 +45,16 @@ func TestCardDecomposeZeroDustAndRejectedTargets(t *testing.T) {
 			}
 		}
 	}
-	for _, reason := range []string{"locked", "missing", "not decomposable", "no extra fame"} {
+	for _, reason := range []string{"main deck", "support deck", "locked", "missing", "not decomposable", "no extra fame"} {
 		s := makeAccount(0)
+		s.decks[0].CardUniqueIDs[1] = 0
+		s.decks[0].SupportCardUniqueIDs[0] = 0
 		uid, kind := int64(2), cardDecomposeCard
 		switch reason {
+		case "main deck":
+			s.decks[0].CardUniqueIDs[1] = 2
+		case "support deck":
+			s.decks[0].SupportCardUniqueIDs[0] = 2
 		case "locked":
 			s.cards[1].IsLock = 1
 		case "missing":
@@ -60,6 +70,9 @@ func TestCardDecomposeZeroDustAndRejectedTargets(t *testing.T) {
 		var business *BusinessError
 		if !errors.As(err, &business) || !reflect.DeepEqual(cards, CloneCards(s.cards)) || !reflect.DeepEqual(decks, CloneDecks(s.decks)) || s.stive != 123 {
 			t.Fatalf("%s did not fail without consumption: %v", reason, err)
+		}
+		if strings.Contains(reason, "deck") && err != ErrCardInDeck {
+			t.Fatalf("equipped card did not request removal from its deck: %v", err)
 		}
 	}
 }
@@ -94,11 +107,11 @@ func TestCardConsumptionReturnsBusinessErrors(t *testing.T) {
 				case "fusion":
 					_, _, _, _, err = s.FuseCard(1, []int64{2}, nil, nil)
 				case "evolution":
-					_, _, _, err = s.EvolveCard(1, 11, []int64{2}, nil, nil)
+					_, _, _, err = s.EvolveCard(1, 11, []int64{2}, nil, nil, nil)
 				case "sell":
-					_, _, _, err = s.SellCards([]int64{2}, nil)
+					_, err = s.SellCards([]int64{2}, nil)
 				case "container sell":
-					_, _, err = s.SellContainerCards([]int64{2})
+					_, err = s.SellContainerCards([]int64{2})
 				}
 				if err != want {
 					t.Fatalf("consumption error = %v, want %v", err, want)
@@ -108,6 +121,69 @@ func TestCardConsumptionReturnsBusinessErrors(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestGodEvolutionRejectsInvalidFameWithoutConsumption(t *testing.T) {
+	for _, reason := range []string{"low fame", "several low fame cards", "main deck", "support deck", "locked", "insufficient gold", "stack instead of instance"} {
+		t.Run(reason, func(t *testing.T) {
+			s := ConsumptionTestStore(t)
+			s.cardActions.EvolutionTransitions[0].Type = 1
+			s.cardActions.EvolutionTransitions[0].Materials[0].Fame = 3
+			s.cards[1].Fame = 5
+			ids, cardIDs := []int64{2}, []int(nil)
+			switch reason {
+			case "low fame":
+				s.cards[1].Fame = 2
+			case "several low fame cards":
+				s.cards[1].Fame = 2
+				s.cards = append(s.cards, CardInfo{UniqueID: 3, CardID: 20, Fame: 2})
+				ids = append(ids, 3)
+			case "main deck":
+				s.decks = []DeckInfo{{CardUniqueIDs: []int64{2}}}
+			case "support deck":
+				s.decks = []DeckInfo{{SupportCardUniqueIDs: []int64{2}}}
+			case "locked":
+				s.cards[1].IsLock = 1
+			case "insufficient gold":
+				s.gold = 0
+			case "stack instead of instance":
+				ids, cardIDs = nil, []int{20}
+				s.stackCards = []gamestate.CardStack{{CardID: 20, Num: 3}}
+			}
+			cards, decks, gold := CloneCards(s.cards), CloneDecks(s.decks), s.gold
+			stacks := append([]gamestate.CardStack(nil), s.stackCards...)
+			_, _, _, err := s.EvolveCard(1, 11, ids, nil, cardIDs, nil)
+			if err == nil || !reflect.DeepEqual(cards, CloneCards(s.cards)) || !reflect.DeepEqual(decks, CloneDecks(s.decks)) || !reflect.DeepEqual(stacks, s.stackCards) || gold != s.gold || len(s.cardCollectionIDs) != 0 {
+				t.Fatalf("invalid request changed inventory/decks/gold: %v", err)
+			}
+			if strings.Contains(reason, "deck") && err != ErrCardInDeck {
+				t.Fatalf("equipped GOD material did not request removal: %v", err)
+			}
+		})
+	}
+}
+
+func TestCardEvolutionKeepsEquippedBaseAndSurplusMaterial(t *testing.T) {
+	s := ConsumptionTestStore(t)
+	s.cards[0].CreateTime = 1700000000
+	s.cards[1].Fame = 5
+	s.decks = []DeckInfo{{CardUniqueIDs: []int64{1}, LeaderCardIndex: 0}}
+	s.cardActions.EvolutionTransitions[0].Type = 1
+	s.cardActions.EvolutionTransitions[0].Materials[0].Fame = 3
+	result, _, decks, err := s.EvolveCard(1, 11, []int64{2}, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.UniqueID != 1 || result.CardID != 11 || len(s.cards) != 2 || s.cards[1].UniqueID != 2 || s.cards[1].Fame != 2 || !reflect.DeepEqual(decks, CloneDecks(s.decks)) || decks[0].CardUniqueIDs[0] != 1 || decks[0].LeaderCardIndex != 0 {
+		t.Fatal("evolution changed the base identity/deck or lost surplus material fame")
+	}
+	if result.CreateTime != 1700000000 {
+		t.Fatal("evolution reset the original acquisition date")
+	}
+	state := s.Snapshot(gamestate.State{})
+	if len(state.Cards) != 2 || state.Cards[0].UniqueID != 1 || state.Cards[0].CardID != 11 || state.Cards[1].UniqueID != 2 || state.Cards[1].Fame != 2 || state.Decks[0].CardUniqueIDs[0] != 1 {
+		t.Fatal("evolved base and remaining fame were not preserved in the save snapshot")
 	}
 }
 
@@ -147,6 +223,64 @@ func TestBuddyConsumptionReturnsBusinessErrors(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestAlchemyEvolutionConsumesItemsAndPreservesCardInventory(t *testing.T) {
+	for _, name := range []string{"success", "insufficient first item", "missing second item", "wrong item", "stack channel", "instance channel", "ordinary evolution", "not full level", "insufficient gold"} {
+		t.Run(name, func(t *testing.T) {
+			s := ConsumptionTestStore(t)
+			s.cards[0].Level = 1
+			s.cards[0].CreateTime = 1700000000
+			definition := s.cardDefinitions[10]
+			definition.RarityPlus = 4
+			s.cardDefinitions[10] = definition
+			transition := &s.cardActions.EvolutionTransitions[0]
+			transition.Type = 4
+			transition.Materials = []gamestate.EvolutionMaterial{{CardID: 20, Num: 3}, {CardID: 21, Num: 2}}
+			s.items = map[int]gamestate.Item{20: {ItemID: 20, Num: 5}, 21: {ItemID: 21, Num: 2}}
+			s.stackCards = []gamestate.CardStack{{CardID: 20, Num: 99}}
+			var uniqueIDs []int64
+			var cardIDs []int
+			itemIDs := []int{20, 21}
+			switch name {
+			case "insufficient first item":
+				s.items[20] = gamestate.Item{ItemID: 20, Num: 2}
+			case "missing second item":
+				delete(s.items, 21)
+			case "wrong item":
+				itemIDs[1] = 22
+			case "stack channel":
+				cardIDs, itemIDs = itemIDs, nil
+			case "instance channel":
+				uniqueIDs = []int64{2}
+			case "ordinary evolution":
+				transition.Type = 0
+			case "not full level":
+				definition.RarityPlus = 0
+				s.cardDefinitions[10] = definition
+			case "insufficient gold":
+				s.gold = 0
+			}
+			before := s.Snapshot(gamestate.State{})
+			result, _, _, err := s.EvolveCard(1, 11, uniqueIDs, nil, cardIDs, itemIDs)
+			if name != "success" {
+				if err == nil || !reflect.DeepEqual(before, s.Snapshot(gamestate.State{})) {
+					t.Fatalf("rejected item evolution changed saved state: %v", err)
+				}
+				return
+			}
+			if err != nil || result.CardID != 11 || result.UniqueID != 1 || result.CreateTime != 1700000000 || s.gold != before.User.Gold-transition.Gold {
+				t.Fatalf("item evolution failed or changed base identity: %v", err)
+			}
+			if len(s.cards) != 2 || s.cards[1].UniqueID != 2 || s.stackCards[0].Num != 99 || s.items[20].Num != 2 || s.items[21].Num != 0 {
+				t.Fatal("item consumption crossed inventories or used slot counts as quantities")
+			}
+			state := s.Snapshot(gamestate.State{})
+			if len(state.Items) != 2 || state.Items[0].Num != 2 || state.Items[1].Num != 0 {
+				t.Fatal("item consumption was not retained in the save snapshot")
+			}
+		})
 	}
 }
 

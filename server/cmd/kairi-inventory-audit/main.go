@@ -73,8 +73,8 @@ func run() error {
 				return fmt.Errorf("missing candidate buddy %d", entry.ID)
 			}
 			c.Buddies[entry.ID] = v
-			c.BurstSkills = map[int][]multiplayer.CombatSkillDefinition{}
-			c.BurstSkillRoles = map[int][]multiplayer.CombatSkillRole{}
+			c.Skills = map[int][]multiplayer.CombatSkillDefinition{}
+			c.SkillRoles = map[int][]multiplayer.CombatSkillRole{}
 			ids := []int{v.PassiveSkillID}
 			for _, skill := range v.Skills {
 				ids = append(ids, skill.SkillID, skill.CallSkillID)
@@ -83,9 +83,9 @@ func run() error {
 				if id == 0 {
 					continue
 				}
-				c.BurstSkills[id] = catalog.BurstSkills[id]
-				for _, skill := range c.BurstSkills[id] {
-					c.BurstSkillRoles[skill.FunctionID] = catalog.BurstSkillRoles[skill.FunctionID]
+				c.Skills[id] = catalog.Skills[id]
+				for _, skill := range c.Skills[id] {
+					c.SkillRoles[skill.FunctionID] = catalog.SkillRoles[skill.FunctionID]
 				}
 			}
 			checks = append(checks, c.ValidateBurstFunctionCoverage)

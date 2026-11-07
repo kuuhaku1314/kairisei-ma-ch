@@ -140,7 +140,7 @@ func stableRowOrder(rows []storedRow, previous map[int64]int64) []int64 {
 	return order
 }
 
-const cardRowColumns = "slot,card_id,level,experience,now_exp,next_exp,love,fame,is_lock,hp,attack,magic,mind,base_add_price,skill_levels"
+const cardRowColumns = "slot,card_id,level,experience,now_exp,next_exp,love,fame,is_lock,hp,attack,magic,mind,base_add_price,skill_levels,create_time"
 
 const itemRowColumns = "num,limit_time"
 
@@ -149,6 +149,18 @@ const stackRowColumns = "num,hp,attack,magic,mind,add_exp,base_add_price,materia
 const presentRowColumns = "history,issued_at_unix,add_elapsed_sec,limit_time,state,reason,title,comment,url,auto_fusion_used,auto_loveup_used,admin_key,rewards_json"
 
 func writeAccountRows(tx *sql.Tx, state gamestate.State) error {
+	return writeChangedAccountRows(tx, state, accountComponentHashes{}, accountComponentHashes{})
+}
+
+func writeSnapshotRows(tx *sql.Tx, state gamestate.State, content []byte) error {
+	before, after, err := changedAccountComponents(tx, state.User.UserID, content)
+	if err != nil {
+		return err
+	}
+	return writeChangedAccountRows(tx, state, before, after)
+}
+
+func writeChangedAccountRows(tx *sql.Tx, state gamestate.State, before, after accountComponentHashes) error {
 	u := state.User
 	if _, err := tx.Exec(`INSERT INTO cn_account_balance(user_id,gold,coin,coin_free,friend_point,pvp_point)
  VALUES(?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET gold=excluded.gold,coin=excluded.coin,
@@ -158,45 +170,56 @@ func writeAccountRows(tx *sql.Tx, state gamestate.State) error {
 		u.UserID, u.Gold, u.Coin, u.CoinFree, u.FriendPoint, u.PVPPoint); err != nil {
 		return err
 	}
-	cards := make([]storedRow, 0, len(state.Cards)+len(state.ContainerCards))
-	for slot, inventory := range [][]gamestate.Card{state.Cards, state.ContainerCards} {
-		for _, c := range inventory {
-			skills, err := json.Marshal(c.SkillLevels)
-			if err != nil {
-				return err
+	if after.Cards == "" || after.Cards != before.Cards {
+		cards := make([]storedRow, 0, len(state.Cards)+len(state.ContainerCards))
+		for slot, inventory := range [][]gamestate.Card{state.Cards, state.ContainerCards} {
+			for _, c := range inventory {
+				skills, err := json.Marshal(c.SkillLevels)
+				if err != nil {
+					return err
+				}
+				cards = append(cards, storedRow{c.UniqueID, []any{slot, c.CardID, c.Level, c.Experience, c.NowLevelExperience, c.NextLevelExperience, c.Love, c.Fame, c.IsLock, c.HP, c.Attack, c.Magic, c.Mind, c.BaseAddPrice, string(skills), c.CreateTime}})
 			}
-			cards = append(cards, storedRow{c.UniqueID, []any{slot, c.CardID, c.Level, c.Experience, c.NowLevelExperience, c.NextLevelExperience, c.Love, c.Fame, c.IsLock, c.HP, c.Attack, c.Magic, c.Mind, c.BaseAddPrice, string(skills)}})
+		}
+		if err := syncAccountRows(tx, "cn_account_card", "unique_id", cardRowColumns, u.UserID, cards); err != nil {
+			return err
 		}
 	}
-	if err := syncAccountRows(tx, "cn_account_card", "unique_id", cardRowColumns, u.UserID, cards); err != nil {
-		return err
-	}
-	items := make([]storedRow, 0, len(state.Items))
-	for _, item := range state.Items {
-		items = append(items, storedRow{int64(item.ItemID), []any{item.Num, item.LimitTime}})
-	}
-	if err := syncAccountRows(tx, "cn_account_item", "item_id", itemRowColumns, u.UserID, items); err != nil {
-		return err
-	}
-	stacks := make([]storedRow, 0, len(state.StackCards))
-	for _, c := range state.StackCards {
-		stacks = append(stacks, storedRow{int64(c.CardID), []any{c.Num, c.HP, c.Attack, c.Magic, c.Mind, c.AddExperience, c.BaseAddPrice, c.MaterialType}})
-	}
-	if err := syncAccountRows(tx, "cn_account_stack_card", "card_id", stackRowColumns, u.UserID, stacks); err != nil {
-		return err
-	}
-	presents := make([]storedRow, 0, len(state.Engagement.Presents)+len(state.Engagement.Histories))
-	for history, group := range [][]gamestate.Present{state.Engagement.Presents, state.Engagement.Histories} {
-		for _, p := range group {
-			// Only the four small, typed reward descriptors are variable JSON.
-			rewards, err := json.Marshal([4]gamestate.Reward{p.Reward, p.Reward0, p.Reward1, p.Reward2})
-			if err != nil {
-				return err
-			}
-			presents = append(presents, storedRow{p.PresentID, []any{history, p.IssuedAtUnix, p.AddElapsedSec, p.LimitTime, p.State, p.Reason, p.Title, p.Comment, p.URL, p.AutoFusionUsed, p.AutoLoveupUsed, p.AdminIdempotencyKey, string(rewards)}})
+	if after.Items == "" || after.Items != before.Items {
+		items := make([]storedRow, 0, len(state.Items))
+		for _, item := range state.Items {
+			items = append(items, storedRow{int64(item.ItemID), []any{item.Num, item.LimitTime}})
+		}
+		if err := syncAccountRows(tx, "cn_account_item", "item_id", itemRowColumns, u.UserID, items); err != nil {
+			return err
 		}
 	}
-	return syncAccountRows(tx, "cn_account_present", "present_id", presentRowColumns, u.UserID, presents)
+	if after.Stacks == "" || after.Stacks != before.Stacks {
+		stacks := make([]storedRow, 0, len(state.StackCards))
+		for _, c := range state.StackCards {
+			stacks = append(stacks, storedRow{int64(c.CardID), []any{c.Num, c.HP, c.Attack, c.Magic, c.Mind, c.AddExperience, c.BaseAddPrice, c.MaterialType}})
+		}
+		if err := syncAccountRows(tx, "cn_account_stack_card", "card_id", stackRowColumns, u.UserID, stacks); err != nil {
+			return err
+		}
+	}
+	if after.Presents == "" || after.Presents != before.Presents {
+		presents := make([]storedRow, 0, len(state.Engagement.Presents)+len(state.Engagement.Histories))
+		for history, group := range [][]gamestate.Present{state.Engagement.Presents, state.Engagement.Histories} {
+			for _, p := range group {
+				// Only the four small, typed reward descriptors are variable JSON.
+				rewards, err := json.Marshal([4]gamestate.Reward{p.Reward, p.Reward0, p.Reward1, p.Reward2})
+				if err != nil {
+					return err
+				}
+				presents = append(presents, storedRow{p.PresentID, []any{history, p.IssuedAtUnix, p.AddElapsedSec, p.LimitTime, p.State, p.Reason, p.Title, p.Comment, p.URL, p.AutoFusionUsed, p.AutoLoveupUsed, p.AdminIdempotencyKey, string(rewards)}})
+			}
+		}
+		if err := syncAccountRows(tx, "cn_account_present", "present_id", presentRowColumns, u.UserID, presents); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Metadata and all row tables must be read in one transaction; otherwise a
@@ -231,7 +254,7 @@ func readAccountRows(tx *sql.Tx, state *gamestate.State) error {
 		var c gamestate.Card
 		var slot int
 		var skills string
-		if err := rows.Scan(&c.UniqueID, &slot, &c.CardID, &c.Level, &c.Experience, &c.NowLevelExperience, &c.NextLevelExperience, &c.Love, &c.Fame, &c.IsLock, &c.HP, &c.Attack, &c.Magic, &c.Mind, &c.BaseAddPrice, &skills); err != nil {
+		if err := rows.Scan(&c.UniqueID, &slot, &c.CardID, &c.Level, &c.Experience, &c.NowLevelExperience, &c.NextLevelExperience, &c.Love, &c.Fame, &c.IsLock, &c.HP, &c.Attack, &c.Magic, &c.Mind, &c.BaseAddPrice, &skills, &c.CreateTime); err != nil {
 			return err
 		}
 		if len(skills) > 4096 {
@@ -245,6 +268,7 @@ func readAccountRows(tx *sql.Tx, state *gamestate.State) error {
 			return fmt.Errorf("account card %d has no public template", c.CardID)
 		}
 		template.UniqueID, template.Level, template.Experience = c.UniqueID, c.Level, c.Experience
+		template.CreateTime = c.CreateTime
 		template.NowLevelExperience, template.NextLevelExperience = c.NowLevelExperience, c.NextLevelExperience
 		template.Love, template.Fame, template.IsLock = c.Love, c.Fame, c.IsLock
 		template.HP, template.Attack, template.Magic, template.Mind = c.HP, c.Attack, c.Magic, c.Mind

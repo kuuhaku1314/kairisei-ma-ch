@@ -8,6 +8,9 @@ import (
 // Operator pool identities are separate from the immutable built-in catalog.
 const OperatorGachaFirstID = 60300001
 
+// Native category requested by the main quest gacha shortcut.
+const MainQuestGachaCategory = 9
+
 // CloneGachas also isolates nested reward slices from operations drafts and
 // account snapshots; advancing one account never edits publication metadata.
 func CloneGachas(source []GachaProfile) []GachaProfile {
@@ -30,7 +33,11 @@ func CloneGachas(source []GachaProfile) []GachaProfile {
 		}
 		p.Gifts = append([]GachaGiftRule(nil), p.Gifts...)
 		for j := range p.Gifts {
-			p.Gifts[j].Rewards = cloneGachaRewards(p.Gifts[j].Rewards)
+			p.Gifts[j].Rewards = cloneRewards(p.Gifts[j].Rewards)
+		}
+		p.RandomGifts = append([]GachaRandomGiftRule(nil), p.RandomGifts...)
+		for j := range p.RandomGifts {
+			p.RandomGifts[j].Pool = cloneRewardPool(p.RandomGifts[j].Pool)
 		}
 	}
 	return result
@@ -44,7 +51,7 @@ func (p GachaProfile) CardFame(cardID int) int {
 	return 1
 }
 
-func cloneGachaRewards(source []Reward) []Reward {
+func cloneRewards(source []Reward) []Reward {
 	result := append([]Reward(nil), source...)
 	for i := range result {
 		result[i].CardSkillLevels = append([]int16{}, result[i].CardSkillLevels...)
@@ -75,11 +82,25 @@ func (p GachaProfile) Exhausted() bool {
 	return p.PlayCountMax > 0 && p.GroupPlayCount >= p.PlayCountMax
 }
 
+func (p GachaProfile) DailyExhausted() bool {
+	return p.DailyPlayMax > 0 && p.DailyGroupPlays >= p.DailyPlayMax
+}
+
 func (p GachaProfile) CurrentGifts() []Reward {
 	result := []Reward{}
 	for _, rule := range p.Gifts {
 		if p.PlayCount >= rule.FromPlay-1 && (rule.ToPlay == 0 || p.PlayCount < rule.ToPlay) {
 			result = append(result, rule.Rewards...)
+		}
+	}
+	return result
+}
+
+func (p GachaProfile) CurrentRandomGifts() []GachaRandomGiftRule {
+	var result []GachaRandomGiftRule
+	for _, rule := range p.RandomGifts {
+		if p.PlayCount >= rule.FromPlay-1 && (rule.ToPlay == 0 || p.PlayCount < rule.ToPlay) {
+			result = append(result, rule)
 		}
 	}
 	return result
@@ -134,8 +155,12 @@ func ValidateGachaRules(p GachaProfile) error {
 	if p.GachaType < 0 || p.GachaType > 4 || p.ArthurType < 0 || p.ArthurType > 5 {
 		return errors.New("invalid gacha type or profession choice")
 	}
-	if p.PlayCountMax < 0 || p.PlayCountMax > 1000000 {
+	if p.PlayCountMax < 0 || p.PlayCountMax > 1000000 || p.DailyPlayMax < 0 || p.DailyPlayMax > 1000000 {
 		return errors.New("invalid gacha play limit")
+	}
+	if p.UserSelectMax < 0 || p.UserSelectMax > len(p.CardIDs) ||
+		p.UserSelectMax > 0 && (p.GachaType != 0 || p.ArthurType != 0 || p.GuaranteedCount != 0 || p.DailyFirstFree) {
+		return errors.New("invalid gacha user-select rule")
 	}
 	mixed := len(p.RewardPool) > 0
 	if mixed {
@@ -182,6 +207,27 @@ func ValidateGachaRules(p GachaProfile) error {
 			if err := ValidateGachaReward(reward); err != nil {
 				return err
 			}
+		}
+	}
+	return ValidateGachaRandomGifts(p.RandomGifts)
+}
+
+func ValidateGachaRandomGifts(gifts []GachaRandomGiftRule) error {
+	if len(gifts) > 10 {
+		return errors.New("最多设置10组随机附赠")
+	}
+	for _, gift := range gifts {
+		if gift.FromPlay < 1 || gift.FromPlay > 1000000 || gift.ToPlay != 0 && (gift.ToPlay < gift.FromPlay || gift.ToPlay > 1000000) ||
+			len(gift.Pool) < 1 || len(gift.Pool) > 100 || gift.EmptyWeight < 0 || gift.EmptyWeight > 1000000 {
+			return errors.New("随机附赠须有有效抽取区间、1–100项奖励及0–1000000的空奖权重")
+		}
+		for _, entry := range gift.Pool {
+			if entry.Weight < 1 || entry.Weight > 1000000 || entry.Reward.Type == 8 && entry.Reward.Num != 1 {
+				return errors.New("随机附赠权重须为1–1000000；单项道具赠礼数量须为1")
+			}
+		}
+		if err := ValidateRewardPool(gift.Pool); err != nil {
+			return err
 		}
 	}
 	return nil

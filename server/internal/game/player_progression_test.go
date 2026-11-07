@@ -9,7 +9,7 @@ import (
 	"kairisei.local/server/internal/gamestate"
 )
 
-func TestLevelFriendCapacitySurvivesSnapshotAndFollowCeiling(t *testing.T) {
+func TestFollowCapacityGrowthSurvivesLevelUpAndSnapshot(t *testing.T) {
 	raw, err := os.ReadFile("../../config/cn602-player-progression-runtime.json")
 	if err != nil {
 		t.Fatal(err)
@@ -18,18 +18,22 @@ func TestLevelFriendCapacitySurvivesSnapshotAndFollowCeiling(t *testing.T) {
 	if err := json.Unmarshal(raw, &policy); err != nil {
 		t.Fatal(err)
 	}
-	s := &Account{playerProgression: policy, currentLevel: 47, currentFriendMax: 50, followMax: 50,
-		bp: 10, bpMax: policy.BattlePointMaximum(47), bpRecoveryInterval: 3 * time.Minute, apRecoveryInterval: 2 * time.Hour}
-	s.applyPlayerExperienceLocked(policy.ExperienceRequired(47))
-	view := s.PlayerProgressionState()
-	if view.Level != 48 || view.FriendMax != 51 || s.FriendMaximum() != 51 || s.FollowMaximum() != 65 {
-		t.Fatalf("level-up is blocked by follow ceiling: %+v, follow=%d", view, s.FollowMaximum())
+	for _, tc := range []struct{ level, maximum int }{{1, 100}, {199, 100}, {200, 100}, {201, 101}, {250, 150}, {299, 199}, {300, 200}, {301, 200}, {350, 200}} {
+		if got := policy.FollowMaximum(tc.level); got != tc.maximum {
+			t.Fatalf("level %d follow capacity %d, want %d", tc.level, got, tc.maximum)
+		}
 	}
-	if saved := s.Snapshot(gamestate.State{}); saved.User.FriendMax != 51 || saved.User.Level != 48 {
-		t.Fatal("level friend capacity not persisted")
-	}
-	s.followMax = 80
-	if s.FollowMaximum() != 80 {
-		t.Fatal("larger configured follow capacity was reduced")
+	for _, level := range []int{47, 199, 200, 299, 300} {
+		s := &Account{playerProgression: policy, currentLevel: level, currentFollowMax: policy.FollowMaximum(level),
+			bp: 10, bpMax: policy.BattlePointMaximum(level), bpRecoveryInterval: 3 * time.Minute, apRecoveryInterval: 2 * time.Hour}
+		s.applyPlayerExperienceLocked(policy.ExperienceRequired(level))
+		view := s.PlayerProgressionState()
+		if view.Level != level+1 || view.FollowMax != policy.FollowMaximum(level+1) || s.FollowMaximum() != view.FollowMax {
+			t.Fatalf("level-up follow capacity: %+v", view)
+		}
+		saved := s.Snapshot(gamestate.State{})
+		if saved.User.FollowMax != view.FollowMax || saved.User.Level != view.Level {
+			t.Fatal("follow capacity not persisted")
+		}
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"time"
 
 	"kairisei.local/server/internal/gamestate"
 )
@@ -28,6 +29,7 @@ func (s *Account) MoveCards(toSlot int8, uniqueIDs []int64) ([]CardInfo, []DeckI
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.refreshCardFameTrainingLocked(time.Now())
 	source := &s.containerCards
 	destination := &s.cards
 	destinationMax := s.cardMax
@@ -45,12 +47,16 @@ func (s *Account) MoveCards(toSlot int8, uniqueIDs []int64) ([]CardInfo, []DeckI
 
 	selected := make(map[int]struct{}, len(uniqueIDs))
 	moved := make([]CardInfo, len(uniqueIDs))
+	movePositions := indexCardSelection(*source, uniqueIDs)
 	for moveIndex, uniqueID := range uniqueIDs {
-		index := cardIndexByUniqueID(*source, uniqueID)
+		index := movePositions[uniqueID]
 		if index < 0 {
 			return nil, nil, errors.New("card move source does not contain unique ID")
 		}
 		selected[index] = struct{}{}
+		if s.cardFameTraining != nil && s.cardFameTraining.UniqueID == uniqueID {
+			return nil, nil, errors.New("card is locked by active fame training")
+		}
 		moved[moveIndex] = cloneCard((*source)[index])
 		moved[moveIndex].Slot = int(toSlot)
 	}
@@ -110,6 +116,10 @@ func (s *Account) fillVacatedDeckSlots(
 	vacatedSlots []int,
 	support bool,
 ) error {
+	if len(vacatedSlots) == 0 {
+		return nil
+	}
+	owned := ownedCardIDs(s.cards)
 	for _, slot := range vacatedSlots {
 		filled := false
 		for _, candidate := range candidates {
@@ -121,7 +131,9 @@ func (s *Account) fillVacatedDeckSlots(
 			} else {
 				deck.CardUniqueIDs[slot] = candidate.UniqueID
 			}
-			if err := s.validateDeckCardFamilies(*deck, 0, 0); err == nil {
+			// System-generated main slots must obey profession rules even in an
+			// inactive draft. Manual drafts and ordinary-profession EX stay editable.
+			if err := s.validateDeckCardFamilies(*deck, owned, 0, 0, !support); err == nil {
 				filled = true
 				break
 			}
@@ -145,10 +157,8 @@ func (s *Account) fillVacatedDeckSlots(
 	return nil
 }
 
-// repairIncompleteMainDecks migrates state written before CardMove replaced
-// cards removed from an equipped deck. The CN client treats a main deck with
-// any zero slot as invalid; at low rank CardMgr.isUseCard then dereferences a
-// missing selected deck while rendering every inventory item.
+// repairIncompleteMainDecks restores vacated slots in equipped main decks.
+// Inactive decks are editable drafts and may legitimately contain empty slots.
 func (s *Account) repairIncompleteMainDecks() (bool, error) {
 	proposed := s.rankedDecksLocked(s.decks)
 	mainInventory := make(map[int64]struct{}, len(s.cards))
@@ -162,6 +172,9 @@ func (s *Account) repairIncompleteMainDecks() (bool, error) {
 
 	changed := false
 	for deckIndex := range proposed {
+		if proposed[deckIndex].IsActive == 0 {
+			continue
+		}
 		vacated := make([]int, 0)
 		for slot, uniqueID := range proposed[deckIndex].CardUniqueIDs {
 			if uniqueID == 0 {
@@ -207,6 +220,7 @@ func (s *Account) SetCardLock(uniqueID int64, slot int, locked bool) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.refreshCardFameTrainingLocked(time.Now())
 	inventory := &s.cards
 	if slot == 1 {
 		inventory = &s.containerCards
@@ -246,6 +260,7 @@ func (s *Account) LoveUpCard(baseUniqueID int64, uses []LoveUpItemUse) (cardLove
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.refreshCardFameTrainingLocked(time.Now())
 
 	cardIndex := cardIndexByUniqueID(s.cards, baseUniqueID)
 	if cardIndex < 0 {
@@ -317,35 +332,47 @@ func (s *Account) LoveUpCard(baseUniqueID int64, uses []LoveUpItemUse) (cardLove
 	}, nil
 }
 
-func (s *Account) SellContainerCards(uniqueIDs []int64) (int, int, error) {
+func (s *Account) SellContainerCards(uniqueIDs []int64) (SellCardsResult, error) {
 	if len(uniqueIDs) == 0 {
-		return 0, 0, errors.New("container sell selection is empty")
+		return SellCardsResult{}, errors.New("container sell selection is empty")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.refreshCardFameTrainingLocked(time.Now())
 	remove := make(map[int]struct{}, len(uniqueIDs))
 	getGold := 0
+	extractNum := 0
+	positions := indexCardSelection(s.containerCards, uniqueIDs)
 	for _, uniqueID := range uniqueIDs {
-		index := cardIndexByUniqueID(s.containerCards, uniqueID)
+		index := positions[uniqueID]
 		if index < 0 {
-			return 0, 0, ErrCardUnavailable
+			return SellCardsResult{}, ErrCardUnavailable
 		}
 		if err := s.checkCardConsumptionLocked(s.containerCards[index]); err != nil {
-			return 0, 0, err
+			return SellCardsResult{}, err
 		}
 		definition, exists := s.cardDefinitions[s.containerCards[index].CardID]
 		if !exists || definition.SellGold < 0 {
-			return 0, 0, errors.New("container sell price is unavailable")
+			return SellCardsResult{}, errors.New("container sell price is unavailable")
 		}
 		remove[index] = struct{}{}
 		var err error
 		getGold, err = checkedCardSaleGold(s.gold, getGold, definition.SellGold, 1)
 		if err != nil {
-			return 0, 0, err
+			return SellCardsResult{}, err
 		}
+		count := s.cardSellExtractCount(definition.CardID)
+		if count > math.MaxInt-extractNum {
+			return SellCardsResult{}, errors.New("card sell extract quantity overflows")
+		}
+		extractNum += count
 	}
 	if len(remove) != len(uniqueIDs) {
-		return 0, 0, errors.New("duplicate container sell card")
+		return SellCardsResult{}, errors.New("duplicate container sell card")
+	}
+	extract, err := s.grantCardSellExtractLocked(extractNum)
+	if err != nil {
+		return SellCardsResult{}, err
 	}
 	kept := make([]CardInfo, 0, len(s.containerCards)-len(remove))
 	for index, card := range s.containerCards {
@@ -355,7 +382,9 @@ func (s *Account) SellContainerCards(uniqueIDs []int64) (int, int, error) {
 	}
 	s.containerCards = kept
 	s.gold += getGold
-	return getGold, s.gold, nil
+	s.markMissionMetricLocked(gamestate.MissionCardOwned)
+	s.markMissionMetricLocked(gamestate.MissionCardFame)
+	return SellCardsResult{GetGold: getGold, Gold: s.gold, Decks: s.rankedDecksLocked(s.decks), Extract: extract}, nil
 }
 
 func (s *Account) FuseCard(
@@ -370,6 +399,7 @@ func (s *Account) FuseCard(
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.refreshCardFameTrainingLocked(time.Now())
 	baseIndex := cardIndexByUniqueID(s.cards, baseUniqueID)
 	if baseIndex < 0 {
 		return CardInfo{}, CardInfo{}, 0, nil, errors.New("unknown fusion base card")
@@ -383,8 +413,9 @@ func (s *Account) FuseCard(
 		return CardInfo{}, CardInfo{}, 0, nil, errors.New("fusion base card definition is unavailable")
 	}
 	materialIndexes := make(map[int]struct{}, len(materialUniqueIDs))
+	materialPositions := indexCardSelection(s.cards, materialUniqueIDs)
 	for _, uniqueID := range materialUniqueIDs {
-		index := cardIndexByUniqueID(s.cards, uniqueID)
+		index := materialPositions[uniqueID]
 		if index < 0 {
 			return CardInfo{}, CardInfo{}, 0, nil, ErrCardUnavailable
 		}
@@ -400,8 +431,9 @@ func (s *Account) FuseCard(
 		return CardInfo{}, CardInfo{}, 0, nil, errors.New("duplicate fusion material card")
 	}
 	containerMaterialIndexes := make(map[int]struct{}, len(containerMaterialUniqueIDs))
+	containerPositions := indexCardSelection(s.containerCards, containerMaterialUniqueIDs)
 	for _, uniqueID := range containerMaterialUniqueIDs {
-		index := cardIndexByUniqueID(s.containerCards, uniqueID)
+		index := containerPositions[uniqueID]
 		if index < 0 {
 			return CardInfo{}, CardInfo{}, 0, nil, ErrCardUnavailable
 		}
@@ -417,13 +449,16 @@ func (s *Account) FuseCard(
 		return CardInfo{}, CardInfo{}, 0, nil, err
 	}
 	materialCount := len(materialUniqueIDs) + len(containerMaterialUniqueIDs)
+	if len(materialUniqueIDs) > s.cardProgression.MaximumCardMaterialCount || len(containerMaterialUniqueIDs) > s.cardProgression.MaximumCardMaterialCount || len(stackUses) > s.cardProgression.MaximumCardMaterialCount {
+		return CardInfo{}, CardInfo{}, 0, nil, errors.New("too many card fusion material instances or types")
+	}
 	for _, use := range stackUses {
-		if use.Num > s.cardProgression.MaximumCardMaterialCount-materialCount {
+		if use.Num > cardFusionTotalMaterialLimit-materialCount {
 			return CardInfo{}, CardInfo{}, 0, nil, errors.New("too many card fusion materials")
 		}
 		materialCount += use.Num
 	}
-	if materialCount <= 0 || materialCount > s.cardProgression.MaximumCardMaterialCount {
+	if materialCount <= 0 || materialCount > cardFusionTotalMaterialLimit {
 		return CardInfo{}, CardInfo{}, 0, nil, errors.New("too many card fusion materials")
 	}
 	cost64 := int64(oldCard.BaseAddPrice) * int64(materialCount)
@@ -539,11 +574,14 @@ func (s *Account) FuseCard(
 		}
 		s.containerCards = keptContainer
 	}
-	consumeStackUses(s.stackCards, stackUses)
+	s.consumeStackUsesLocked(stackUses)
 	s.gold -= cost
 	if err := s.advanceOnboardingLocked(onboardingEvent{kind: "fusion"}); err != nil {
 		return CardInfo{}, CardInfo{}, 0, nil, err
 	}
+	s.markMissionMetricLocked(gamestate.MissionCardOwned)
+	s.markMissionMetricLocked(gamestate.MissionCardFame)
+	s.recordMissionEventLocked(missionEvent{kind: gamestate.MissionCardFusion}, time.Now())
 	return oldCard, updated, success.SuccessType, s.rankedDecksLocked(s.decks), nil
 }
 
@@ -553,9 +591,11 @@ func (s *Account) EvolveCard(
 	materialUniqueIDs []int64,
 	containerMaterialUniqueIDs []int64,
 	materialCardIDs []int,
+	materialItemIDs []int,
 ) (CardInfo, int, []DeckInfo, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.refreshCardFameTrainingLocked(time.Now())
 	baseIndex := cardIndexByUniqueID(s.cards, baseUniqueID)
 	if baseIndex < 0 {
 		return CardInfo{}, 0, nil, errors.New("unknown evolution base card")
@@ -572,8 +612,13 @@ func (s *Account) EvolveCard(
 			break
 		}
 	}
-	if transition == nil || base.Level != base.LevelMax {
+	if transition == nil || base.Level != base.LevelMax && s.cardDefinitions[base.CardID].RarityPlus != 4 {
 		return CardInfo{}, 0, nil, errors.New("card is not ready for evolution")
+	}
+	itemEvolution := transition.Type == 4
+	if itemEvolution && (len(materialUniqueIDs) != 0 || len(containerMaterialUniqueIDs) != 0 || len(materialCardIDs) != 0) ||
+		!itemEvolution && len(materialItemIDs) != 0 {
+		return CardInfo{}, 0, nil, errors.New("evolution material inventory differs from the recipe")
 	}
 	if s.evolutionRestrictions != nil {
 		if _, blocked := s.evolutionRestrictions.blocked[EvolutionPath{FromCardID: base.CardID, ToCardID: toCardID}]; blocked {
@@ -582,8 +627,9 @@ func (s *Account) EvolveCard(
 	}
 	materialIndexes := make(map[int]struct{}, len(materialUniqueIDs))
 	selectedMaterials := make(map[int]int, len(materialUniqueIDs)+len(containerMaterialUniqueIDs)+len(materialCardIDs))
+	materialPositions := indexCardSelection(s.cards, materialUniqueIDs)
 	for _, uniqueID := range materialUniqueIDs {
-		index := cardIndexByUniqueID(s.cards, uniqueID)
+		index := materialPositions[uniqueID]
 		if index < 0 {
 			return CardInfo{}, 0, nil, ErrCardUnavailable
 		}
@@ -600,8 +646,9 @@ func (s *Account) EvolveCard(
 		return CardInfo{}, 0, nil, errors.New("duplicate evolution material card")
 	}
 	containerMaterialIndexes := make(map[int]struct{}, len(containerMaterialUniqueIDs))
+	containerPositions := indexCardSelection(s.containerCards, containerMaterialUniqueIDs)
 	for _, uniqueID := range containerMaterialUniqueIDs {
-		index := cardIndexByUniqueID(s.containerCards, uniqueID)
+		index := containerPositions[uniqueID]
 		if index < 0 {
 			return CardInfo{}, 0, nil, ErrCardUnavailable
 		}
@@ -614,22 +661,41 @@ func (s *Account) EvolveCard(
 	if len(containerMaterialIndexes) != len(containerMaterialUniqueIDs) {
 		return CardInfo{}, 0, nil, errors.New("duplicate container evolution material card")
 	}
-	stackUses, err := evolutionStackUses(materialCardIDs, selectedMaterials, transition.Materials)
+	materialIDs := materialCardIDs
+	if itemEvolution {
+		materialIDs = materialItemIDs
+	}
+	uses, err := evolutionMaterialUses(materialIDs, selectedMaterials, transition.Materials)
 	if err != nil {
 		return CardInfo{}, 0, nil, err
+	}
+	stackUses := make([]gamestate.CardStackUse, 0, len(uses))
+	for _, use := range uses {
+		if itemEvolution {
+			if s.items[use.id].Num < use.num {
+				return CardInfo{}, 0, nil, ErrInsufficientMaterials
+			}
+		} else {
+			stackUses = append(stackUses, gamestate.CardStackUse{CardID: use.id, Num: use.num})
+		}
+		selectedMaterials[use.id] += use.num
 	}
 	if err := validateStackUses(s.stackCards, stackUses); err != nil {
 		return CardInfo{}, 0, nil, err
 	}
-	for _, use := range stackUses {
-		selectedMaterials[use.CardID] += use.Num
-	}
 	if !sameEvolutionMaterials(selectedMaterials, transition.Materials) {
 		return CardInfo{}, 0, nil, errors.New("evolution materials differ")
 	}
-	// GOD evolution checks each material card's fame, not the sum of a family.
+	// GOD evolution consumes the required fame from each selected instance.
+	// Fame from several cards cannot be combined to satisfy one material slot.
+	var materialFameCosts map[int]int
 	if transition.Type == 1 {
+		if len(stackUses) != 0 {
+			return CardInfo{}, 0, nil, errors.New("GOD evolution requires material card instances")
+		}
+		materialFameCosts = make(map[int]int, len(transition.Materials))
 		for _, required := range transition.Materials {
+			materialFameCosts[required.CardID] = required.Fame
 			for index := range materialIndexes {
 				card := s.cards[index]
 				if card.CardID == required.CardID && card.Fame < required.Fame {
@@ -651,8 +717,9 @@ func (s *Account) EvolveCard(
 	if !exists {
 		return CardInfo{}, 0, nil, errors.New("evolution target template is missing")
 	}
-	result := template
+	result := cloneCard(template)
 	result.UniqueID = base.UniqueID
+	result.CreateTime = base.CreateTime
 	result.Love = base.Love
 	result.Fame = base.Fame
 	result.IsLock = base.IsLock
@@ -675,7 +742,7 @@ func (s *Account) EvolveCard(
 		if !deckContainsCardUniqueID(deck, base.UniqueID) {
 			continue
 		}
-		if err := s.validateDeckCardFamilies(deck, base.UniqueID, toCardID); err != nil {
+		if err := s.validateDeckCardFamilies(deck, ownedCardIDs(s.cards), base.UniqueID, toCardID, false); err != nil {
 			return CardInfo{}, 0, nil, fmt.Errorf("evolution target invalidates deck: %w", err)
 		}
 	}
@@ -685,6 +752,9 @@ func (s *Account) EvolveCard(
 		kept := make([]CardInfo, 0, len(s.cards)-len(materialIndexes))
 		for index, card := range s.cards {
 			if _, remove := materialIndexes[index]; !remove {
+				kept = append(kept, card)
+			} else if fame, consumesFame := materialFameCosts[card.CardID]; consumesFame && card.Fame > fame {
+				card.Fame -= fame
 				kept = append(kept, card)
 			} else {
 				s.clearCardFromDecksLocked(card.UniqueID)
@@ -697,50 +767,105 @@ func (s *Account) EvolveCard(
 		for index, card := range s.containerCards {
 			if _, remove := containerMaterialIndexes[index]; !remove {
 				keptContainer = append(keptContainer, card)
+			} else if fame, consumesFame := materialFameCosts[card.CardID]; consumesFame && card.Fame > fame {
+				card.Fame -= fame
+				keptContainer = append(keptContainer, card)
 			}
 		}
 		s.containerCards = keptContainer
 	}
-	consumeStackUses(s.stackCards, stackUses)
+	s.consumeStackUsesLocked(stackUses)
+	if itemEvolution {
+		for _, use := range uses {
+			item := s.items[use.id]
+			item.Num -= use.num
+			s.items[use.id] = item
+		}
+	}
 	s.gold -= transition.Gold
+	s.recordMissionEventLocked(missionEvent{kind: gamestate.MissionCardEvolution, subjectID: result.CardID}, time.Now())
 	return result, s.gold, s.rankedDecksLocked(s.decks), nil
 }
 
-func (s *Account) SellCards(
-	uniqueIDs []int64,
-	stackUses []gamestate.CardStackUse,
-) (int, int, []DeckInfo, error) {
+type SellCardsResult struct {
+	GetGold int
+	Gold    int
+	Decks   []DeckInfo
+	Extract PresentReceiveResult
+}
+
+func (s *Account) cardSellExtractCount(cardID int) int {
+	if s.cardSellExtract == nil {
+		return 0
+	}
+	baseID, found := s.cardSellExtract.BaseCardIDs[cardID]
+	if !found {
+		return 0
+	}
+	rarity, found := s.cardSellExtract.BaseRarities[baseID]
+	if !found {
+		return 0
+	}
+	return s.cardSellExtract.CountByBaseRarity[rarity]
+}
+
+func (s *Account) grantCardSellExtractLocked(count int) (PresentReceiveResult, error) {
+	result := PresentReceiveResult{}
+	if count == 0 {
+		return result, nil
+	}
+	// Grant under the same account lock before the infallible sale mutations.
+	// The HTTP layer persists both changes in one account snapshot.
+	reward := gamestate.Reward{Type: 8, RewardTypeID: s.cardSellExtract.ItemID, Num: count, CardSkillLevels: []int16{}}
+	if err := s.validateRewardLocked(reward); err != nil {
+		return PresentReceiveResult{}, err
+	}
+	if err := s.applyRewardOrPresentLocked(reward, &result, "卡牌出售提取奖励"); err != nil {
+		return PresentReceiveResult{}, err
+	}
+	return result, nil
+}
+
+func (s *Account) SellCards(uniqueIDs []int64, stackUses []gamestate.CardStackUse) (SellCardsResult, error) {
 	if len(uniqueIDs) == 0 && len(stackUses) == 0 {
-		return 0, 0, nil, errors.New("sell selection is empty")
+		return SellCardsResult{}, errors.New("sell selection is empty")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.refreshCardFameTrainingLocked(time.Now())
 	remove := make(map[int]struct{}, len(uniqueIDs))
 	getGold := 0
+	extractNum := 0
+	positions := indexCardSelection(s.cards, uniqueIDs)
 	for _, uniqueID := range uniqueIDs {
-		index := cardIndexByUniqueID(s.cards, uniqueID)
+		index := positions[uniqueID]
 		if index < 0 {
-			return 0, 0, nil, ErrCardUnavailable
+			return SellCardsResult{}, ErrCardUnavailable
 		}
 		if err := s.checkCardConsumptionLocked(s.cards[index]); err != nil {
-			return 0, 0, nil, err
+			return SellCardsResult{}, err
 		}
 		definition, exists := s.cardDefinitions[s.cards[index].CardID]
 		if !exists || definition.SellGold < 0 {
-			return 0, 0, nil, errors.New("card sell price is unavailable")
+			return SellCardsResult{}, errors.New("card sell price is unavailable")
 		}
 		remove[index] = struct{}{}
 		var err error
 		getGold, err = checkedCardSaleGold(s.gold, getGold, definition.SellGold, 1)
 		if err != nil {
-			return 0, 0, nil, err
+			return SellCardsResult{}, err
 		}
+		count := s.cardSellExtractCount(definition.CardID)
+		if count > math.MaxInt-extractNum {
+			return SellCardsResult{}, errors.New("card sell extract quantity overflows")
+		}
+		extractNum += count
 	}
 	if len(remove) != len(uniqueIDs) {
-		return 0, 0, nil, errors.New("duplicate sell card")
+		return SellCardsResult{}, errors.New("duplicate sell card")
 	}
 	if err := validateStackUses(s.stackCards, stackUses); err != nil {
-		return 0, 0, nil, err
+		return SellCardsResult{}, err
 	}
 	for _, use := range stackUses {
 		for _, stack := range s.stackCards {
@@ -748,12 +873,22 @@ func (s *Account) SellCards(
 				var err error
 				getGold, err = checkedCardSaleGold(s.gold, getGold, stack.BaseAddPrice, use.Num)
 				if err != nil {
-					return 0, 0, nil, err
+					return SellCardsResult{}, err
 				}
+				count := s.cardSellExtractCount(use.CardID)
+				if count > 0 && use.Num > (math.MaxInt-extractNum)/count {
+					return SellCardsResult{}, errors.New("card sell extract quantity overflows")
+				}
+				extractNum += count * use.Num
 				break
 			}
 		}
 	}
+	extract, err := s.grantCardSellExtractLocked(extractNum)
+	if err != nil {
+		return SellCardsResult{}, err
+	}
+	result := SellCardsResult{Extract: extract}
 	kept := make([]CardInfo, 0, len(s.cards)-len(remove))
 	for index, card := range s.cards {
 		if _, exists := remove[index]; !exists {
@@ -763,9 +898,12 @@ func (s *Account) SellCards(
 		}
 	}
 	s.cards = kept
-	consumeStackUses(s.stackCards, stackUses)
+	s.consumeStackUsesLocked(stackUses)
 	s.gold += getGold
-	return getGold, s.gold, s.rankedDecksLocked(s.decks), nil
+	s.markMissionMetricLocked(gamestate.MissionCardOwned)
+	s.markMissionMetricLocked(gamestate.MissionCardFame)
+	result.GetGold, result.Gold, result.Decks = getGold, s.gold, s.rankedDecksLocked(s.decks)
+	return result, nil
 }
 
 // Selling and using a card as material share these ordinary availability
@@ -781,25 +919,18 @@ func (s *Account) checkCardConsumptionLocked(card CardInfo) error {
 }
 
 func (s *Account) uniqueIDInDeck(uniqueID int64) bool {
-	decks := s.decks
-	// CN CardMgr.isUseCard considers only the selected deck before rank A.
-	if s.deckRankPolicy.ConfigVersion > 0 && s.highestDeckRank < 10 {
-		selected, found := SelectPartnerDeck(decks, s.currentActiveArthur)
-		if !found {
-			return false
+	// The Alchemist deck opens after training, independently of the A-rank
+	// gate on ordinary professions. Protect its main and EX slots at any rank.
+	allDecks := s.deckRankPolicy.ConfigVersion == 0 || s.highestDeckRank >= 10
+	if !allDecks {
+		current, found := SelectPartnerDeck(s.decks, s.currentActiveArthur)
+		if found && deckContainsCardUniqueID(current, uniqueID) {
+			return true
 		}
-		decks = []DeckInfo{selected}
 	}
-	for _, deck := range decks {
-		for _, candidate := range deck.CardUniqueIDs {
-			if candidate == uniqueID {
-				return true
-			}
-		}
-		for _, candidate := range deck.SupportCardUniqueIDs {
-			if candidate == uniqueID {
-				return true
-			}
+	for _, deck := range s.decks {
+		if (allDecks || deck.ArthurType == 5) && deckContainsCardUniqueID(deck, uniqueID) {
+			return true
 		}
 	}
 	return false
@@ -835,14 +966,22 @@ func validateStackUses(cards []gamestate.CardStack, uses []gamestate.CardStackUs
 	return nil
 }
 
-func consumeStackUses(cards []gamestate.CardStack, uses []gamestate.CardStackUse) {
+func (s *Account) consumeStackUsesLocked(uses []gamestate.CardStackUse) {
 	for _, use := range uses {
-		for index := range cards {
-			if cards[index].CardID == use.CardID {
-				cards[index].Num -= use.Num
+		for index := range s.stackCards {
+			if s.stackCards[index].CardID == use.CardID {
+				s.consumeStackCardLocked(index, use.Num)
 				break
 			}
 		}
+	}
+}
+
+func (s *Account) consumeStackCardLocked(index, count int) {
+	card := &s.stackCards[index]
+	card.Num -= count
+	if card.Num == 0 {
+		s.markMissionMetricLocked(gamestate.MissionCardOwned)
 	}
 }
 
@@ -858,18 +997,23 @@ func sameEvolutionMaterials(selected map[int]int, expected []gamestate.Evolution
 	return true
 }
 
-// EvoFusionUI.SendFusionInfo sends one card ID per selected material slot,
+type evolutionMaterialUse struct {
+	id  int
+	num int
+}
+
+// EvoFusionUI.SendFusionInfo sends one card/item ID per selected material slot,
 // even when that slot requires 25 or 800 copies. The authoritative recipe
 // supplies quantities; unlike exp fusion, repeated IDs are not unit counts.
-func evolutionStackUses(cardIDs []int, instanceCounts map[int]int, materials []gamestate.EvolutionMaterial) ([]gamestate.CardStackUse, error) {
-	selectedSlots := make(map[int]int, len(cardIDs))
-	for _, id := range cardIDs {
+func evolutionMaterialUses(materialIDs []int, instanceCounts map[int]int, materials []gamestate.EvolutionMaterial) ([]evolutionMaterialUse, error) {
+	selectedSlots := make(map[int]int, len(materialIDs))
+	for _, id := range materialIDs {
 		if id <= 0 {
-			return nil, errors.New("invalid evolution stack material ID")
+			return nil, errors.New("invalid evolution material ID")
 		}
 		selectedSlots[id]++
 	}
-	uses := make([]gamestate.CardStackUse, 0, len(selectedSlots))
+	uses := make([]evolutionMaterialUse, 0, len(selectedSlots))
 	for _, material := range materials {
 		slots := selectedSlots[material.CardID]
 		if slots == 0 {
@@ -879,11 +1023,11 @@ func evolutionStackUses(cardIDs []int, instanceCounts map[int]int, materials []g
 		if count <= 0 || slots > count {
 			return nil, errors.New("invalid evolution material slots")
 		}
-		uses = append(uses, gamestate.CardStackUse{CardID: material.CardID, Num: count})
+		uses = append(uses, evolutionMaterialUse{id: material.CardID, num: count})
 		delete(selectedSlots, material.CardID)
 	}
 	if len(selectedSlots) != 0 {
-		return nil, errors.New("evolution stack material is not in the recipe")
+		return nil, errors.New("evolution material is not in the recipe")
 	}
 	return uses, nil
 }
@@ -894,10 +1038,12 @@ func (s *Account) SetDecks(incoming []DeckInfo) ([]CardInfo, []DeckInfo, error) 
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.refreshCardFameTrainingLocked(time.Now())
 	unlockedRank := s.highestDeckRank
 	inventory := s.rankInventoryLocked()
+	owned := ownedCardIDs(s.cards)
 	for _, deck := range incoming {
-		if err := s.validateDeck(deck); err != nil {
+		if err := s.validateDeck(deck, owned); err != nil {
 			return nil, nil, err
 		}
 		// The client batches the edited deck and any newly opened empty slot.
@@ -933,7 +1079,17 @@ func (s *Account) SetDecks(incoming []DeckInfo) ([]CardInfo, []DeckInfo, error) 
 	return CloneCards(s.cards), s.rankedDecksLocked(s.decks), nil
 }
 
-func (s *Account) validateDeck(deck DeckInfo) error {
+func (s *Account) validateDeck(deck DeckInfo, owned map[int64]int) error {
+	if err := s.validateStoredDeck(deck, owned); err != nil {
+		return err
+	}
+	return s.validateDeckComposition(deck, owned, 0, 0, deck.IsActive != 0)
+}
+
+// Loading checks shape, ownership and card families. Current composition rules
+// apply when saving, generating replacements or admitting a battle, so a saved
+// deck can still be opened and corrected without preventing account login.
+func (s *Account) validateStoredDeck(deck DeckInfo, owned map[int64]int) error {
 	if deck.ArthurType < 1 || deck.ArthurType > 5 {
 		return errors.New("arthur_type must be 1 through 5")
 	}
@@ -977,15 +1133,11 @@ func (s *Account) validateDeck(deck DeckInfo) error {
 	if err := s.validateDeckBuddies(deck); err != nil {
 		return err
 	}
-	known := make(map[int64]struct{}, len(s.cards))
-	for _, card := range s.cards {
-		known[card.UniqueID] = struct{}{}
-	}
 	for _, uniqueID := range deck.CardUniqueIDs {
 		if uniqueID == 0 {
 			continue
 		}
-		if _, exists := known[uniqueID]; !exists {
+		if _, exists := owned[uniqueID]; !exists {
 			return fmt.Errorf("unknown card unique ID %d", uniqueID)
 		}
 	}
@@ -993,14 +1145,11 @@ func (s *Account) validateDeck(deck DeckInfo) error {
 		if uniqueID == 0 {
 			continue
 		}
-		if _, exists := known[uniqueID]; !exists {
+		if _, exists := owned[uniqueID]; !exists {
 			return fmt.Errorf("unknown support card unique ID %d", uniqueID)
 		}
 	}
-	if err := s.validateDeckCardFamilies(deck, 0, 0); err != nil {
-		return err
-	}
-	return nil
+	return s.validateDeckFamilies(deck, owned, 0, 0)
 }
 
 func deckContainsCardUniqueID(deck DeckInfo, uniqueID int64) bool {
@@ -1017,20 +1166,17 @@ func deckContainsCardUniqueID(deck DeckInfo, uniqueID int64) bool {
 	return false
 }
 
-// validateDeckCardFamilies mirrors the CN client's DeckUtility.IsValidDeck
+// validateDeckFamilies mirrors the client's DeckUtility.IsValidDeck
 // family checks. Main slots compare same_cardid, support slots compare
 // same_supportcardid, and a support/main pair conflicts only when both family
 // IDs match. replacementUniqueID/replacementCardID lets evolution validate
 // the target definition before any inventory, gold, or material mutation.
-func (s *Account) validateDeckCardFamilies(
+func (s *Account) validateDeckFamilies(
 	deck DeckInfo,
+	cardIDsByUniqueID map[int64]int,
 	replacementUniqueID int64,
 	replacementCardID int,
 ) error {
-	cardIDsByUniqueID := make(map[int64]int, len(s.cards))
-	for _, card := range s.cards {
-		cardIDsByUniqueID[card.UniqueID] = card.CardID
-	}
 	definitionFor := func(uniqueID int64) (gamestate.Card, error) {
 		cardID, exists := cardIDsByUniqueID[uniqueID]
 		if !exists {
@@ -1132,4 +1278,23 @@ func fixedInt64Slots(values []int64, size int) []int64 {
 	result := make([]int64, size)
 	copy(result, values)
 	return result
+}
+
+// Selection-local lookup avoids rescanning a large inventory for every material.
+func indexCardSelection(cards []CardInfo, ids []int64) map[int64]int {
+	positions := make(map[int64]int, len(ids))
+	for _, id := range ids {
+		positions[id] = -1
+	}
+	remaining := len(positions)
+	for index, card := range cards {
+		if remaining == 0 {
+			break
+		}
+		if _, selected := positions[card.UniqueID]; selected {
+			positions[card.UniqueID] = index
+			remaining--
+		}
+	}
+	return positions
 }

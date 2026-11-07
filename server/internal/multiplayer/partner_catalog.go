@@ -18,7 +18,7 @@ func (h *Hub) PartnerCardKinds(cardIDs []int) map[int]int {
 		if !ok {
 			continue
 		}
-		if skills := h.combat.PlayerSkills[card.NormalSkillID]; len(skills) > 0 {
+		if skills := h.combat.Skills[card.NormalSkillID]; len(skills) > 0 {
 			result[id] = kinds[skills[0].Kind]
 		}
 	}

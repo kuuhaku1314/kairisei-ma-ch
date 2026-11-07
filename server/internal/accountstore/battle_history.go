@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"time"
 
+	"kairisei.local/server/internal/game"
 	"kairisei.local/server/internal/gamestate"
 	"kairisei.local/server/internal/multiplayer"
 )
@@ -29,13 +30,15 @@ func writeBattleClear(tx *sql.Tx, record gamestate.BattleClearRecord) error {
 	if record.BossID <= 0 || record.UserID < PrimaryUserID || record.UserID >= SystemPartnerUserIDBase ||
 		record.CompletedAt <= 0 || record.EventKey == "" || len(record.EventKey) > 256 ||
 		(record.Mode != 0 && record.Mode != 1) || (record.Mode == 0 && record.ArthurType != 0) ||
-		(record.Mode == 1 && (record.ArthurType < 1 || record.ArthurType > 4)) || len(record.Decks) != 4 {
+		(record.Mode == 1 && (record.ArthurType < 1 || record.ArthurType > 4 || len(record.Decks) != 4)) ||
+		len(record.Decks) < 1 || len(record.Decks) > 4 {
 		return errors.New("invalid battle clear statistics identity")
 	}
 	seen := map[int]bool{}
 	owner := false
 	for _, deck := range record.Decks {
-		if deck.ArthurType < 1 || deck.ArthurType > 4 || seen[deck.ArthurType] || deck.UserID <= 0 || len(deck.HonorIDs) != 4 || !json.Valid(deck.Deck) {
+		alchemistSolo := record.Mode == 0 && len(record.Decks) == 1 && deck.ArthurType == 5
+		if deck.ArthurType < 1 || (deck.ArthurType > 4 && !alchemistSolo) || (record.Mode == 1 && seen[deck.ArthurType]) || deck.UserID <= 0 || len(deck.HonorIDs) != 4 || !json.Valid(deck.Deck) {
 			return errors.New("invalid frozen clear deck")
 		}
 		seen[deck.ArthurType] = true
@@ -72,15 +75,16 @@ func pruneBattleClearStatistics(tx *sql.Tx, now time.Time) error {
 	return err
 }
 
-// PersistSoloClear commits inventory, the existing result receipt and the daily
-// counter together. The durable receipt is the idempotency authority.
-func (accounts *Accounts) PersistSoloClear(state gamestate.State, record gamestate.BattleClearRecord, receiptSHA string) error {
-	if record.UserID != state.User.UserID || record.Mode != 0 || len(receiptSHA) != 64 {
+// PersistSoloBattle commits the accepted outcome and cross-account rental
+// inbox events atomically. A result query cannot create any of these effects.
+func (accounts *Accounts) PersistSoloBattle(state gamestate.State, result game.SoloBattleCommit) error {
+	userID, bossID, receiptSHA := state.User.UserID, result.BossID, result.ReceiptSHA
+	if bossID <= 0 || len(receiptSHA) != 64 || (result.Clear != nil && (result.Clear.UserID != userID || result.Clear.BossID != bossID || result.Clear.Mode != 0)) {
 		return errors.New("solo clear ownership mismatch")
 	}
 	matched := false
 	for _, receipt := range state.TeamBattleSoloResultReceipts {
-		if receipt.RequestSHA256 == receiptSHA && receipt.BossID == record.BossID {
+		if receipt.RequestSHA256 == receiptSHA && receipt.BossID == bossID {
 			matched = true
 			break
 		}
@@ -102,10 +106,10 @@ func (accounts *Accounts) PersistSoloClear(state gamestate.State, record gamesta
 	}
 	defer tx.Rollback()
 	var old []byte
-	if record.UserID == PrimaryUserID {
+	if userID == PrimaryUserID {
 		err = tx.QueryRow(`SELECT payload_json FROM cn_save_snapshot WHERE singleton=1`).Scan(&old)
 	} else {
-		err = tx.QueryRow(`SELECT payload_json FROM cn_account_snapshot WHERE user_id=?`, record.UserID).Scan(&old)
+		err = tx.QueryRow(`SELECT payload_json FROM cn_account_snapshot WHERE user_id=?`, userID).Scan(&old)
 	}
 	if err != nil {
 		return err
@@ -117,30 +121,42 @@ func (accounts *Accounts) PersistSoloClear(state gamestate.State, record gamesta
 		return err
 	}
 	for _, receipt := range previous.Receipts {
-		if receipt.RequestSHA256 == receiptSHA && receipt.BossID == record.BossID {
+		if receipt.RequestSHA256 == receiptSHA && receipt.BossID == bossID {
 			return nil
 		}
 	}
 	digest := sha256.Sum256(content)
 	updated := time.Now().UTC().Format(time.RFC3339Nano)
-	if record.UserID == PrimaryUserID {
+	if userID == PrimaryUserID {
 		err = writePrimaryAccountSnapshot(tx, state, content, hex.EncodeToString(digest[:]), updated, nil)
 	} else {
-		err = writeAccountSnapshot(tx, record.UserID, state, content, hex.EncodeToString(digest[:]), updated, nil)
+		err = writeAccountSnapshot(tx, userID, state, content, hex.EncodeToString(digest[:]), updated, nil)
 	}
 	if err != nil {
 		return err
 	}
-	if err = writeBattleClear(tx, record); err != nil {
-		return err
+	if result.Clear != nil {
+		if err = writeBattleClear(tx, *result.Clear); err != nil {
+			return err
+		}
+		if err = pruneBattleClearStatistics(tx, time.Now()); err != nil {
+			return err
+		}
 	}
-	if err = pruneBattleClearStatistics(tx, time.Now()); err != nil {
-		return err
+	if len(result.RentalCredits) != 0 {
+		if err = writeFriendPointRentals(tx, result.RentalEventKey, userID, result.RentalCredits, bossID); err != nil {
+			return err
+		}
+	}
+	if result.Score != nil {
+		if err = writeBossScoreResult(tx, userID, gamestate.BattleScoreSolo, *result.Score); err != nil {
+			return err
+		}
 	}
 	if err = tx.Commit(); err != nil {
 		return err
 	}
-	accounts.RememberBattle(record.UserID, state.ActiveTeamBattle, state.StoryTeamBattleSession)
+	accounts.RememberBattle(userID, state.ActiveTeamBattle, state.StoryTeamBattleSession)
 	return nil
 }
 

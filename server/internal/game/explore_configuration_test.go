@@ -10,6 +10,8 @@ import (
 func TestExploreFreezesRewardsIncludingEmptyAfterPersistence(t *testing.T) {
 	for _, amount := range []int{0, 20} {
 		s := onboardingTestStore()
+		s.missionCatalog = missionCatalogFixture(t, map[int]gamestate.MissionDefinition{1: {MissionID: 1, Published: true, Title: "探索", Rule: &gamestate.MissionRule{Event: gamestate.MissionExploreClear, Target: 1}}})
+		s.missions = map[int]gamestate.MissionProgress{}
 		s.ap, s.apMax, s.apRecoveryInterval = 2, 3, time.Hour
 		s.avatars = []gamestate.Avatar{{}}
 		s.cards = []CardInfo{{UniqueID: 1, CardID: 10000010}}
@@ -43,6 +45,9 @@ func TestExploreFreezesRewardsIncludingEmptyAfterPersistence(t *testing.T) {
 		}
 		if _, _, done, _, err := s.EndExplore(rewards); err != nil || done || s.gold != amount {
 			t.Fatal("replayed exploration awarded twice", err)
+		}
+		if s.missions[1].ProgressNow != 1 || s.missions[1].State != 1 || len(s.TakeMissionUpdates()) != 1 {
+			t.Fatal("exploration replay duplicated or lost mission progress")
 		}
 	}
 }

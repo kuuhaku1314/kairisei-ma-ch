@@ -1,13 +1,29 @@
 package cnbootstrap
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
 )
 
-// Original HOME2 artwork for the local 11801010 permanent event replay.
-const cn602HomeEventBannerFile = "https___ma43_gdl_netease_com_web_netease_HOMEBANNER_20180409_banner_event_wang_home1_png"
+// A stable route needs a content version because clients retain banner bytes on disk.
+func gachaBannerVersions(defaultPath string, paths map[string]string) (map[string]string, error) {
+	versions := make(map[string]string, len(paths)+1)
+	for key, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("read CN gacha banner %s version: %w", key, err)
+		}
+		versions[key] = fmt.Sprintf("%x", sha256.Sum256(content))
+	}
+	content, err := os.ReadFile(defaultPath)
+	if err != nil {
+		return nil, fmt.Errorf("read CN default gacha banner version: %w", err)
+	}
+	versions[""] = fmt.Sprintf("%x", sha256.Sum256(content))
+	return versions, nil
+}
 
 // Local titles describe the configured pools; archived event artwork retains
 // its source filename so it cannot silently serve an unrelated generic pool.

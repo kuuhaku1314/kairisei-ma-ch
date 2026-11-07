@@ -29,12 +29,21 @@ func auditCompleteFollowBusiness(t *testing.T, handler http.Handler, savePath, s
 	testfixture.AttachProbeCardCatalog(t, storage, cards)
 	accounts := testfixture.TestAccountRepository(t, storage)
 	// Leave the preconstructed primary handler untouched; use fresh players.
-	if _, err := accounts.ResolveLogin("00000000-0000-4000-8478-000000000000"); err != nil {
+	if _, err := accounts.ResolveInternalLogin("00000000-0000-4000-8478-000000000000"); err != nil {
 		t.Fatal(err)
 	}
 	user := testfixture.CreateNamedFriendCapacityAccount(t, accounts, 0x4781)
 	other := testfixture.CreateNamedFriendCapacityAccount(t, accounts, 0x4782)
-	identity, err := accounts.ResolveLogin(fmt.Sprintf("00000000-0000-4000-8000-%012x", 0x4781))
+	stored, err := accounts.LoadState(user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored.User.FollowMax = 37
+	stored.User.CardMax = 6000
+	if err := accounts.PersistState(user, stored); err != nil {
+		t.Fatal(err)
+	}
+	identity, err := accounts.ResolveInternalLogin(fmt.Sprintf("00000000-0000-4000-8000-%012x", 0x4781))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,6 +73,12 @@ func auditCompleteFollowBusiness(t *testing.T, handler http.Handler, savePath, s
 	for range 2 {
 		call("/FollowUnFollow", fmt.Sprintf(`{"userid":%d}`, other), 0)
 	}
-	call("/FollowoFollowShow", "", 0)
+	if response := call("/FollowoFollowShow", "", 0); response["follow_max"] != nil {
+		t.Fatal("follow list repeated the user-info capacity")
+	}
+	stored, err = accounts.LoadState(user)
+	if err != nil || stored.User.FollowMax != 37 || stored.User.CardMax != 10000 {
+		t.Fatalf("normal HTTP reload changed stored follow capacity or failed to raise the bag: follow=%d card=%d err=%v", stored.User.FollowMax, stored.User.CardMax, err)
+	}
 	t.Log("native FollowAdd: real/system accounts, padded/empty/duplicate selections, business errors, repeat unfollow and subsequent list passed")
 }

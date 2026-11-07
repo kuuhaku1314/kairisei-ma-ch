@@ -119,5 +119,6 @@ func (a *API) purgeGacha(ctx context.Context, groupID int, expected string) (acc
 	o.customGachaRevision++
 	o.customGachaNextID = registry.NextID
 	o.gachaRevision++
+	o.publishRuntimeLocked()
 	return report, nil
 }

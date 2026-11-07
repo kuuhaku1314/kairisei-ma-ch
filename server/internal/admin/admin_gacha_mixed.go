@@ -12,11 +12,18 @@ import (
 // Historical reward identities and gifts are fixed by the audited preset;
 // operators can tune each step's price and weights, plus its publication window.
 func ValidateMixedGachaConfig(catalog map[string]AdminCatalogEntry, base gamestate.GachaProfile, config AdminGachaConfig) (map[string]any, error) {
+	return validateMixedGachaConfig(catalog, base, config, false)
+}
+
+func validateMixedGachaConfig(catalog map[string]AdminCatalogEntry, base gamestate.GachaProfile, config AdminGachaConfig, editable bool) (map[string]any, error) {
 	if err := validateAdminGachaPayment(catalog, config); err != nil {
 		return nil, err
 	}
 	if len(config.CardIDs) != 0 || len(config.Weights) != 0 || len(config.Steps) != len(base.Steps) {
-		return nil, errors.New("混合池须保留预设奖励与阶段数量")
+		return nil, errors.New("混合池不能使用普通卡牌表；阶段数量须与创建规则一致")
+	}
+	if len(config.RewardPool) == 0 {
+		return nil, errors.New("混合池至少需要一项奖励")
 	}
 	configured := adminConfiguredGacha(base, config).Profile
 	if err := gamestate.ValidateGachaRules(configured); err != nil {
@@ -40,17 +47,36 @@ func ValidateMixedGachaConfig(catalog map[string]AdminCatalogEntry, base gamesta
 	names := map[string]string{}
 	blocked := []int{}
 	for i, pool := range edited {
-		if len(pool) != len(canonical[i]) {
+		if !editable && len(pool) != len(canonical[i]) {
 			return nil, errors.New("混合池须保留预设奖励身份，调整每项权重即可")
 		}
+		if len(pool) > 6000 {
+			return nil, errors.New("每个奖励表最多6000项")
+		}
 		for j, entry := range pool {
-			if !reflect.DeepEqual(entry.Reward, canonical[i][j].Reward) || entry.Weight < 1 || entry.Weight > 1000000 {
-				return nil, errors.New("只能调整预设奖励权重（1–1000000），不能替换身份或数量")
+			if !editable && !reflect.DeepEqual(entry.Reward, canonical[i][j].Reward) {
+				return nil, errors.New("此池须保留原奖励身份和数量")
+			}
+			if entry.Weight < 1 || entry.Weight > 1000000 {
+				return nil, errors.New("奖励权重须为1–1000000")
 			}
 			key := adminCatalogKey(entry.Reward.Type, entry.Reward.RewardTypeID)
 			item, ok := catalog[key]
 			if !ok {
 				return nil, fmt.Errorf("混合奖励不存在：%s", key)
+			}
+			if editable {
+				// Reuse the Admin reward contract (quantity and card progression).
+				// Resource readiness is reported by preview below, so drafts can
+				// include a known reward whose assets have not been published yet.
+				r := entry.Reward
+				canonical, err := adminCatalogReward(AdminMailRequest{RewardType: r.Type, RewardTypeID: r.RewardTypeID, Quantity: r.Num, CardLevel: int(r.CardLevel), CardFame: int(r.CardFame), CardLove: r.CardLove}, item)
+				if err != nil {
+					return nil, fmt.Errorf("奖励 %s：%w", key, err)
+				}
+				if !reflect.DeepEqual(canonical, r) {
+					return nil, fmt.Errorf("奖励 %s 的卡牌成长字段无效", key)
+				}
 			}
 			names[key] = item.Name
 			if item.ResourceState == "unavailable" {
@@ -81,5 +107,12 @@ func ValidateMixedGachaConfig(catalog map[string]AdminCatalogEntry, base gamesta
 			stages = append(stages, rows...)
 		}
 	}
-	return map[string]any{"config": config, "base": adminConfiguredGacha(base, config).Profile, "odds_scaled": []int{}, "odds_scale": 100000, "rarities": map[int]int{}, "blocked_card_ids": blocked, "publishable": len(blocked) == 0, "warnings": []string{"混合池奖励与赠礼按预设保留；各阶段价格和权重为本地运营配置。最后阶段重复，赠礼仍按累计抽取次数限制。"}, "stages": stages, "reward_names": names}, nil
+	warning := "混合池奖励与赠礼按原规则保留；各阶段价格和权重为本地运营配置。"
+	if editable {
+		warning = "奖励身份、数量和权重使用本卡池的独立配置。"
+	}
+	if len(config.Steps) > 0 {
+		warning += "成功抽取后推进阶段，最后阶段重复；重新发布不重置玩家进度。"
+	}
+	return map[string]any{"config": config, "base": adminConfiguredGacha(base, config).Profile, "odds_scaled": []int{}, "odds_scale": 100000, "rarities": map[int]int{}, "blocked_card_ids": blocked, "publishable": len(blocked) == 0, "warnings": []string{warning}, "stages": stages, "reward_names": names}, nil
 }

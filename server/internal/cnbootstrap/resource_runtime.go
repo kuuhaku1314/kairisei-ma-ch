@@ -1,10 +1,6 @@
 package cnbootstrap
 
-import (
-	"path/filepath"
-
-	"kairisei.local/server/internal/cpk"
-)
+import "kairisei.local/server/internal/cpk"
 
 // clientResources is a validated, read-only inventory shared by every account.
 type clientResources struct {
@@ -12,18 +8,20 @@ type clientResources struct {
 	FiveStarGachaBanner string
 	HomeBanner          string
 	GachaBanners        map[string]string
-	HomeEventBanner     string
+	GachaBannerVersions map[string]string
 	CPK                 []cpk.File
 	Images              cardImages
 	CPKList             []byte
 	CPKState            []byte
-	PatchRoots          []string
-	Catalog             []byte
-	Patch               []cnPatchDelivery
 	AvailableBundles    map[string]struct{}
+	Platforms           platformDeliveries
 }
 
 func loadClientResources(config ResourcesConfig) (*clientResources, error) {
+	platforms, err := loadPlatformDeliveries(config.PlatformDeliveries)
+	if err != nil {
+		return nil, err
+	}
 	images, err := loadCardImages(config.ImageRoot)
 	if err != nil {
 		return nil, err
@@ -40,11 +38,11 @@ func loadClientResources(config ResourcesConfig) (*clientResources, error) {
 	if err != nil {
 		return nil, err
 	}
-	homeEventBanner, err := resolveBanner(filepath.Join(filepath.Dir(absoluteHomeBanner), cn602HomeEventBannerFile), "Home event")
+	gachaBannerPaths, err := resolveCN602GachaBannerPaths(absoluteGachaBanner, absoluteFiveStarGachaBanner)
 	if err != nil {
 		return nil, err
 	}
-	gachaBannerPaths, err := resolveCN602GachaBannerPaths(absoluteGachaBanner, absoluteFiveStarGachaBanner)
+	bannerVersions, err := gachaBannerVersions(absoluteGachaBanner, gachaBannerPaths)
 	if err != nil {
 		return nil, err
 	}
@@ -58,35 +56,17 @@ func loadClientResources(config ResourcesConfig) (*clientResources, error) {
 	}
 	cpkFileList := cpk.FileList(cpkDelivery)
 	cpkPatchState := cpk.PatchState(cpkDelivery)
-	resolvedPatchRoots, err := resolveCNPatchRoots(config.PatchRoots)
-	if err != nil {
-		return nil, err
-	}
-	catalogContent, err := buildCN602Catalog(resolvedPatchRoots, config.AssetMap)
-	if err != nil {
-		return nil, err
-	}
-	patchDelivery, err := cnPatchDeliveryFromCatalog(catalogContent)
-	if err != nil {
-		return nil, err
-	}
-	availableBundles, err := loadCNAssetMapBundleSet(config.AssetMap)
-	if err != nil {
-		return nil, err
-	}
 	return &clientResources{
 		GachaBanner:         absoluteGachaBanner,
 		FiveStarGachaBanner: absoluteFiveStarGachaBanner,
 		HomeBanner:          absoluteHomeBanner,
 		GachaBanners:        gachaBannerPaths,
-		HomeEventBanner:     homeEventBanner,
+		GachaBannerVersions: bannerVersions,
 		CPK:                 cpkDelivery,
 		Images:              images,
 		CPKList:             cpkFileList,
 		CPKState:            cpkPatchState,
-		PatchRoots:          resolvedPatchRoots,
-		Catalog:             catalogContent,
-		Patch:               patchDelivery,
-		AvailableBundles:    availableBundles,
+		AvailableBundles:    platforms.availableBundles(),
+		Platforms:           platforms,
 	}, nil
 }

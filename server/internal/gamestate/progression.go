@@ -6,6 +6,10 @@ func (policy PlayerProgressionPolicy) ExperienceRequired(level int) int {
 	if level < 1 || level >= policy.MaxLevel {
 		return 0
 	}
+	higher := policy.Experience.HigherLevels
+	if higher.FromLevel > 0 && level >= higher.FromLevel {
+		return higher.Base + (level-higher.FromLevel)*higher.PerLevel
+	}
 	return policy.Experience.Base + (level-1)*policy.Experience.PerLevel
 }
 
@@ -18,8 +22,15 @@ func (policy PlayerProgressionPolicy) CumulativeExperience(level int) int {
 		level = policy.MaxLevel
 	}
 	levels := level - 1
+	higher := policy.Experience.HigherLevels
+	higherLevels := 0
+	if higher.FromLevel > 0 && level > higher.FromLevel {
+		higherLevels = level - higher.FromLevel
+		levels -= higherLevels
+	}
 	return levels*policy.Experience.Base +
-		levels*(levels-1)/2*policy.Experience.PerLevel
+		levels*(levels-1)/2*policy.Experience.PerLevel +
+		higherLevels*higher.Base + higherLevels*(higherLevels-1)/2*higher.PerLevel
 }
 
 func (policy PlayerProgressionPolicy) BattlePointMaximum(level int) int {
@@ -33,18 +44,8 @@ func (policy PlayerProgressionPolicy) BattlePointMaximum(level int) int {
 	return value
 }
 
-func (policy PlayerProgressionPolicy) FriendMaximum(level int) int {
-	value := policy.Friends.Offset
-	if level > 0 {
-		value += level * policy.Friends.Numerator / policy.Friends.Denominator
-	}
-	if value < policy.Friends.Minimum {
-		value = policy.Friends.Minimum
-	}
-	if value > policy.Friends.Maximum {
-		value = policy.Friends.Maximum
-	}
-	return value
+func (policy PlayerProgressionPolicy) FollowMaximum(level int) int {
+	return min(policy.Friends.Maximum, policy.Friends.Base+max(0, level-policy.Friends.IncreaseFromLevel+1))
 }
 
 func (policy PlayerProgressionPolicy) JobsAtLevel(level int) []JobParameter {

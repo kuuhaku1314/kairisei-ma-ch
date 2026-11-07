@@ -15,4 +15,4 @@ case "${1:-}" in
 esac
 if [ ! -f "$SERVER" ]; then echo 'Extract the complete server package first.' >&2; exit 1; fi
 if [ ! -x "$SERVER" ]; then chmod u+x "$SERVER"; fi
-exec "$SERVER" "$@"
+exec "$SERVER" "$@" -platform-content-config "$ROOT/deployment.json"

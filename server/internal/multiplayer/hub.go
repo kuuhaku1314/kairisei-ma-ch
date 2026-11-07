@@ -12,14 +12,14 @@ import (
 	"sync"
 	"time"
 
+	"kairisei.local/server/battlecore"
 	"kairisei.local/server/internal/gamestate"
 )
 
 const (
-	maxRoomMembers      = 4
-	deckSphereSlots     = 3
 	deckBuddySlotCount  = 5
 	pendingLifetime     = 2 * time.Minute
+	maxPendingPerUser   = 4
 	reservationLifetime = time.Minute
 	comebackLifetime    = 2 * time.Minute
 	completedLifetime   = 30 * time.Minute
@@ -77,45 +77,11 @@ type Member struct {
 	IsBuddy       int
 }
 
-// BattleCard is the persisted deck identity required by the official client
-// to build CardBattleData for remote room members. CardType is the one-based
-// deck slot used by BattleSv result commands.
-type BattleCard struct {
-	CardType int
-	CardID   int
-	Level    int
-	Love     int
-}
-
-// BattleSphere is one of the original client's three equipped sphere slots.
-// SphereType is one-based and remains distinct from the sphere master ID.
-type BattleSphere struct {
-	SphereType int
-	SphereID   int
-	Level      int
-}
-
-// BattleBuddy is the persisted buddy identity equipped in one of the five
-// official deck buddy slots. BuddyType is one-based and remains distinct from
-// the buddy master ID.
-type BattleBuddy struct {
-	BuddyType int
-	BuddyID   int
-	Level     int
-}
-
-// BattleDrop is one deterministic reward assigned to an enemy slot by the
-// local HTTP publication profile. EnemyIndex is the zero-based slot consumed
-// by TeamBattleSoloDropInfo; the battle engine converts it to member 5..8 only
-// when it projects ResultCmd83/84/108.
-type BattleDrop struct {
-	EnemyIndex   int
-	RewardType   int
-	Num          int
-	RewardTypeID int
-}
+// Battle inputs are defined by the shared core; room DTOs compose them.
 
 type RoomSpec struct {
+	SettlementPlan     gamestate.TeamBattleSettlementPlan
+	StageType          gamestate.BattleStageType
 	ScorePolicy        *gamestate.TeamBattleScorePolicy
 	FameRewardsSet     bool
 	FameRewards        []gamestate.Reward
@@ -134,11 +100,13 @@ type RoomSpec struct {
 	NeedHP             int
 	NeedFame           int
 	Comment            string
-	Flag               int
 	AllowToLeave       int
 	GameStartMemberNum int
 	AutoStart          bool
+	SkipBattleMessages bool
+	GameSpeed          int // Zero preserves the existing operator default for older callers.
 	CostInitial        int
+	AwakeTakeover      battlecore.WaveTakeover
 	HoldMax            int
 	BurstGaugeInitial  int
 	Seed               int
@@ -149,6 +117,7 @@ type RoomSpec struct {
 }
 
 type RoomSnapshot struct {
+	StageType          gamestate.BattleStageType
 	RoomID             int64
 	BossID             int
 	BossGroupID        int
@@ -158,11 +127,11 @@ type RoomSnapshot struct {
 	NeedHP             int
 	NeedFame           int
 	Comment            string
-	Flag               int
 	AllowToLeave       int
 	GameStartMemberNum int
 	OwnerMemberType    int
 	GameSpeed          int
+	SkipBattleMessages bool
 	State              RoomState
 	BossGroup          any
 	Members            []Member
@@ -174,6 +143,9 @@ type RoomSnapshot struct {
 // their authenticated comeback window. Mutable account rewards remain in the
 // per-account SQLite store.
 type CompletedBattle struct {
+	SettlementPlan     gamestate.TeamBattleSettlementPlan
+	StageType          gamestate.BattleStageType
+	EnemyDeadBits      []int
 	ScorePolicy        *gamestate.TeamBattleScorePolicy
 	ScoreDamage        int64
 	EndType            int
@@ -195,15 +167,12 @@ type CompletedBattle struct {
 	CompletedAtUnix    int64
 }
 
-// CompletionRepository keeps the immutable room outcome separate from each
-// account's reward receipt. It lets the HTTP settlement survive a server
-// restart without moving mutable character state out of the account snapshot.
+// CompletionRepository reads immutable completed rooms and reserves room IDs.
+// Completion writes belong to the joint room/account transaction.
 type CompletionRepository interface {
-	// Implementations only own durable room data. They must not call back into
-	// Hub or acquire account gameplay locks: SaveCompleted owns a room session.
+	// Reads and ID allocation do not call back into Hub or acquire account locks.
 	// NextRoomID atomically reserves an ID, even if the room never completes.
 	NextRoomID(minimum int64) (int64, error)
-	SaveCompleted(CompletedBattle, time.Time) error
 	LoadCompleted(roomID int64, now time.Time) (CompletedBattle, time.Time, error)
 }
 
@@ -225,6 +194,7 @@ const (
 )
 
 type pendingRequest struct {
+	sequence  uint64
 	Kind      pendingKind
 	RoomID    int64
 	Spec      RoomSpec
@@ -233,28 +203,24 @@ type pendingRequest struct {
 	ExpiresAt time.Time
 }
 
-type cardPlaySubmission struct {
-	CardTypes    [5]int
-	Targets      [5]int
-	SphereSlot   int
-	SphereTarget int
-	TimedOut     bool
-	// Set only by the server's automatic player; not accepted from the wire.
-	Automatic bool
-}
-
 type room struct {
-	scorePolicy *gamestate.TeamBattleScorePolicy
-	session     *roomSession // registry-owned identity; mutable state uses session.mu
+	closing            bool // administrative interruption; existing transaction barriers still finish
+	settlementPlan     gamestate.TeamBattleSettlementPlan
+	pendingCompletion  *completedBattle
+	completionRetry    *time.Timer
+	completionFailures int
+	scorePolicy        *gamestate.TeamBattleScorePolicy
+	session            *roomSession // registry-owned identity; mutable state uses session.mu
 
 	RoomSnapshot
 	battles                []gamestate.TeamBattleReplayBattle
 	battleIndex            int
 	progress               int
 	nextBattlePending      bool
+	completionDone         chan struct{}
 	nextBattleIndex        int
 	gameNextFinished       map[int]bool
-	waveDropsRecorded      map[int]bool
+	waveOutcomes           map[int]battlecore.WaveOutcome
 	releasedDrops          []gamestate.TeamBattleEnemyDrop
 	destroyedEnemyBits     int
 	dropLedgerVersion      int
@@ -272,11 +238,13 @@ type room struct {
 	connections            map[int]*clientConn
 	reservations           map[int]roomReservation
 	comebackTokens         map[int]string
+	pendingComebackTokens  map[int]string
 	disconnectedUntil      map[int]time.Time
 	ownerFallbackParty     []Member
 	enemyPartyID           int
 	enemyType              int
 	costInitial            int
+	awakeTakeover          battlecore.WaveTakeover
 	holdMax                int
 	burstGaugeInitial      int
 	seed                   int
@@ -316,29 +284,52 @@ type roomReservation struct {
 type Hub struct {
 	maintenance        bool
 	creatingRooms      int
+	creatingDone       chan struct{}
 	mu                 sync.RWMutex
 	configFrozen       bool       // startup dependencies become immutable on first activity
 	reservationMu      sync.Mutex // serializes cross-room reservation moves
 	nextRoomID         int64
 	rooms              map[int64]*room
 	pending            map[string]pendingRequest
+	pendingSequence    uint64
 	completed          map[int64]*completedBattle
 	repository         CompletionRepository
 	combat             *CombatCatalog
 	startAuthorizer    func(BattleStart) error
 	continueAuthorizer func(BattleContinue) (ContinueBalance, error)
+	completionCommit   func(CompletedBattle, time.Time) error
 	gameSpeed          func() int
+}
+
+// AttachBattleCompleter installs the account/completion transaction before any
+// room activity. It is called without room or registry locks.
+func (h *Hub) AttachBattleCompleter(commit func(CompletedBattle, time.Time) error) error {
+	if commit == nil {
+		return errors.New("multiplayer completion transaction is required")
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.configFrozen || h.completionCommit != nil {
+		return errors.New("multiplayer completion transaction must be attached before room activity")
+	}
+	h.completionCommit = commit
+	return nil
 }
 
 func ValidGameSpeed(speed int) bool {
 	return speed == 100 || speed == 150 || speed == 200
 }
 
+// ValidOperatorGameSpeed accepts zero to leave presentation to the room host.
+func ValidOperatorGameSpeed(speed int) bool {
+	return speed == 0 || ValidGameSpeed(speed)
+}
+
 // AttachGameSpeed binds the in-memory operator setting before room activity.
 // The callback is read-only; each room retains its creation-time speed.
 func (h *Hub) AttachGameSpeed(current func() int) error {
-	if current == nil || !ValidGameSpeed(current()) {
-		return errors.New("multiplayer speed must be 100, 150 or 200 percent")
+	if current == nil || !ValidOperatorGameSpeed(current()) {
+		return errors.New("multiplayer speed must be client-selected (0), 100, 150 or 200 percent")
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -446,12 +437,13 @@ type completedBattle struct {
 	session *roomSession // same lifetime lock as the active room
 
 	CompletedBattle
-	claimed               map[int]bool
 	expiresAt             time.Time
 	comebackTokens        map[int]string
+	pendingComebackTokens map[int]string
 	disconnectedUntil     map[int]time.Time
 	comebackConnections   map[int]*clientConn
 	terminalEngine        *BattleEngine
+	terminalExpiresAt     time.Time
 	terminalBattleEndType int
 }
 
@@ -464,8 +456,8 @@ func NewHub() *Hub {
 	}
 }
 
-// SettlementFor returns a completed room only to an account that still has an
-// unclaimed result. CPU fallback character IDs are never eligible claimants.
+// SettlementFor reads a completed room only for an eligible participant.
+// Account result snapshots, rather than this cache, own settlement idempotency.
 func (h *Hub) SettlementFor(roomID int64, userID int) (CompletedBattle, error) {
 	if roomID <= 0 || userID <= 0 {
 		return CompletedBattle{}, errors.New("completed room identity is invalid")
@@ -491,27 +483,27 @@ func (h *Hub) SettlementFor(roomID int64, userID int) (CompletedBattle, error) {
 	}
 
 	// Loading a persisted result does not own a room. Another request can load
-	// and claim it meanwhile; publish only if absent, then recheck under its lock.
+	// or restore its terminal interaction meanwhile; publish only if absent.
 	persisted, expiresAt, loadErr := repository.LoadCompleted(roomID, time.Now())
-	claimed := make(map[int]bool, len(persisted.OnlineUserIDs))
+	seen := make(map[int]struct{}, len(persisted.OnlineUserIDs))
 	if loadErr == nil {
 		for _, id := range persisted.OnlineUserIDs {
 			if id <= 0 {
 				loadErr = errors.New("persisted completed room claimant is invalid")
 				break
 			}
-			if _, duplicate := claimed[id]; duplicate {
+			if _, duplicate := seen[id]; duplicate {
 				loadErr = errors.New("persisted completed room repeats a claimant")
 				break
 			}
-			claimed[id] = false
+			seen[id] = struct{}{}
 		}
 	}
 	h.mu.Lock()
 	now := time.Now()
 	h.pruneCompletedLocked(now)
 	if h.rooms[roomID] == nil && h.completed[roomID] == nil && loadErr == nil && expiresAt.After(now) {
-		h.completed[roomID] = &completedBattle{session: &roomSession{}, CompletedBattle: cloneCompletedBattle(persisted), claimed: claimed, expiresAt: expiresAt}
+		h.completed[roomID] = &completedBattle{session: &roomSession{}, CompletedBattle: cloneCompletedBattle(persisted), expiresAt: expiresAt}
 	}
 	h.mu.Unlock()
 	session = h.lockRoomSession(roomID)
@@ -528,36 +520,15 @@ func (h *Hub) SettlementFor(roomID int64, userID int) (CompletedBattle, error) {
 	return CompletedBattle{}, ErrCompletedBattleUnavailable
 }
 
-// Caller owns the session; claiming and cloning use the same memory snapshot.
+// Caller owns the session; eligibility and cloning use the same snapshot.
 func (completed *completedBattle) settlementFor(userID int) (CompletedBattle, error) {
 	if !completed.expiresAt.After(time.Now()) {
 		return CompletedBattle{}, ErrCompletedBattleUnavailable
 	}
-	claimed, eligible := completed.claimed[userID]
-	if !eligible || claimed {
+	if !slices.Contains(completed.OnlineUserIDs, userID) {
 		return CompletedBattle{}, ErrCompletedBattleIneligible
 	}
 	return cloneCompletedBattle(completed.CompletedBattle), nil
-}
-
-// MarkSettlementClaimed is advisory in memory. The immutable completion stays
-// available until its bounded expiry so another eligible account can settle;
-// account-owned SQLite receipts are the authoritative duplicate guard.
-func (h *Hub) MarkSettlementClaimed(roomID int64, userID int) error {
-	if roomID <= 0 || userID <= 0 {
-		return errors.New("completed room identity is invalid")
-	}
-	session := h.lockRoomSession(roomID)
-	defer session.Unlock()
-	completed := session.completed
-	if completed == nil || !completed.expiresAt.After(time.Now()) {
-		return errors.New("completed room is unavailable")
-	}
-	if _, eligible := completed.claimed[userID]; !eligible {
-		return errors.New("completed room result is unavailable for this account")
-	}
-	completed.claimed[userID] = true
-	return nil
 }
 
 func (h *Hub) IssueCreate(spec RoomSpec) (Credential, error) {
@@ -571,7 +542,7 @@ func (h *Hub) IssueCreate(spec RoomSpec) (Credential, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.maintenance {
-		return Credential{}, errors.New("服务器维护中，请稍后再试")
+		return Credential{}, ErrMaintenance
 	}
 	if h.combat != nil {
 		for index, wave := range roomSpecBattles(spec) {
@@ -588,13 +559,13 @@ func (h *Hub) IssueCreate(spec RoomSpec) (Credential, error) {
 	}
 	h.prunePendingLocked(time.Now())
 	h.configFrozen = true
-	h.pending[credential.AuthToken] = pendingRequest{
+	h.storePendingLocked(credential.AuthToken, pendingRequest{
 		Kind:      pendingCreate,
 		Spec:      cloneRoomSpec(spec),
 		Member:    cloneMember(spec.Owner),
 		Signature: credential.Signature,
 		ExpiresAt: time.Now().Add(pendingLifetime),
-	}
+	})
 	return credential, nil
 }
 
@@ -637,13 +608,16 @@ func (h *Hub) IssueEnter(roomID int64, member Member) (Credential, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.prunePendingLocked(now)
-	h.pending[credential.AuthToken] = pendingRequest{
+	if h.maintenance {
+		return Credential{}, ErrMaintenance
+	}
+	h.storePendingLocked(credential.AuthToken, pendingRequest{
 		Kind:      pendingEnter,
 		RoomID:    roomID,
 		Member:    cloneMember(member),
 		Signature: credential.Signature,
 		ExpiresAt: time.Now().Add(pendingLifetime),
-	}
+	})
 	return credential, nil
 }
 
@@ -682,9 +656,16 @@ func (h *Hub) Reserve(roomID int64, userID int, arthurType int) (int64, error) {
 		}
 		h.reservationMu.Unlock()
 	}
+	h.mu.RLock()
+	if h.maintenance {
+		h.mu.RUnlock()
+		unlock()
+		return 0, ErrMaintenance
+	}
 	now := time.Now()
 	memberType, err := roomReservationSlot(current, userID, arthurType, now)
 	if err != nil {
+		h.mu.RUnlock()
 		unlock()
 		return 0, err
 	}
@@ -710,6 +691,7 @@ func (h *Hub) Reserve(roomID int64, userID int, arthurType int) (int64, error) {
 	}
 	current.reservations[arthurType] = roomReservation{UserID: userID, MemberType: memberType, ExpiresAt: limit}
 	deliveries = append(deliveries, reserveMemberReservationLocked(roomConnections(current), memberType, true)...)
+	h.mu.RUnlock()
 	unlock()
 	sendRoomFrames(deliveries)
 	h.scheduleReservationExpiry(roomID, userID, arthurType, memberType, limit)
@@ -935,6 +917,9 @@ func validateRoomRequirements(snapshot RoomSnapshot, member Member) error {
 }
 
 func validateRoomSpec(spec RoomSpec) error {
+	if spec.GameSpeed != 0 && !ValidGameSpeed(spec.GameSpeed) {
+		return errors.New("room game speed is invalid")
+	}
 	if err := gamestate.ValidateTeamBattleScorePolicy(spec.ScorePolicy); err != nil {
 		return err
 	}
@@ -1032,7 +1017,7 @@ func validateMember(member Member) error {
 	if len(member.DeckCards) != 10 {
 		return errors.New("room member battle deck is invalid")
 	}
-	if err := validateSupportCards(member.SupportCards); err != nil {
+	if err := ValidateSupportCards(member.SupportCards); err != nil {
 		return err
 	}
 	if len(member.DeckSpheres) > deckSphereSlots {
@@ -1080,6 +1065,31 @@ func newCredential() (Credential, error) {
 	}, nil
 }
 
+// Callers prune expired requests under mu before storing. Keep a small retry
+// window per account across create/join, without changing credential expiry or
+// consuming a room reservation. Comeback credentials belong to the room.
+func (h *Hub) storePendingLocked(token string, request pendingRequest) {
+	count := 0
+	oldestToken := ""
+	var oldest uint64
+	for existingToken, existing := range h.pending {
+		if existing.Member.UserID != request.Member.UserID {
+			continue
+		}
+		count++
+		if oldestToken == "" || existing.sequence < oldest {
+			oldestToken, oldest = existingToken, existing.sequence
+		}
+	}
+	if count >= maxPendingPerUser {
+		delete(h.pending, oldestToken)
+	}
+	// Clock resolution can give a burst of requests identical expiry times.
+	h.pendingSequence++
+	request.sequence = h.pendingSequence
+	h.pending[token] = request
+}
+
 func (h *Hub) prunePendingLocked(now time.Time) {
 	for token, request := range h.pending {
 		if !request.ExpiresAt.After(now) {
@@ -1110,6 +1120,7 @@ func cloneMember(member Member) Member {
 }
 
 func cloneRoomSpec(spec RoomSpec) RoomSpec {
+	spec.SettlementPlan = gamestate.CloneTeamBattleSettlementPlan(spec.SettlementPlan)
 	spec.ScorePolicy = gamestate.CloneTeamBattleScorePolicy(spec.ScorePolicy)
 	spec.FameRewards = cloneFameRewards(spec.FameRewards)
 	spec.Battles = append([]gamestate.TeamBattleReplayBattle(nil), spec.Battles...)
@@ -1135,6 +1146,8 @@ func cloneRoomSnapshot(snapshot RoomSnapshot) RoomSnapshot {
 }
 
 func cloneCompletedBattle(completed CompletedBattle) CompletedBattle {
+	completed.SettlementPlan = gamestate.CloneTeamBattleSettlementPlan(completed.SettlementPlan)
+	completed.EnemyDeadBits = append([]int(nil), completed.EnemyDeadBits...)
 	completed.ScorePolicy = gamestate.CloneTeamBattleScorePolicy(completed.ScorePolicy)
 	completed.FameRewards = cloneFameRewards(completed.FameRewards)
 	completed.ReleasedDrops = cloneDropPlan(completed.ReleasedDrops)

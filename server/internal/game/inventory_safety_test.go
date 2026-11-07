@@ -39,6 +39,8 @@ func TestCardFusionFame(t *testing.T) {
 				},
 			}
 			var uniqueIDs []int64
+			s.missionCatalog = missionCatalogFixture(t, map[int]gamestate.MissionDefinition{1: {MissionID: 1, Published: true, Title: "强化", Rule: &gamestate.MissionRule{Event: gamestate.MissionCardFusion, Target: 1}}})
+			s.missions = map[int]gamestate.MissionProgress{}
 			uses := []gamestate.CardStackUse{{CardID: 20, Num: 2}}
 			wantFame, wantGold, wantStack := 100, 800, 1
 			if name == "wrong attribute" {
@@ -53,13 +55,16 @@ func TestCardFusionFame(t *testing.T) {
 			}
 			_, result, _, _, err := s.FuseCard(1, uniqueIDs, nil, uses)
 			if name == "wrong attribute" {
-				if err == nil || s.gold != 1000 || s.stackCards[0].Num != 3 || !EqualCardInfo(s.cards[0], base) {
+				if err == nil || s.gold != 1000 || s.stackCards[0].Num != 3 || !EqualCardInfo(s.cards[0], base) || len(s.missions) != 0 {
 					t.Fatal("ineffective fame material changed inventory")
 				}
 				return
 			}
 			if err != nil || result.Fame != wantFame || result.Experience != base.Experience || s.gold != wantGold || s.stackCards[0].Num != wantStack || len(s.cards) != 1 {
 				t.Fatalf("fusion fame or consumption differs: result=%+v gold=%d stack=%v err=%v", result, s.gold, s.stackCards, err)
+			}
+			if s.missions[1].ProgressNow != 1 || s.missions[1].State != 1 || len(s.TakeMissionUpdates()) != 1 {
+				t.Fatal("a successful fusion did not produce exactly one mission event")
 			}
 		})
 	}
@@ -70,7 +75,7 @@ func TestPresentMultiReceiveUsesClientFilterLimitAndPartialResults(t *testing.T)
 		return gamestate.Present{PresentID: id, Reward: gamestate.Reward{Type: 4, Num: 5}}
 	}
 	item := gamestate.Present{PresentID: 1, Reward: gamestate.Reward{Type: 8, RewardTypeID: 10, Num: 1}}
-	for _, name := range []string{"twenty per batch", "full item keeps other rewards", "daily item filter", "nonclaimable keeps other rewards"} {
+	for _, name := range []string{"twenty per batch", "full item keeps other rewards", "daily item filter", "nonclaimable keeps other rewards", "only received"} {
 		t.Run(name, func(t *testing.T) {
 			s := &Account{items: map[int]gamestate.Item{}, itemDefinitions: map[int]gamestate.ItemDefinition{
 				10: {ItemID: 10, MaxOwned: 1},
@@ -79,11 +84,15 @@ func TestPresentMultiReceiveUsesClientFilterLimitAndPartialResults(t *testing.T)
 			var wantIDs, wantFailed []int64
 			wantGold := 0
 			switch name {
+			case "only received":
+				received := gold(1)
+				received.State = 1
+				s.presents = []gamestate.Present{received}
 			case "nonclaimable keeps other rewards":
 				unclaimable := gold(1)
 				unclaimable.State = 1
 				s.presents = []gamestate.Present{unclaimable, gold(2)}
-				wantIDs, wantFailed, wantGold = []int64{2}, []int64{1}, 5
+				wantIDs, wantGold = []int64{2}, 5
 			case "twenty per batch":
 				for id := int64(1); id <= 21; id++ {
 					s.presents = append(s.presents, gold(id))
@@ -121,18 +130,26 @@ func TestPresentMultiReceiveUsesClientFilterLimitAndPartialResults(t *testing.T)
 					t.Fatalf("gift failed after freeing space: %+v %v", claimed, err)
 				}
 				retry, err := s.ReceivePresent(1)
-				if err != nil || !slices.Equal(retry.FailedID, []int64{1}) || s.items[10].Num != 1 || len(s.presentHistories) != 0 {
+				if err != nil || len(retry.PresentID) != 0 || len(retry.FailedID) != 0 || len(retry.Rewards) != 0 || s.items[10].Num != 1 || len(s.presentHistories) != 0 {
 					t.Fatalf("retry duplicated reward/history: %+v %v", retry, err)
 				}
 			}
 			if name == "nonclaimable keeps other rewards" {
 				result, err := s.ReceivePresent(1)
-				if err != nil || !slices.Equal(result.FailedID, []int64{1}) || s.gold != 5 || len(s.presentHistories) != 0 {
+				if err != nil || len(result.PresentID) != 0 || len(result.FailedID) != 0 || len(result.Rewards) != 0 || s.gold != 5 || len(s.presentHistories) != 0 {
 					t.Fatalf("nonclaimable gift was granted: %+v %v", result, err)
+				}
+				repeated, err := s.ReceivePresents(receiveTypes, true)
+				if err != nil || len(repeated.PresentID) != 0 || len(repeated.FailedID) != 0 || len(repeated.Rewards) != 0 || s.gold != 5 {
+					t.Fatalf("received-only batch reported capacity failure or granted twice: %+v %v", repeated, err)
 				}
 				deleted, err := s.DeletePresents(1)
 				if err != nil || !slices.Equal(deleted, []int64{1}) || s.gold != 5 || len(s.presents) != 1 || len(s.presentHistories) != 1 {
 					t.Fatalf("discarding gift changed reward or failed: %v %v", deleted, err)
+				}
+				unavailable, err := s.ReceivePresent(1)
+				if err != nil || len(unavailable.PresentID) != 0 || len(unavailable.FailedID) != 0 || len(unavailable.Rewards) != 0 || s.gold != 5 || len(s.presentHistories) != 1 {
+					t.Fatalf("unavailable gift reported capacity failure or granted twice: %+v %v", unavailable, err)
 				}
 			}
 		})
@@ -146,13 +163,13 @@ func TestCardSalesRejectOverflowBeforeConsumingInventory(t *testing.T) {
 		var err error
 		if container {
 			s.containerCards = cards
-			_, _, err = s.SellContainerCards([]int64{1})
+			_, err = s.SellContainerCards([]int64{1})
 			if len(s.containerCards) != 1 {
 				t.Fatal("failed sale removed a warehouse card")
 			}
 		} else {
 			s.cards = cards
-			_, _, _, err = s.SellCards([]int64{1}, nil)
+			_, err = s.SellCards([]int64{1}, nil)
 			if len(s.cards) != 1 {
 				t.Fatal("failed sale removed an inventory card")
 			}
@@ -170,15 +187,18 @@ func TestCardSalesRejectOverflowBeforeConsumingInventory(t *testing.T) {
 }
 
 func TestFameTrainingCannotUnlockOrReplaceItsCard(t *testing.T) {
-	s := &Account{cards: []CardInfo{{UniqueID: 1, CardID: 9, IsLock: 1}}, cardFameTraining: &gamestate.CardFameTraining{UniqueID: 1}}
+	s := &Account{cardContainerMax: 10, cards: []CardInfo{{UniqueID: 1, CardID: 9, IsLock: 1}}, cardFameTraining: &gamestate.CardFameTraining{UniqueID: 1}}
 	if err := s.SetCardLock(1, 0, false); err == nil || s.cards[0].IsLock != 1 {
 		t.Fatal("active training lock removed")
 	}
 	if _, _, _, _, err := s.FuseCard(1, []int64{2}, nil, nil); err == nil || !strings.Contains(err.Error(), "active fame training") {
 		t.Fatal("training card accepted as fusion base")
 	}
-	if _, _, _, err := s.EvolveCard(1, 10, nil, nil, nil); err == nil || !strings.Contains(err.Error(), "active fame training") {
+	if _, _, _, err := s.EvolveCard(1, 10, nil, nil, nil, nil); err == nil || !strings.Contains(err.Error(), "active fame training") {
 		t.Fatal("training card accepted as evolution base")
+	}
+	if _, _, err := s.MoveCards(1, []int64{1}); err == nil || !strings.Contains(err.Error(), "active fame training") {
+		t.Fatal("training card moved away from its owner")
 	}
 	s.cardFameTraining = nil
 	if err := s.SetCardLock(1, 0, false); err != nil {
@@ -189,42 +209,54 @@ func TestFameTrainingCannotUnlockOrReplaceItsCard(t *testing.T) {
 func TestCardFusionMaterialCount(t *testing.T) {
 	policy := cardFusionTestPolicy()
 	for _, input := range []struct {
-		name                        string
-		stack, inventory, container int
-		gold                        int
-		rejected                    bool
+		name                               string
+		stack, inventory, container, kinds int
+		gold                               int
+		rejected                           bool
 	}{
-		{"eight", 8, 0, 0, 20000, false},
-		{"nine", 9, 0, 0, 20000, false},
-		{"hundred", 100, 0, 0, 20000, false},
-		{"over limit", 101, 0, 0, 20000, true},
-		{"mixed hundred", 98, 1, 1, 20000, false},
-		{"mixed over limit", 99, 1, 1, 20000, true},
-		{"insufficient gold", 9, 0, 0, 899, false},
+		{"eight", 8, 0, 0, 1, 20000, false},
+		{"nine", 9, 0, 0, 1, 20000, false},
+		{"hundred", 100, 0, 0, 1, 20000, false},
+		{"grouped 101", 101, 0, 0, 1, 20000, false},
+		{"mixed 101", 99, 1, 1, 1, 20000, false},
+		{"total limit", 9999, 0, 0, 1, 1000000, false},
+		{"mixed total limit", 9997, 1, 1, 1, 1000000, false},
+		{"over total", 10000, 0, 0, 1, 1000100, true},
+		{"mixed over total", 9998, 1, 1, 1, 1000100, true},
+		{"instance limit", 0, 60, 40, 0, 20000, false},
+		{"over instance limit", 0, 101, 0, 0, 20000, true},
+		{"mixed 101 instances", 0, 60, 41, 0, 20000, false},
+		{"both instance limits", 0, 100, 100, 0, 20000, false},
+		{"over warehouse limit", 0, 0, 101, 0, 20000, true},
+		{"type limit", 1, 0, 0, 100, 20000, false},
+		{"over type limit", 1, 0, 0, 101, 20000, true},
+		{"insufficient gold", 9, 0, 0, 1, 899, false},
 	} {
 		t.Run(input.name, func(t *testing.T) {
 			base := CardInfo{UniqueID: 1, CardID: 10, Level: 1, LevelMax: 2, BaseAddPrice: 100}
-			s := &Account{
-				gold: input.gold, cards: []CardInfo{base}, cardProgression: policy,
-				cardDefinitions: map[int]gamestate.Card{
-					10: {CardID: 10, LevelMax: 2, ExperienceTableID: 1},
-					11: {CardID: 11, SameCardID: 11},
-				},
-				cardExperience: map[int][]int{1: {100000}},
-				stackCards:     []gamestate.CardStack{{CardID: 20, Num: 200, AddExperience: 10}},
+			s := &Account{gold: input.gold, cards: []CardInfo{base}, cardProgression: policy,
+				cardDefinitions: map[int]gamestate.Card{10: {CardID: 10, LevelMax: 2, ExperienceTableID: 1}, 11: {CardID: 11, SameCardID: 11}},
+				cardExperience:  map[int][]int{1: {1000000}},
 			}
 			uniqueIDs, containerIDs, stackIDs := []int64{}, []int64{}, []gamestate.CardStackUse{}
-			if input.inventory != 0 {
-				s.cards = append(s.cards, CardInfo{UniqueID: 2, CardID: 11, AddExperience: 10})
-				uniqueIDs = append(uniqueIDs, 2)
+			for i := range input.inventory {
+				uid := int64(i + 2)
+				s.cards = append(s.cards, CardInfo{UniqueID: uid, CardID: 11, AddExperience: 10})
+				uniqueIDs = append(uniqueIDs, uid)
 			}
-			if input.container != 0 {
-				s.containerCards = []CardInfo{{UniqueID: 3, CardID: 11, AddExperience: 10}}
-				containerIDs = append(containerIDs, 3)
+			for i := range input.container {
+				uid := int64(i + 10000)
+				s.containerCards = append(s.containerCards, CardInfo{UniqueID: uid, CardID: 11, AddExperience: 10})
+				containerIDs = append(containerIDs, uid)
 			}
-			if input.stack > 0 {
-				stackIDs = append(stackIDs, gamestate.CardStackUse{CardID: 20, Num: input.stack})
+			for i := range input.kinds {
+				id := 20 + i
+				s.stackCards = append(s.stackCards, gamestate.CardStack{CardID: id, Num: 10001, AddExperience: 10})
+				stackIDs = append(stackIDs, gamestate.CardStackUse{CardID: id, Num: input.stack})
 			}
+			beforeCards := append([]CardInfo(nil), s.cards...)
+			beforeContainer := append([]CardInfo(nil), s.containerCards...)
+			beforeStacks := append([]gamestate.CardStack(nil), s.stackCards...)
 			_, _, successType, _, err := s.FuseCard(1, uniqueIDs, containerIDs, stackIDs)
 			if input.rejected || input.name == "insufficient gold" {
 				if err == nil {
@@ -233,7 +265,7 @@ func TestCardFusionMaterialCount(t *testing.T) {
 				if input.name == "insufficient gold" && err != ErrInsufficientGold {
 					t.Fatalf("gold error = %v", err)
 				}
-				if s.gold != input.gold || s.stackCards[0].Num != 200 || !EqualCardInfo(s.cards[0], base) || len(s.cards) != 1+input.inventory || len(s.containerCards) != input.container {
+				if s.gold != input.gold || !slices.EqualFunc(s.cards, beforeCards, EqualCardInfo) || !slices.EqualFunc(s.containerCards, beforeContainer, EqualCardInfo) || !slices.Equal(s.stackCards, beforeStacks) {
 					t.Fatal("rejected fusion changed inventory, experience or gold")
 				}
 				return
@@ -241,10 +273,15 @@ func TestCardFusionMaterialCount(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			count := input.stack + input.inventory + input.container
+			count := input.stack*input.kinds + input.inventory + input.container
 			multiplier := []int{1000, 1500, 2500}[successType]
-			if s.gold != input.gold-100*count || s.stackCards[0].Num != 200-input.stack || len(s.cards) != 1 || len(s.containerCards) != 0 || s.cards[0].Experience != count*10*multiplier/1000 {
-				t.Fatalf("fusion consumption/result differs: gold=%d stack=%d cards=%+v", s.gold, s.stackCards[0].Num, s.cards)
+			if s.gold != input.gold-100*count || len(s.cards) != 1 || len(s.containerCards) != 0 || s.cards[0].Experience != count*10*multiplier/1000 {
+				t.Fatalf("fusion consumption/result differs: gold=%d cards=%+v", s.gold, s.cards)
+			}
+			for _, stack := range s.stackCards {
+				if stack.Num != 10001-input.stack {
+					t.Fatal("stack quantity differs")
+				}
 			}
 		})
 	}
@@ -268,6 +305,8 @@ func TestCardEvolutionRecipes(t *testing.T) {
 		{"god low fame", 1, 1, 2, true, false, true},
 		{"god warehouse material", 1, 1, 3, true, true, false},
 		{"god warehouse low fame", 1, 1, 2, true, true, true},
+		{"god retains surplus fame", 1, 1, 5, true, false, false},
+		{"god retains warehouse surplus fame", 1, 1, 5, true, true, false},
 	} {
 		t.Run(input.name, func(t *testing.T) {
 			base := CardInfo{UniqueID: 1, CardID: 10, Level: 2, LevelMax: 2, Experience: 10, Fame: 3, Love: 5, IsLock: 1}
@@ -282,6 +321,10 @@ func TestCardEvolutionRecipes(t *testing.T) {
 				cardTemplates:   map[int]CardInfo{11: {CardID: 11, Level: 1, LevelMax: 3}},
 				cardExperience:  map[int][]int{2: {20, 30}},
 				cardProgression: gamestate.CardProgressionPolicy{ConfigVersion: 5, FusionGoldPerMaterialPerBaseLevel: 100},
+				missionCatalog: missionCatalogFixture(t, map[int]gamestate.MissionDefinition{
+					1: {MissionID: 1, Published: true, Title: "进化为指定卡", Rule: &gamestate.MissionRule{Event: gamestate.MissionCardEvolution, SubjectID: 11, Target: 1}},
+				}),
+				missions: map[int]gamestate.MissionProgress{},
 			}
 			var uniqueIDs, containerIDs []int64
 			var materialIDs []int
@@ -321,7 +364,7 @@ func TestCardEvolutionRecipes(t *testing.T) {
 			if input.name == "closed reverse leaves forward open" {
 				s.ApplyEvolutionRestrictions(NewEvolutionRestrictions([]EvolutionPath{{FromCardID: 11, ToCardID: 10}}))
 			}
-			_, _, _, err := s.EvolveCard(1, 11, uniqueIDs, containerIDs, materialIDs)
+			_, _, _, err := s.EvolveCard(1, 11, uniqueIDs, containerIDs, materialIDs, nil)
 			if input.rejected {
 				wantCode := -1
 				if input.name == "limit insufficient materials" {
@@ -334,7 +377,7 @@ func TestCardEvolutionRecipes(t *testing.T) {
 				if !errors.As(err, &business) || business.Code != wantCode {
 					t.Fatalf("evolution rejection = %v, want code %d", err, wantCode)
 				}
-				if s.gold != beforeGold || !EqualCardInfo(s.cards[0], base) || len(s.cards)+len(s.containerCards) != beforeCards || !slices.Equal(s.stackCards, beforeStacks) || len(s.cardCollectionIDs) != 0 {
+				if s.gold != beforeGold || !EqualCardInfo(s.cards[0], base) || len(s.cards)+len(s.containerCards) != beforeCards || !slices.Equal(s.stackCards, beforeStacks) || len(s.cardCollectionIDs) != 0 || len(s.missions) != 0 {
 					t.Fatal("invalid evolution changed state")
 				}
 				return
@@ -343,11 +386,27 @@ func TestCardEvolutionRecipes(t *testing.T) {
 				t.Fatal(err)
 			}
 			result := s.cards[0]
+			if s.missions[1].ProgressNow != 1 || s.missions[1].State != 1 {
+				t.Fatal("successful evolution did not count the result card once")
+			}
 			wantLevel, wantExp := 1, 0
 			if input.keep {
 				wantLevel, wantExp = 2, 20
 			}
-			if result.CardID != 11 || result.UniqueID != base.UniqueID || result.Level != wantLevel || result.Experience != wantExp || result.Love != base.Love || result.Fame != base.Fame || result.IsLock != base.IsLock || s.gold != 400 || len(s.cards) != 1 || len(s.containerCards) != 0 {
+			wantCards, wantContainer := 1, 0
+			if input.kind == 1 && input.fame > 3 {
+				remaining := s.cards[1:]
+				if input.container {
+					wantContainer = 1
+					remaining = s.containerCards
+				} else {
+					wantCards++
+				}
+				if len(remaining) != 1 || remaining[0].UniqueID != 2 || remaining[0].Fame != input.fame-3 {
+					t.Fatal("GOD evolution did not retain the surplus material fame")
+				}
+			}
+			if result.CardID != 11 || result.UniqueID != base.UniqueID || result.Level != wantLevel || result.Experience != wantExp || result.Love != base.Love || result.Fame != base.Fame || result.IsLock != base.IsLock || s.gold != 400 || len(s.cards) != wantCards || len(s.containerCards) != wantContainer {
 				t.Fatalf("evolution result or consumption differs: %+v", result)
 			}
 			if input.kind != 1 {

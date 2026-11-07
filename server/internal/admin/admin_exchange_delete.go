@@ -89,12 +89,18 @@ func (a *API) changeExchangeDeletion(w http.ResponseWriter, r *http.Request) {
 		WriteAdminError(w, 400, "最多50个未删除的兑换所")
 		return
 	}
+	configuration, err := game.NewContentConfiguration(c.configuration.Revision+1, state)
+	if err != nil {
+		WriteAdminError(w, 400, err.Error())
+		return
+	}
 	doc, err := o.writeDocument(exchangesKey, *body.Expected, next)
 	if err != nil {
 		writeContentError(w, err)
 		return
 	}
 	c.shops, c.shopRevision = next, doc.Revision
-	c.configuration = game.ContentConfiguration{Revision: c.configuration.Revision + 1, State: state}
+	c.configuration = configuration
+	o.publishRuntimeLocked()
 	WriteAdminJSON(w, 200, map[string]any{"state": "PASS", "revision": doc.Revision})
 }

@@ -28,14 +28,14 @@ func TestPastPublicationNativeProjection(t *testing.T) {
 		if r.URL.Path != "/TeamBattlePastBossShow" {
 			t.Fatal("wrong forwarding route")
 		}
-		_, _ = w.Write([]byte("{\"0\":0}\n{\"0\":[{\"0\":2,\"5\":1},{\"0\":3,\"5\":7}],\"1\":[{\"0\":42}],\"2\":0,\"3\":0}\n{}"))
+		_, _ = w.Write([]byte("{\"0\":0}\n{\"0\":[{\"0\":2,\"5\":1},{\"0\":3,\"5\":7}],\"1\":[{\"0\":42}]}\n{}"))
 	})
 	show := func(wantCount int) {
 		t.Helper()
 		r := httptest.NewRequest("POST", "/TeamBattlePastBossShow", strings.NewReader("test-session-00000000"))
 		r = r.WithContext(context.WithValue(r.Context(), cnAuthenticatedUserKey{}, accountstore.PrimaryUserID))
 		w := httptest.NewRecorder()
-		cnBootstrapPastBossShow(business, ops)(w, r)
+		cnBootstrapPastBossShow(business, ops.Runtime)(w, r)
 		var result struct {
 			Groups []struct {
 				ID     int `json:"0"`

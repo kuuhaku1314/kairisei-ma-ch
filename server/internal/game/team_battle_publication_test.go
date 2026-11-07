@@ -48,7 +48,7 @@ func publicationGroupWithBosses(groupID, areaID, model int, bossIDs ...int) json
 	return content
 }
 
-func TestProjectCNTeamBattlePublicationLimitsFirstActivityFamilyDuringTutorial(t *testing.T) {
+func TestProjectCNTeamBattlePublicationOnlyFirstActivityFamilyDuringTutorial(t *testing.T) {
 	configuration, err := json.Marshal(map[string]any{
 		"9": []json.RawMessage{
 			publicationGroupWithBosses(760000012, 0, 1, 30010102, 30010104, 30010103),
@@ -74,23 +74,17 @@ func TestProjectCNTeamBattlePublicationLimitsFirstActivityFamilyDuringTutorial(t
 	if err := json.Unmarshal(projected, &top); err != nil {
 		t.Fatal(err)
 	}
-	if len(top["10"]) != 2 || len(top["10"][0].Bosses) != 1 {
+	if len(top["10"]) != 1 || len(top["10"][0].Bosses) != 1 {
 		t.Fatalf("projected 3D bosses = %+v", top["10"])
 	}
 	if got := top["10"][0].Bosses[0].BossID; got != 30010102 {
 		t.Fatalf("tutorial 3D boss = %d, want 30010102", got)
 	}
-	if top["10"][1].GroupID != 760000013 || len(top["10"][1].Bosses) != 2 {
-		t.Fatalf("later 3D activity family changed = %+v", top["10"][1])
-	}
-	if len(top["12"]) != 2 || len(top["12"][0].Bosses) != 1 {
+	if len(top["12"]) != 1 || len(top["12"][0].Bosses) != 1 {
 		t.Fatalf("projected 2D bosses = %+v", top["12"])
 	}
 	if got := top["12"][0].Bosses[0].BossID; got != 40001002 {
 		t.Fatalf("tutorial 2D boss = %d, want 40001002", got)
-	}
-	if top["12"][1].GroupID != 710000013 || len(top["12"][1].Bosses) != 2 {
-		t.Fatalf("later 2D activity family changed = %+v", top["12"][1])
 	}
 }
 
@@ -98,7 +92,9 @@ func TestProjectCNTeamBattlePublicationKeepsFullActivityFamiliesOutsideTutorial(
 	configuration, err := json.Marshal(map[string]any{
 		"9": []json.RawMessage{
 			publicationGroupWithBosses(760000012, 0, 1, 30010102, 30010104, 30010103),
+			publicationGroupWithBosses(760000013, 0, 1, 30020102, 30020103),
 			publicationGroupWithBosses(710000012, 0, 0, 40001002, 40001004),
+			publicationGroupWithBosses(710000013, 0, 0, 40002002, 40002003),
 		},
 		"10": []any{}, "11": []any{}, "12": []any{},
 	})
@@ -115,10 +111,10 @@ func TestProjectCNTeamBattlePublicationKeepsFullActivityFamiliesOutsideTutorial(
 	if err := json.Unmarshal(projected, &top); err != nil {
 		t.Fatal(err)
 	}
-	if len(top["10"]) != 1 || len(top["10"][0].Bosses) != 3 {
+	if len(top["10"]) != 2 || len(top["10"][0].Bosses) != 3 || len(top["10"][1].Bosses) != 2 {
 		t.Fatalf("full 3D activity family = %+v", top["10"])
 	}
-	if len(top["12"]) != 1 || len(top["12"][0].Bosses) != 2 {
+	if len(top["12"]) != 2 || len(top["12"][0].Bosses) != 2 || len(top["12"][1].Bosses) != 2 {
 		t.Fatalf("full 2D activity family = %+v", top["12"])
 	}
 }

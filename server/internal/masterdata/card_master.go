@@ -16,9 +16,9 @@ import (
 	"kairisei.local/server/internal/gamestate"
 )
 
-// Full CN inventory plus compatible imported cards exceeds the original 8 MiB
-// snapshot. Keep a bounded allowance for the complete runtime catalog.
-const maxCardMasterBytes = 16 * 1024 * 1024
+// The complete modern ordinary-card projection exceeds the former 16 MiB
+// snapshot. Keep an explicit bound while preserving the same inventory schema.
+const maxCardMasterBytes = 32 * 1024 * 1024
 
 type CardRuntimeMaster struct {
 	SchemaVersion                     int                                   `json:"schema_version"`
@@ -34,8 +34,10 @@ type CardRuntimeMaster struct {
 	SupportDeckSetCardNum             int                                   `json:"support_deck_set_card_num"`
 	Source                            json.RawMessage                       `json:"source"`
 	CardTemplates                     []gamestate.Card                      `json:"card_templates"`
+	CardSellExtract                   *gamestate.CardSellExtractPolicy      `json:"card_sell_extract,omitempty"`
 	CardCollectionPages               [][]int                               `json:"card_collection_pages"`
 	DeckRankPolicy                    gamestate.DeckRankPolicy              `json:"deck_rank_policy"`
+	AlchemistStarterDeck              *gamestate.AlchemistStarterDeck       `json:"alchemist_starter_deck,omitempty"`
 	StackCardTemplates                []gamestate.CardStack                 `json:"stack_card_templates"`
 	CardCategoryProfiles              []gamestate.CardCategoryProfile       `json:"card_category_profiles"`
 	CardGroupProfiles                 []gamestate.CardGroupProfile          `json:"card_group_profiles"`
@@ -116,7 +118,7 @@ func validateCardRuntimeMaster(master CardRuntimeMaster) error {
 	}
 	if len(master.Source) == 0 || bytes.Equal(master.Source, []byte("null")) ||
 		len(master.CardTemplates) == 0 || len(master.StackCardTemplates) == 0 ||
-		len(master.CardCategoryProfiles) != 1 || len(master.CardGroupProfiles) != 6 ||
+		len(master.CardCategoryProfiles) == 0 || len(master.CardGroupProfiles) == 0 ||
 		len(master.CardExperienceTables) == 0 ||
 		len(master.EvolutionTransitions) == 0 || len(master.SphereDefinitions) == 0 ||
 		len(master.SphereExperienceTables) == 0 || len(master.SphereEvolutionPrices) == 0 ||
@@ -161,7 +163,7 @@ func validateCardRuntimeMaster(master CardRuntimeMaster) error {
 		}
 		if card.UniqueID != 0 || card.CardID <= 0 || card.Name == "" ||
 			card.SameCardID <= 0 || card.SameSupportCardID <= 0 ||
-			card.RarityRank < 1 || card.RarityRank > 8 ||
+			card.RarityRank < 1 || card.RarityRank > 8 || card.RarityPlus < 0 || card.RarityPlus > 4 ||
 			card.Level != 1 || card.LevelMax < 1 || card.ExperienceTableID < 0 ||
 			card.Experience != 0 || card.NowLevelExperience != 0 ||
 			card.Love != 0 || card.LoveMax < 0 ||
@@ -188,14 +190,43 @@ func validateCardRuntimeMaster(master CardRuntimeMaster) error {
 		cardIDs[card.CardID] = struct{}{}
 	}
 	stackIDs := make(map[int]gamestate.CardStack, len(master.StackCardTemplates))
+	if starter := master.AlchemistStarterDeck; starter != nil {
+		seen := make(map[int]bool, 10)
+		for _, id := range append(starter.SummonCardIDs[:], starter.SkillCardIDs[:]...) {
+			if _, exists := cardIDs[id]; !exists || seen[id] || master.DeckRankPolicy.Cards[id].ArthurType != 5 {
+				return fmt.Errorf("invalid alchemist starter card %d", id)
+			}
+			seen[id] = true
+		}
+	}
 	for _, card := range master.StackCardTemplates {
-		if card.CardID <= 0 || card.Num != 0 || card.AddExperience <= 0 || card.BaseAddPrice < 0 || card.MaterialType < 0 || card.MaterialType > 10 {
+		if card.CardID <= 0 || card.Num != 0 || card.AddExperience <= 0 || card.BaseAddPrice < 0 || card.MaterialType < 0 || card.MaterialType > 12 {
 			return fmt.Errorf("invalid CN stack-card template %d", card.CardID)
 		}
 		if _, exists := stackIDs[card.CardID]; exists {
 			return fmt.Errorf("duplicate CN stack-card template %d", card.CardID)
 		}
 		stackIDs[card.CardID] = card
+	}
+	if policy := master.CardSellExtract; policy != nil {
+		if policy.ItemID <= 0 || len(policy.CountByBaseRarity) == 0 || len(policy.BaseCardIDs) == 0 || len(policy.BaseRarities) == 0 {
+			return errors.New("card sell extract policy is incomplete")
+		}
+		for rarity, count := range policy.CountByBaseRarity {
+			if rarity < 1 || rarity > 8 || count <= 0 {
+				return fmt.Errorf("invalid card sell extract rarity %d", rarity)
+			}
+		}
+		for baseID, rarity := range policy.BaseRarities {
+			if baseID <= 0 || rarity < 0 || rarity > 10 {
+				return fmt.Errorf("invalid card sell extract base rarity %d", baseID)
+			}
+		}
+		for cardID, baseID := range policy.BaseCardIDs {
+			if _, exists := policy.BaseRarities[baseID]; cardID <= 0 || baseID <= 0 || !exists {
+				return fmt.Errorf("card sell extract source %d has no valid base rarity", cardID)
+			}
+		}
 	}
 	for cardID, bonuses := range master.CardProgressionPolicy.FameMaterials {
 		if _, exists := stackIDs[cardID]; !exists {
@@ -210,7 +241,7 @@ func validateCardRuntimeMaster(master CardRuntimeMaster) error {
 	transitions := make(map[[2]int]struct{}, len(master.EvolutionTransitions))
 	for _, transition := range master.EvolutionTransitions {
 		key := [2]int{transition.FromCardID, transition.ToCardID}
-		if transition.Type < 0 || transition.Type > 3 ||
+		if transition.Type < 0 || transition.Type > 4 ||
 			transition.Gold < 0 || len(transition.Materials) == 0 {
 			return fmt.Errorf("invalid CN evolution transition %v", key)
 		}
@@ -231,7 +262,7 @@ func validateCardRuntimeMaster(master CardRuntimeMaster) error {
 			}
 			_, isStackCard := stackIDs[material.CardID]
 			_, isInstanceCard := cardIDs[material.CardID]
-			if !isStackCard && !isInstanceCard {
+			if material.CardID <= 0 || transition.Type != 4 && !isStackCard && !isInstanceCard {
 				return fmt.Errorf("unknown CN evolution material %d", material.CardID)
 			}
 			if _, exists := materialIDs[material.CardID]; exists {
@@ -473,7 +504,9 @@ func validateCardFusionSuccessPolicy(policy gamestate.CardProgressionPolicy) err
 
 func ApplyCardRuntimeMaster(state *gamestate.State, master CardRuntimeMaster) (bool, error) {
 	state.DeckRankPolicy = master.DeckRankPolicy
+	state.AlchemistStarterDeck = master.AlchemistStarterDeck
 	state.CardTemplates = append([]gamestate.Card(nil), master.CardTemplates...)
+	state.CardSellExtract = master.CardSellExtract
 	state.CardCategoryProfiles = append(
 		[]gamestate.CardCategoryProfile(nil), master.CardCategoryProfiles...,
 	)
@@ -761,22 +794,50 @@ func validateCardGroupProfiles(master CardRuntimeMaster) error {
 		!strings.HasPrefix(policy.DeckLimitBossID, "CONFIRMED:") {
 		return errors.New("CN card group policy is invalid")
 	}
-	category := master.CardCategoryProfiles[0]
-	if category.CategoryID != 60200001 || category.Name == "" || category.Order != 2 ||
-		category.ViewType != 0 || !strings.HasPrefix(category.Evidence, "PLACEHOLDER:") {
-		return errors.New("CN card category profile is invalid")
+	// Dynamic directory keys continue the sourced packaged base inventory.
+	// Exact offsets are established by the catalog producer; only continuity
+	// and the established minimum base keys belong to this runtime contract.
+	categoryOrder := master.CardCategoryProfiles[0].Order
+	groupOrder := master.CardGroupProfiles[0].Order
+	if categoryOrder < 2 || groupOrder < 10 {
+		return errors.New("card directory overlaps packaged base keys")
 	}
-	expectedGroupIDs := []int{20020001, 30020001, 30020002, 30020003, 30020005, 90020001}
-	knownCards := make(map[int]struct{}, len(master.CardTemplates))
+	categories := make(map[int]struct{}, len(master.CardCategoryProfiles))
+	for index, category := range master.CardCategoryProfiles {
+		evidence := strings.HasPrefix(category.Evidence, "CONFIRMED:") ||
+			strings.HasPrefix(category.Evidence, "INFERRED:") ||
+			strings.HasPrefix(category.Evidence, "PLACEHOLDER:")
+		if category.CategoryID <= 0 || category.CategoryID == 1 || category.CategoryID == 1000 ||
+			strings.TrimSpace(category.Name) == "" || category.Order != categoryOrder+index ||
+			category.ViewType != 0 || !evidence {
+			return errors.New("CN card category profile is invalid")
+		}
+		if _, duplicate := categories[category.CategoryID]; duplicate {
+			return fmt.Errorf("duplicate card category %d", category.CategoryID)
+		}
+		categories[category.CategoryID] = struct{}{}
+	}
+	knownCards := make(map[int]struct{}, len(master.CardTemplates)+len(master.StackCardTemplates))
 	for _, card := range master.CardTemplates {
 		knownCards[card.CardID] = struct{}{}
 	}
+	for _, card := range master.StackCardTemplates {
+		knownCards[card.CardID] = struct{}{}
+	}
+	groups := make(map[int]struct{}, len(master.CardGroupProfiles))
 	for index, group := range master.CardGroupProfiles {
-		if group.GroupID != expectedGroupIDs[index] || group.CategoryID != category.CategoryID ||
-			group.Name == "" || group.Order != 10+index || group.DeckLimitBossID != 0 ||
-			len(group.MemberCardIDs) == 0 || !strings.HasPrefix(group.NameEvidence, "INFERRED:") {
+		_, categoryExists := categories[group.CategoryID]
+		nameEvidence := strings.HasPrefix(group.NameEvidence, "CONFIRMED:") ||
+			strings.HasPrefix(group.NameEvidence, "INFERRED:")
+		if group.GroupID <= 0 || !categoryExists || strings.TrimSpace(group.Name) == "" ||
+			group.Order != groupOrder+index || group.DeckLimitBossID < 0 ||
+			len(group.MemberCardIDs) == 0 || !nameEvidence {
 			return fmt.Errorf("CN card group profile %d is invalid", group.GroupID)
 		}
+		if _, duplicate := groups[group.GroupID]; duplicate {
+			return fmt.Errorf("duplicate card group %d", group.GroupID)
+		}
+		groups[group.GroupID] = struct{}{}
 		previous := 0
 		for _, cardID := range group.MemberCardIDs {
 			if cardID <= previous {
@@ -842,6 +903,7 @@ func normalizeCard(
 	}
 	normalized := template
 	normalized.UniqueID = card.UniqueID
+	normalized.CreateTime = card.CreateTime
 	normalized.Level = experienceState.Level
 	normalized.Experience = experienceState.Experience
 	normalized.NowLevelExperience = experienceState.NowLevelExperience

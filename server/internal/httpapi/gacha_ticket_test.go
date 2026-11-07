@@ -40,6 +40,11 @@ func TestRarityFiveTicketGachaUsesDedicatedLoopbackBanner(t *testing.T) {
 		t.Fatalf("element banner = %q, default = %q", elementBanner, defaultBanner)
 	}
 	api.account = &game.Account{}
+	api.gachaBannerVersions = map[string]string{"element_fire": "new-banner-content"}
+	versioned := api.gachaInfos([]gamestate.GachaProfile{{GachaID: 3, BannerKey: "element_fire"}})[0].(map[string]any)
+	if versioned["image_l_url"] != elementBanner+"?v=new-banner-content" || versioned["image_s_url"] != versioned["image_l_url"] {
+		t.Fatalf("versioned banner = %+v", versioned)
+	}
 	covered := []gamestate.GachaProfile{{GachaID: 4, BannerKey: "element_fire", CoverPath: "gacha-covers/a.png"}}
 	for source, want := range map[string]string{"server": "http://10.0.2.2:26020/local/gacha-covers/a.png", "storage": "https://cdn.example.com/k/gacha-covers/a.png"} {
 		api.account.ApplyRuntimeSettings(game.RuntimeSettings{GachaCoverSource: source, GachaCoverBaseURL: "https://cdn.example.com/k/"})

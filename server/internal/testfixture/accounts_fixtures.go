@@ -47,7 +47,7 @@ func NewFriendCapacityTestAccounts(t *testing.T) *accountstore.Accounts {
 
 func CreateNamedFriendCapacityAccount(t *testing.T, accounts *accountstore.Accounts, number int) int {
 	t.Helper()
-	identity, err := accounts.ResolveLogin(fmt.Sprintf("00000000-0000-4000-8000-%012x", number))
+	identity, err := accounts.ResolveInternalLogin(fmt.Sprintf("00000000-0000-4000-8000-%012x", number))
 	if err != nil {
 		t.Fatal(err)
 	}

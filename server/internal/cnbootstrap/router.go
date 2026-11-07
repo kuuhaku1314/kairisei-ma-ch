@@ -11,7 +11,9 @@ import (
 	"kairisei.local/server/internal/accounthttp"
 	"kairisei.local/server/internal/accountstore"
 	adminapi "kairisei.local/server/internal/admin"
+	"kairisei.local/server/internal/game"
 	"kairisei.local/server/internal/gamestate"
+	"kairisei.local/server/internal/operations"
 )
 
 // application wires long-lived services. Protocol handlers never construct
@@ -20,19 +22,23 @@ type application struct {
 	config      Config
 	resources   *clientResources
 	accounts    *accountstore.Accounts
-	operations  *adminapi.Operations
+	operations  *operations.Runtime
+	editor      *adminapi.Operations
 	business    *accounthttp.Router
 	recorder    *recorder
 	progression gamestate.PlayerProgressionPolicy
+	pvpRanks    []game.PVPRankConfig
 }
 
 func (app *application) router() chi.Router {
 	router := chi.NewRouter()
+	router.Use(app.blockIPRequests)
 	router.Use(cnNetworkCompression(app.config.Logger))
 	router.Use(app.recorder.middleware(app.config.Logger))
 	router.Use(normalizeLeadingSlashes)
 	router.Use(app.maintenanceRequests)
 	router.Use(authenticateCNSessions(app.accounts))
+	router.Use(markAuthenticatedCapture)
 	router.Get("/healthz", func(writer http.ResponseWriter, _ *http.Request) {
 		writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_ = json.NewEncoder(writer).Encode(map[string]any{
@@ -67,17 +73,13 @@ func (app *application) router() chi.Router {
 			http.ServeFile(writer, request, bannerPath)
 		})
 	}
-	// Operator-uploaded pool covers (content-addressed files next to the save database).
+	// Operator-uploaded pool covers and home banners (content-addressed files next to the save database).
 	router.Get("/local/gacha-covers/{file}", adminapi.ServeGachaCover(app.gachaCoverDir()))
+	router.Get("/local/home-banners/{file}", adminapi.ServeHomeBanner(app.homeBannerDir()))
 	router.Get("/local/home/banner.png", func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "image/png")
 		writer.Header().Set("Cache-Control", "no-store")
 		http.ServeFile(writer, request, app.resources.HomeBanner)
-	})
-	router.Get("/local/home/event-banner.png", func(writer http.ResponseWriter, request *http.Request) {
-		writer.Header().Set("Content-Type", "image/png")
-		writer.Header().Set("Cache-Control", "no-store")
-		http.ServeFile(writer, request, app.resources.HomeEventBanner)
 	})
 	emptyJSON := func(writer http.ResponseWriter, _ *http.Request) {
 		writer.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -102,16 +104,17 @@ func (app *application) router() chi.Router {
 	router.Get("/html/latest_default.json", emptyBody)
 	router.Post("/d/*", emptyJSON)
 	router.Post("/log.php", acknowledgeClientLog)
-	router.Post("/mods_switch.php", cnBootstrapModuleSwitches)
-	router.Post("/loginSDK.php", cnBootstrapLogin(app.accounts, app.config.Network.AdvertiseHost, app.config.Network.HTTPPort, app.config.CDN, resourceVersionNamespace(app.resources.Catalog, app.resources.CPKList, app.resources.CPKState), app.resources.Images.Namespace))
+	router.Post("/mods_switch.php", app.moduleSwitches)
+	modernLogin := platformClientLogin(app.accounts, app.config.Network.AdvertiseHost, app.config.Network.HTTPPort, app.config.CDN, app.resources.Images.Namespace, app.resources.Platforms)
+	router.Post("/local/client/login", modernLogin)
 	accountGateway := newCNAccountGateway(app.accounts)
-	for _, action := range []string{"status", "bind", "login"} {
+	for _, action := range []string{"status", "bind", "login", "change-password"} {
 		router.Post("/local/account/"+action, accountGateway.ServeHTTP)
 	}
 	router.Post("/subcribe_push.php", cnBootstrapPushRegistration)
 	app.registerGameRoutes(router)
 	router.Get("/disabled/products", cnBootstrapProducts)
-	router.Get("/disabled/web", app.operations.LocalNotice)
+	router.Get("/disabled/web", app.editor.LocalNotice)
 	router.Get("/disabled/web/deck-guide", cnBootstrapDeckGuide)
 	router.Get("/disabled/web/information/2015/7/kechengbiao", cnBootstrapDungeonSchedule)
 	introHandler, err := newCNIntroHandler(app.resources.GachaBanner)
@@ -120,10 +123,7 @@ func (app *application) router() chi.Router {
 		introHandler = cnBootstrapIntroPlaceholder
 	}
 	router.Get("/disabled/web/netease/fourplusone/20160626/Intro_{index}.png", introHandler)
-	registerResourceVersions(router, app.resources.PatchRoots, app.resources.Catalog, app.resources.CPKList, app.resources.CPKState)
-	versionedPatch := cnBootstrapVersionedPatchFile(app.resources.PatchRoots, app.resources.Patch)
-	router.Get("/local/resources/patch/Android/patch/*", versionedPatch)
-	router.Head("/local/resources/patch/Android/patch/*", versionedPatch)
+	registerPlatformContent(router, app.resources.Platforms, app.resources.CPKList, app.resources.CPKState)
 	cpkResource := cnBootstrapCPKResource(app.resources.CPK)
 	router.Get("/local/resources/cpk/*", cpkResource)
 	router.Head("/local/resources/cpk/*", cpkResource)
@@ -162,22 +162,33 @@ func (app *application) maintenanceRequests(next http.Handler) http.Handler {
 	})
 }
 
-func (app *application) handler() (http.Handler, error) {
+func (app *application) handler() (*cnDeploymentHandler, error) {
+	if err := app.accounts.ValidateCreationPolicy(); err != nil {
+		return nil, err
+	}
 	adminHandler, err := adminapi.New(adminapi.Config{
-		Accounts: app.accounts, Runtime: app.business, Operations: app.operations,
+		Accounts: app.accounts, Runtime: app.business, Operations: app.editor,
 		BattleMaster: app.config.Masters.Battle, CardMaster: app.config.Masters.Cards, ItemMaster: app.config.Masters.Items,
+		PVPRanks:    app.pvpRanks,
 		Multiplayer: app.config.Multiplayer, AdvertiseHost: app.config.Network.AdvertiseHost, GamePort: app.config.Network.HTTPPort,
 		Logger: app.config.Logger, Progression: app.progression,
-		GachaBanners: app.resources.GachaBanners, AssetMaps: []string{app.config.Resources.AssetMap},
-		GachaCoverDir: app.gachaCoverDir(),
+		NetworkMetrics: app.config.NetworkMetrics,
+		RuntimeLogPath: app.config.AdminLogFile,
+		GachaBanners:   app.resources.GachaBanners, AssetMaps: []string{app.config.Resources.AssetMap},
+		GachaCoverDir: app.gachaCoverDir(), HomeBannerDir: app.homeBannerDir(), ImageStorage: app.config.ImageStorage,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("initialize CN admin handler: %w", err)
 	}
-	return &cnDeploymentHandler{Handler: app.router(), admin: adminHandler, database: app.accounts.Database(), operations: app.operations}, nil
+	return &cnDeploymentHandler{Handler: app.router(), admin: adminHandler, database: app.accounts.Database(), accounts: app.accounts, operations: app.operations}, nil
 }
 
 // gachaCoverDir is the fixed, writable cover folder: "gacha-covers" beside the save database.
 func (app *application) gachaCoverDir() string {
 	return filepath.Join(filepath.Dir(app.config.Persistence.SavePath), "gacha-covers")
+}
+
+// homeBannerDir is the fixed, writable home banner folder: "home-banners" beside the save database.
+func (app *application) homeBannerDir() string {
+	return filepath.Join(filepath.Dir(app.config.Persistence.SavePath), "home-banners")
 }

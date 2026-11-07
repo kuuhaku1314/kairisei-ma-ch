@@ -2,6 +2,7 @@ package cnbootstrap
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -24,11 +25,11 @@ import (
 func TestServingRestartInvalidatesSessionsNotAccounts(t *testing.T) {
 	accounts := testfixture.NewFriendCapacityTestAccounts(t)
 	const uuid = "00000000-0000-0000-0000-000000000001"
-	identity, err := accounts.ResolveLogin(uuid)
+	identity, err := accounts.ResolveInternalLogin(uuid)
 	if err != nil {
 		t.Fatal(err)
 	}
-	binding, err := accounts.BindAccount(uuid, "restart_test", "test-password")
+	binding, err := accounts.BindInternalAccount(uuid, "restart_test", "test-password")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +44,11 @@ func TestServingRestartInvalidatesSessionsNotAccounts(t *testing.T) {
 	if id, err := accounts.ResolveSession(identity.SessionKey); err != nil || id != identity.UserID {
 		t.Fatalf("initial session: %d %v", id, err)
 	}
-	if err := accounts.InvalidateSessions(); err != nil {
+	deployment := &cnDeploymentHandler{accounts: accounts}
+	if id, err := accounts.ResolveSession(identity.SessionKey); err != nil || id != identity.UserID {
+		t.Fatal("assembly revoked session", err)
+	}
+	if err := deployment.Activate(); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := accounts.ResolveSession(identity.SessionKey); !errors.Is(err, accountstore.ErrInvalidSession) {
@@ -61,7 +66,7 @@ func TestServingRestartInvalidatesSessionsNotAccounts(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(document, retainedDocument) {
 		t.Fatalf("operator configuration changed: %v", err)
 	}
-	loggedIn, err := accounts.ResolveLogin(uuid)
+	loggedIn, err := accounts.ResolveInternalLogin(uuid)
 	if err != nil || loggedIn.UserID != identity.UserID || loggedIn.SessionKey == identity.SessionKey {
 		t.Fatalf("relogin did not retain identity and rotate session: %v", err)
 	}
@@ -85,8 +90,8 @@ func TestActiveBattleUsesRuntimeMemoryAcrossAccountReload(t *testing.T) {
 		Seed:       478,
 		BossID:     10000101, BattleEnemyTypes: []int8{1, 1, 1, 1},
 		StageQuestAreaID: 100001, StageQuestStageID: 10000101,
-		BPUse: 7, ConsumesBattlePoints: true, FameSeed: "normal-quest-start",
-		FameSources: []gamestate.TeamBattleFameSourceState{{ArthurType: 1, LeaderFame: 100}},
+		BPUse: 7, EntryRole: gamestate.BattleEntrySolo, FameSeed: "normal-quest-start",
+		FameSources: []gamestate.TeamBattleFameSourceState{{MemberType: 1, LeaderFame: 100}},
 		DropPlanSet: true,
 		DropPlan: []gamestate.TeamBattleEnemyDrop{
 			{BattleIndex: 3, Reward: gamestate.Reward{Type: 4, Num: 100, CardSkillLevels: []int16{}}},
@@ -134,6 +139,38 @@ func TestActiveBattleUsesRuntimeMemoryAcrossAccountReload(t *testing.T) {
 		t.Fatal("learning battle survived restart or completed chapters were lost")
 	}
 	accounts.RememberBattle(accountstore.PrimaryUserID, nil, gamestate.StoryTeamBattleSession{})
+	// Response-only receipts are disposable. Strict JSON seeds and SQLite must
+	// accept them without replaying the obsolete DTO or losing the settled key.
+	content, err := json.Marshal(accountstore.SaveFromState(withoutBattle))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var seed map[string]json.RawMessage
+	if err := json.Unmarshal(content, &seed); err != nil {
+		t.Fatal(err)
+	}
+	seed["team_battle_result_receipts"] = json.RawMessage(`[{"room_id":42,"claimed_at_unix":1,"response":{"members":[]}}]`)
+	seed["team_battle_solo_result_receipts"] = json.RawMessage(`[{"request_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","boss_id":10000101,"claimed_at_unix":1,"response":{"partners":[]}}]`)
+	content, err = json.Marshal(seed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	retired, err := accountstore.DecodeSaveState(content)
+	if err != nil {
+		t.Fatal("retired receipt blocked strict save loading", err)
+	}
+	if err := restarted.PersistState(accountstore.PrimaryUserID, retired); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := testfixture.TestAccountRepository(t, accounts.Database()).LoadState(accountstore.PrimaryUserID)
+	if err != nil || len(loaded.TeamBattleResultReceipts) != 1 || len(loaded.TeamBattleSoloResultReceipts) != 1 ||
+		len(loaded.TeamBattleResultReceipts[0].Snapshot) != 0 || len(loaded.TeamBattleSoloResultReceipts[0].Snapshot) != 0 {
+		t.Fatal("retired settlement identity was lost or old payload retained", err)
+	}
+	encoded, err = accountstore.EncodeAccountMetadata(loaded)
+	if err != nil || bytes.Contains(encoded, []byte(`"response"`)) {
+		t.Fatal("retired client replies were written back", err)
+	}
 }
 
 func requireFollowAddError(t *testing.T, err error, resultCode int) {
@@ -150,63 +187,32 @@ func TestFollowCapacityPreservesOriginalClientResultCodes(t *testing.T) {
 	targetA := testfixture.CreateNamedFriendCapacityAccount(t, accounts, 0x102)
 	targetB := testfixture.CreateNamedFriendCapacityAccount(t, accounts, 0x103)
 	targetC := testfixture.CreateNamedFriendCapacityAccount(t, accounts, 0x104)
-	if _, err := accounts.FollowFriendPointAccounts(requester, []int{targetA, targetB}, 2, 20); err != nil {
+	if _, err := accounts.FollowFriendPointAccounts(requester, []int{targetA, targetB}, 2); err != nil {
 		t.Fatal(err)
 	}
-	_, err := accounts.FollowFriendPointAccounts(requester, []int{targetC}, 2, 20)
+	_, err := accounts.FollowFriendPointAccounts(requester, []int{targetC}, 2)
 	requireFollowAddError(t, err, -3410)
-
-	followerA := testfixture.CreateNamedFriendCapacityAccount(t, accounts, 0x105)
-	followerB := testfixture.CreateNamedFriendCapacityAccount(t, accounts, 0x106)
-	followerC := testfixture.CreateNamedFriendCapacityAccount(t, accounts, 0x107)
-	fullTarget := testfixture.CreateNamedFriendCapacityAccount(t, accounts, 0x108)
-	if _, err := accounts.FollowFriendPointAccounts(followerA, []int{fullTarget}, 2, 20); err != nil {
-		t.Fatal(err)
+	// A full outgoing list still accepts new followers and mutual relationships.
+	for _, target := range []int{targetA, targetB} {
+		result, err := accounts.FollowFriendPointAccounts(target, []int{requester}, 1)
+		if err != nil || !result.IsFriendFull {
+			t.Fatalf("mutual follow at sole follow ceiling: %+v %v", result, err)
+		}
 	}
-	if _, err := accounts.FollowFriendPointAccounts(followerB, []int{fullTarget}, 2, 20); err != nil {
-		t.Fatal(err)
+	for _, suffix := range []int{0x105, 0x106, 0x107} {
+		follower := testfixture.CreateNamedFriendCapacityAccount(t, accounts, suffix)
+		if _, err := accounts.FollowFriendPointAccounts(follower, []int{requester}, 1); err != nil {
+			t.Fatalf("full target rejected a follower: %v", err)
+		}
 	}
-	_, err = accounts.FollowFriendPointAccounts(followerC, []int{fullTarget}, 2, 20)
-	requireFollowAddError(t, err, -3412)
-
-	mutualOwner := testfixture.CreateNamedFriendCapacityAccount(t, accounts, 0x109)
-	mutualA := testfixture.CreateNamedFriendCapacityAccount(t, accounts, 0x10a)
-	mutualB := testfixture.CreateNamedFriendCapacityAccount(t, accounts, 0x10b)
-	if _, err := accounts.FollowFriendPointAccounts(mutualA, []int{mutualOwner}, 10, 20); err != nil {
-		t.Fatal(err)
+	followed, err := accounts.ListFollowedFriendPointAccounts(requester)
+	if err != nil || len(followed) != 2 || followed[0].FriendState != game.FriendStateFriend || followed[1].FriendState != game.FriendStateFriend {
+		t.Fatalf("mutuals consume existing follows: %+v %v", followed, err)
 	}
-	result, err := accounts.FollowFriendPointAccounts(mutualOwner, []int{mutualA}, 10, 1)
-	if err != nil || !result.IsFriendFull {
-		t.Fatalf("fill requester mutual capacity = (%+v, %v)", result, err)
+	followers, total, err := accounts.ListFollowerFriendPointAccounts(requester, 200)
+	if err != nil || total != 5 || len(followers) != 5 {
+		t.Fatalf("follower capacity was independently restricted: %d %d %v", len(followers), total, err)
 	}
-	if _, err := accounts.FollowFriendPointAccounts(mutualB, []int{mutualOwner}, 10, 20); err != nil {
-		t.Fatal(err)
-	}
-	_, err = accounts.FollowFriendPointAccounts(mutualOwner, []int{mutualB}, 10, 1)
-	requireFollowAddError(t, err, -3410)
-
-	otherFull := testfixture.CreateNamedFriendCapacityAccount(t, accounts, 0x10c)
-	otherFriend := testfixture.CreateNamedFriendCapacityAccount(t, accounts, 0x10d)
-	otherRequester := testfixture.CreateNamedFriendCapacityAccount(t, accounts, 0x10e)
-	otherFullState, err := accounts.LoadState(otherFull)
-	if err != nil {
-		t.Fatal(err)
-	}
-	otherFullState.User.FriendMax = 1
-	if err := accounts.PersistState(otherFull, otherFullState); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := accounts.FollowFriendPointAccounts(otherFriend, []int{otherFull}, 10, 20); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := accounts.FollowFriendPointAccounts(otherFull, []int{otherFriend}, 10, 1); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := accounts.FollowFriendPointAccounts(otherFull, []int{otherRequester}, 10, 1); err != nil {
-		t.Fatal(err)
-	}
-	_, err = accounts.FollowFriendPointAccounts(otherRequester, []int{otherFull}, 10, 20)
-	requireFollowAddError(t, err, -3412)
 }
 
 func TestFriendPointAccountStatesReadsTargetedRelationshipStates(t *testing.T) {
@@ -216,13 +222,13 @@ func TestFriendPointAccountStatesReadsTargetedRelationshipStates(t *testing.T) {
 	inbound := testfixture.CreateNamedFriendCapacityAccount(t, accounts, 0x203)
 	mutual := testfixture.CreateNamedFriendCapacityAccount(t, accounts, 0x204)
 	unrelated := testfixture.CreateNamedFriendCapacityAccount(t, accounts, 0x205)
-	if _, err := accounts.FollowFriendPointAccounts(requester, []int{outbound, mutual}, 10, 20); err != nil {
+	if _, err := accounts.FollowFriendPointAccounts(requester, []int{outbound, mutual}, 10); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := accounts.FollowFriendPointAccounts(inbound, []int{requester}, 10, 20); err != nil {
+	if _, err := accounts.FollowFriendPointAccounts(inbound, []int{requester}, 10); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := accounts.FollowFriendPointAccounts(mutual, []int{requester}, 10, 20); err != nil {
+	if _, err := accounts.FollowFriendPointAccounts(mutual, []int{requester}, 10); err != nil {
 		t.Fatal(err)
 	}
 
@@ -255,7 +261,7 @@ func TestPartnerDiscoveryReadsProjectionInsteadOfFullSnapshots(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	relations, err := accounts.ListFriendPointAccountRelations(requester)
+	relations, err := accounts.LoadFriendPointAccountRelations(requester, []int{target})
 	if err != nil {
 		t.Fatalf("partner discovery decoded a full account snapshot: %v", err)
 	}
@@ -402,14 +408,14 @@ func TestSystemPartnerAccountsArePersistentFriendTargetsAndDoNotConsumePlayerIDs
 		}
 	}
 
-	primaryIdentity, err := accounts.ResolveLogin("00000000-0000-4000-8000-000000000001")
+	primaryIdentity, err := accounts.ResolveInternalLogin("00000000-0000-4000-8000-000000000001")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if primaryIdentity.UserID != accountstore.PrimaryUserID {
 		t.Fatalf("primary player user ID = %d, want %d", primaryIdentity.UserID, accountstore.PrimaryUserID)
 	}
-	identity, err := accounts.ResolveLogin("00000000-0000-4000-8000-000000000002")
+	identity, err := accounts.ResolveInternalLogin("00000000-0000-4000-8000-000000000002")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -425,14 +431,14 @@ func TestSystemPartnerAccountsArePersistentFriendTargetsAndDoNotConsumePlayerIDs
 	}
 
 	targetID := accountstore.SystemPartnerUserID(2)
-	added, err := accounts.FollowFriendPointAccounts(accountstore.PrimaryUserID, []int{targetID}, 100, 100)
+	added, err := accounts.FollowFriendPointAccounts(accountstore.PrimaryUserID, []int{targetID}, 100)
 	if err != nil {
 		t.Fatalf("follow system partner: %v", err)
 	}
 	if !slices.Equal(added.RequestUserIDs, []int{targetID}) || added.IsFriendFull {
 		t.Fatalf("follow response = %v", added)
 	}
-	relations, err := accounts.ListFriendPointAccountRelations(accountstore.PrimaryUserID)
+	relations, err := accounts.ListFollowedFriendPointAccounts(accountstore.PrimaryUserID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -479,7 +485,7 @@ func TestPlayerAccountLoadsSharedItemShopWithoutResettingOwnedItems(t *testing.T
 	if err != nil {
 		t.Fatalf("initialize account store: %v", err)
 	}
-	identity, err := accounts.ResolveLogin("00000000-0000-4000-8000-000000000099")
+	identity, err := accounts.ResolveInternalLogin("00000000-0000-4000-8000-000000000099")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -525,14 +531,14 @@ func TestPlayerAccountLoadsSharedItemShopWithoutResettingOwnedItems(t *testing.T
 func TestAccountSnapshotExcludesDerivedFriendProfiles(t *testing.T) {
 	started := time.Now().Unix()
 	accounts := testfixture.NewFriendCapacityTestAccounts(t)
-	primary, err := accounts.ResolveLogin("00000000-0000-4000-8000-000000000001")
+	primary, err := accounts.ResolveInternalLogin("00000000-0000-4000-8000-000000000001")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if primary.UserID != accountstore.PrimaryUserID {
 		t.Fatalf("primary user ID = %d, want %d", primary.UserID, accountstore.PrimaryUserID)
 	}
-	identity, err := accounts.ResolveLogin("00000000-0000-4000-8000-000000000199")
+	identity, err := accounts.ResolveInternalLogin("00000000-0000-4000-8000-000000000199")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -7,11 +7,11 @@
 ```
 
 清空 `base_url` 即恢复本地下载。Windows 启动器、命令行和 Linux x64／ARM64 共用此配置。
-源码启动可传 `tools/powershell/Start-Server.ps1 -ResourceSet <resource-set.json> -CDNConfig _local/config/cdn.json`；直接运行程序用 `-cdn-config`。
+使用配套启动脚本时，编辑解压目录中的 `cdn.json`。自行组装启动参数时，使用 `-cdn-config <cdn.json 路径>`。
 
 CDN 可使用任意能提供原样文件的 HTTP(S) 源站或域名，不绑定厂商。只改变登录响应中的
 `res_patch_url`、`res_cpk_url`；API、战斗、版本目录、动态 banner 和 Admin 保持原地址。
-服务端仍需完整 `resource-set`。HTTPS CDN 需使用 v31 或更新的配套 APK；之后切换 CDN 地址无需重打 APK。
+服务端仍需完整 `resource-set`。Windows 和 Android 使用与服务端配套的 2.0.0 客户端，切换 CDN 后重新登录即可。
 不会自动回源重试；CDN 故障时可关闭配置后重新登录。
 
 ## 一份 JSON，一次运行
@@ -30,14 +30,14 @@ CDN 可使用任意能提供原样文件的 HTTP(S) 源站或域名，不绑定�
 
 `endpoint_url` 是 S3 上传 API 地址；`public_url` 是**桶的公开下载根地址**，不要添加 `/cn602`。
 先在 R2 启用公开读取，密钥需对该桶有对象读写权限；使用访问密钥ID与机密访问密钥，不用“令牌值”。
-密钥只存在你本地的 `cdn-sync.json`，不要把填好的文件随包分享；正常游戏服务不会读取它。
+密钥只存在你本地的 `cdn-sync.json`，不要把填好的文件随包分享；启用运营图片同步时，服务端也会读取这份文件中的存储配置。
 
 - **Windows**：双击 `Sync-CDN.cmd`，窗口显示进度，结束后保留结果。
 - **Linux x64／ARM64**：`sh Sync-CDN.sh`，脚本自动选择架构。
 - **只检查输入**：Windows `Sync-CDN.cmd --dry-run`，Linux `sh Sync-CDN.sh --dry-run`；不联网、不上传、不修改 CDN 配置。
 
 同步能力内置于 server，无需 Python、Go、AWS CLI 或其他安装；命令独立退出，不启动游戏服务、不打开账号库。
-自动读取当前完整资源集，只上传客户端下载的补丁／CPK，不上传服务器目录、账号或密钥。
+随包同步脚本读取 `deployment.json` 选择的平台资源，以及完整资源集里的共用资源。上传范围是客户端下载的资源。
 默认8并发，流式上传，不复制资源、不把整包放进内存；存在且大小／SHA元数据一致则跳过。
 失败或 Ctrl+C 后直接重跑，已完成的文件无需重传；单个未完成文件会重新上传。
 记录自动写入 `_local/cdn-sync/`，不含密钥或代理密码。
@@ -71,9 +71,7 @@ Linux 可执行 `HTTPS_PROXY=http://127.0.0.1:7890 sh Sync-CDN.sh`。`NO_PROXY` 
 
 ## 版本与别名的唯一来源
 
-- 补丁对象名是 `patch/Android/patch/<原始 bundle 路径>.v<8 位大写 CRC>`。
-  `asset-map.json` 的 `delivery_crc32` 优先于官方 `version.dat` 的旧值；资源修复工具按实际交付字节生成 CRC。
-  本地版本接口和 CDN 导出共同解析最终 catalog，不另建版本算法；旧版本请求不会拿到新字节。
+- Windows 和 Android 资源按各自的平台清单分发。保持 `deployment.json`、`platform/` 与 `resource-set/` 的原有相对路径，使用随包脚本生成上传映射。
 - 语音对象名是 `cpk/CPK/<逻辑名>.v<整数版本>`。源文件、逻辑名、大小、版本在 `resources/cpk.File` 中一次解析，
   文件列表、版本表、本地下载和 CDN 导出共用。别名必须直指物理 CPK，不允许链式别名或大小写重名。
   查找时忽略大小写，输出路径保留客户端约定的拼写，不把 Unity 内部名字、磁盘文件名和逻辑名混成一个名字。
@@ -91,6 +89,4 @@ Linux 可执行 `HTTPS_PROXY=http://127.0.0.1:7890 sh Sync-CDN.sh`。`NO_PROXY` 
 
 公开源站应允许匿名 GET／HEAD、返回正确长度并保留 Range 206；禁用 gzip／转码／文件内容重写。
 已版本化对象使用长期不可变缓存，不缓存错误响应；不要在客户端地址中填带临时签名查询串的 URL。
-配套客户端的 HTTPS 下载使用 Android 系统 TLS 流式写盘，完成长度检查后交原安装回调；
-失败不登记 CPK 版本或触发安装成功，不关闭证书检查。如果下载一直停在0%，应检查设备到公开下载域名的
-DNS、TLS及网络连通性；电脑能访问该域名不代表设备也能访问。
+下载一直停在 0% 时，可在出现问题的设备上检查到 CDN 域名的 DNS、TLS 和网络连接，并确认公开地址允许匿名下载。

@@ -109,25 +109,31 @@ func TestDeckRankCardUseAllowsHiddenDeckMaterialBeforeA(t *testing.T) {
 	s := &Account{
 		deckRankPolicy: gamestate.DeckRankPolicy{ConfigVersion: 1}, highestDeckRank: 9,
 		currentActiveArthur: 1,
-		cards:               []CardInfo{{UniqueID: 1, CardID: 101}, {UniqueID: 2, CardID: 102}},
+		cards:               []CardInfo{{UniqueID: 1, CardID: 101}, {UniqueID: 2, CardID: 102}, {UniqueID: 3, CardID: 101}, {UniqueID: 4, CardID: 102}},
 		cardDefinitions:     map[int]gamestate.Card{101: {SellGold: 10}, 102: {SellGold: 10}},
 		decks: []DeckInfo{
 			{ArthurType: 1, IsActive: 1, CardUniqueIDs: []int64{1}},
 			{ArthurType: 2, IsActive: 1, CardUniqueIDs: []int64{2}, SupportCardUniqueIDs: []int64{2}},
+			{ArthurType: 5, IsActive: 1, CardUniqueIDs: []int64{3}, SupportCardUniqueIDs: []int64{4}},
 		},
 	}
-	if _, _, _, err := s.SellCards([]int64{1}, nil); err == nil {
+	if _, err := s.SellCards([]int64{1}, nil); err == nil {
 		t.Fatal("selected deck card must remain protected before A")
 	}
+	for _, id := range []int64{3, 4} {
+		if _, err := s.SellCards([]int64{id}, nil); err != ErrCardInDeck {
+			t.Fatalf("Alchemist main and support cards must remain protected before A, uid %d: %v", id, err)
+		}
+	}
 	s.highestDeckRank = 10
-	if _, _, _, err := s.SellCards([]int64{2}, nil); err == nil {
+	if _, err := s.SellCards([]int64{2}, nil); err == nil {
 		t.Fatal("all decks must be protected at A")
 	}
 	s.highestDeckRank = 9
-	if _, _, _, err := s.SellCards([]int64{2}, nil); err != nil {
+	if _, err := s.SellCards([]int64{2}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if len(s.cards) != 1 || s.decks[1].CardUniqueIDs[0] != 0 || s.decks[1].SupportCardUniqueIDs[0] != 0 {
+	if len(s.cards) != 3 || s.decks[1].CardUniqueIDs[0] != 0 || s.decks[1].SupportCardUniqueIDs[0] != 0 {
 		t.Fatal("consumed hidden-deck cards must not leave dangling references")
 	}
 }

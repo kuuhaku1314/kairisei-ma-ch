@@ -2,31 +2,36 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"kairisei.local/server/battlemodel"
 	"kairisei.local/server/internal/cdnsync"
 	"kairisei.local/server/internal/cnbootstrap"
 	"kairisei.local/server/internal/multiplayer"
+	"kairisei.local/server/internal/netstats"
 )
 
-const serverVersion = "1.3.8"
+const serverVersion = "2.0.0"
 
 type options struct {
 	showVersion       bool
 	cdnSyncConfig     string
+	imageStorage      string
 	cdnSyncDryRun     bool
 	cdnConfig         string
 	cdnManifestOutput string
@@ -34,6 +39,7 @@ type options struct {
 	clientProfile     string
 
 	requestLog                string
+	adminLogFile              string
 	cnSavePath                string
 	cnSaveSeedPath            string
 	cnAssetMapPath            string
@@ -57,7 +63,8 @@ type options struct {
 	cnCPKRoot                 string
 	cnImageRoot               string
 	cnCPKAliasPath            string
-	cnPatchRoots              stringListFlag
+	platformContent           stringListFlag
+	platformContentConfig     string
 	listenHost                string
 	advertiseHost             string
 	port                      int
@@ -81,6 +88,48 @@ func (values *stringListFlag) Set(value string) error {
 	return nil
 }
 
+// The assembled deployment already owns the selected profile list. Resolve only
+// that field here; the normal platform loader still validates every profile.
+func loadPlatformContentConfig(filename string) (stringListFlag, error) {
+	absolute, err := filepath.Abs(filename)
+	if err != nil {
+		return nil, err
+	}
+	root, err := filepath.EvalSymlinks(filepath.Dir(absolute))
+	if err != nil {
+		return nil, err
+	}
+	content, err := os.ReadFile(absolute)
+	if err != nil {
+		return nil, err
+	}
+	var config struct {
+		PlatformContents []string `json:"platform_contents"`
+	}
+	if err := json.Unmarshal(content, &config); err != nil {
+		return nil, err
+	}
+	if len(config.PlatformContents) == 0 {
+		return nil, errors.New("deployment platform_contents must contain at least one profile")
+	}
+	profiles := make(stringListFlag, 0, len(config.PlatformContents))
+	for _, name := range config.PlatformContents {
+		if name == "." || !filepath.IsLocal(name) || path.Clean(name) != name || strings.ContainsAny(name, "\\:\x00\r\n") {
+			return nil, fmt.Errorf("invalid deployment platform profile path %q", name)
+		}
+		resolved, err := filepath.EvalSymlinks(filepath.Join(root, filepath.FromSlash(name)))
+		if err != nil {
+			return nil, err
+		}
+		relative, err := filepath.Rel(root, resolved)
+		if err != nil || !filepath.IsLocal(relative) {
+			return nil, fmt.Errorf("deployment platform profile escapes package root: %q", name)
+		}
+		profiles = append(profiles, resolved)
+	}
+	return profiles, nil
+}
+
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	if err := run(os.Args[1:], logger); err != nil {
@@ -97,14 +146,16 @@ func run(arguments []string, logger *slog.Logger) error {
 	flags.StringVar(&opts.cdnManifestOutput, "export-cdn-manifest", "", "export client download object mapping and exit without starting the server")
 	flags.StringVar(&opts.cdnSyncConfig, "sync-cdn", "", "sync client resources using this JSON config, then enable CDN and exit; no game service or database")
 	flags.BoolVar(&opts.cdnSyncDryRun, "cdn-sync-dry-run", false, "check sync inputs locally without network or writes")
+	flags.StringVar(&opts.imageStorage, "cdn-sync-config", "", "optional cdn-sync.json whose storage keys let Admin sync operational images; missing or unfilled keeps it off")
 	flags.StringVar(&opts.resourceSet, "resource-set", "", "complete resource-set.json used for CDN export/sync")
 	flags.StringVar(&opts.shutdownEvent, "shutdown-event", "", "Windows local graceful shutdown event")
 	flags.StringVar(&opts.clientProfile, "client-profile", "", "explicit client profile")
 
 	flags.StringVar(&opts.requestLog, "request-log", "", "CN JSONL request capture")
+	flags.StringVar(&opts.adminLogFile, "admin-log-file", "", "current server JSON log file for read-only Admin search")
 	flags.StringVar(&opts.cnSavePath, "cn-save-path", "", "editable local CN character save")
 	flags.StringVar(&opts.cnSaveSeedPath, "cn-save-seed", "", "versioned local CN save migration seed")
-	flags.StringVar(&opts.cnAssetMapPath, "cn-asset-map", "", "generated official CN logical asset map")
+	flags.StringVar(&opts.cnAssetMapPath, "cn-asset-map", "", "CN logical asset metadata for Admin card presentation")
 	flags.StringVar(&opts.cnCardMasterPath, "cn-card-master", "", "normalized official CN card runtime master")
 	flags.StringVar(&opts.cnExploreMasterPath, "cn-explore-master", "", "normalized official CN Explore runtime master")
 	flags.StringVar(&opts.cnStoryMasterPath, "cn-story-master", "", "normalized official CN story runtime master")
@@ -125,7 +176,8 @@ func run(arguments []string, logger *slog.Logger) error {
 	flags.StringVar(&opts.cnCPKRoot, "cn-cpk-root", "", "read-only official CN CPK root")
 	flags.StringVar(&opts.cnImageRoot, "cn-image-root", "", "read-only enlarged card image root")
 	flags.StringVar(&opts.cnCPKAliasPath, "cn-cpk-aliases", "", "generated CN CPK logical alias manifest")
-	flags.Var(&opts.cnPatchRoots, "cn-patch-root", "read-only official CN patch root; repeat for source overlays")
+	flags.Var(&opts.platformContent, "platform-content", "target/Unity delivery.json; repeat per platform")
+	flags.StringVar(&opts.platformContentConfig, "platform-content-config", "", "assembled deployment.json; read platform_contents relative to its directory instead of -platform-content")
 	flags.StringVar(&opts.listenHost, "listen-host", "0.0.0.0", "local listen address")
 	flags.StringVar(&opts.advertiseHost, "advertise-host", "10.0.2.2", "host returned to client")
 	flags.IntVar(&opts.port, "port", 26020, "local HTTP port")
@@ -142,6 +194,16 @@ func run(arguments []string, logger *slog.Logger) error {
 		_, err := fmt.Fprintln(os.Stdout, "kairi-server "+serverVersion)
 		return err
 	}
+	if opts.platformContentConfig != "" {
+		if len(opts.platformContent) != 0 {
+			return errors.New("-platform-content-config and -platform-content cannot be combined")
+		}
+		profiles, err := loadPlatformContentConfig(opts.platformContentConfig)
+		if err != nil {
+			return fmt.Errorf("load platform content config: %w", err)
+		}
+		opts.platformContent = profiles
+	}
 	if opts.cdnSyncConfig != "" {
 		if opts.cdnManifestOutput != "" {
 			return errors.New("-sync-cdn and -export-cdn-manifest cannot be combined")
@@ -154,18 +216,23 @@ func run(arguments []string, logger *slog.Logger) error {
 		}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
-		return cdnsync.Run(ctx, cdnsync.Options{ConfigPath: opts.cdnSyncConfig, ResourceSet: opts.resourceSet, CDNConfigPath: opts.cdnConfig, DryRun: opts.cdnSyncDryRun}, os.Stdout)
+		return cdnsync.Run(ctx, cdnsync.Options{ConfigPath: opts.cdnSyncConfig, ResourceSet: opts.resourceSet, PlatformContent: []string(opts.platformContent), CDNConfigPath: opts.cdnConfig, DryRun: opts.cdnSyncDryRun}, os.Stdout)
 	}
 	if opts.cdnSyncDryRun {
 		return errors.New("-cdn-sync-dry-run requires -sync-cdn")
 	}
 	if opts.cdnManifestOutput != "" {
-		return cnbootstrap.ExportCDNManifest(opts.resourceSet, opts.cdnManifestOutput)
+		return cnbootstrap.ExportCDNManifest(opts.resourceSet, opts.cdnManifestOutput, opts.platformContent...)
 	}
 	if opts.resourceSet != "" {
 		return errors.New("-resource-set requires -export-cdn-manifest or -sync-cdn")
 	}
 	cdn, cdnErr := cnbootstrap.LoadCDNConfig(opts.cdnConfig)
+	// The game service never depends on upload keys: a faulty file only disables the Admin image sync.
+	imageStorage := cdnsync.LoadImageStorage(opts.imageStorage)
+	if imageStorage.Problem != "" {
+		logger.Warn("Admin image sync disabled", "config", opts.imageStorage, "problem", imageStorage.Problem)
+	}
 	if cdnErr != nil {
 		return cdnErr
 	}
@@ -206,95 +273,99 @@ func run(arguments []string, logger *slog.Logger) error {
 	}
 	defer closeEvent()
 	baseURL := "http://" + opts.advertiseHost + ":" + strconv.Itoa(opts.port)
-	var handler http.Handler
-	var multiplayerHub *multiplayer.Hub
-	var battleServer *multiplayer.Server
-	var err error
-	switch opts.clientProfile {
-	case "cn602-bootstrap":
-		if opts.cnBattleMasterPath == "" {
-			return errors.New("-cn-battle-master is required for cn602-bootstrap")
-		}
-		if opts.cnCombatCardPath == "" || opts.cnCombatMasterRoot == "" {
-			return errors.New("-cn-combat-card-master and -cn-combat-master-root are required for cn602-bootstrap")
-		}
-		if opts.cnPVPMasterPath == "" {
-			return errors.New("-cn-pvp-master is required for cn602-bootstrap")
-		}
-		if opts.cnPlayerProgressionPath == "" {
-			return errors.New("-cn-player-progression is required for cn602-bootstrap")
-		}
-		if opts.cnLoginBonusPath == "" {
-			return errors.New("-cn-login-bonus is required for cn602-bootstrap")
-		}
-		if opts.cnGachaBannerPath == "" || opts.cnFiveStarGachaBannerPath == "" || opts.cnHomeBannerPath == "" {
-			return errors.New("-cn-gacha-banner, -cn-five-star-gacha-banner and -cn-home-banner are required for cn602-bootstrap")
-		}
-		combatCatalog, catalogErr := multiplayer.LoadCombatCatalog(opts.cnCombatCardPath, opts.cnCombatMasterRoot)
-		if catalogErr != nil {
-			return fmt.Errorf("load CN combat catalog: %w", catalogErr)
-		}
-		multiplayerHub = multiplayer.NewHub()
-		if attachErr := multiplayerHub.AttachCombatCatalog(combatCatalog); attachErr != nil {
-			return fmt.Errorf("attach CN combat catalog: %w", attachErr)
-		}
-		battleServer, err = multiplayer.NewServer(multiplayerHub, logger)
-		if err == nil {
-			handler, err = cnbootstrap.New(cnbootstrap.Config{
-				Persistence: cnbootstrap.PersistenceConfig{
-					RequestLog: opts.requestLog,
-					SavePath:   opts.cnSavePath,
-					SeedPath:   opts.cnSaveSeedPath,
-				},
-				Resources: cnbootstrap.ResourcesConfig{
-					AssetMap:            opts.cnAssetMapPath,
-					GachaBanner:         opts.cnGachaBannerPath,
-					FiveStarGachaBanner: opts.cnFiveStarGachaBannerPath,
-					HomeBanner:          opts.cnHomeBannerPath,
-					CPKRoot:             opts.cnCPKRoot,
-					ImageRoot:           opts.cnImageRoot,
-					CPKAliases:          opts.cnCPKAliasPath,
-					PatchRoots:          []string(opts.cnPatchRoots),
-				},
-				Masters: cnbootstrap.MastersConfig{
-					Cards:             opts.cnCardMasterPath,
-					Explore:           opts.cnExploreMasterPath,
-					Story:             opts.cnStoryMasterPath,
-					Battle:            opts.cnBattleMasterPath,
-					Navi:              opts.cnNaviMasterPath,
-					Items:             opts.cnItemMasterPath,
-					Avatar:            opts.cnAvatarMasterPath,
-					Stamps:            opts.cnStampMasterPath,
-					Honors:            opts.cnHonorMasterPath,
-					PVP:               opts.cnPVPMasterPath,
-					PlayerProgression: opts.cnPlayerProgressionPath,
-					LoginBonus:        opts.cnLoginBonusPath,
-				},
-				Network: cnbootstrap.NetworkConfig{
-					AdvertiseHost: opts.advertiseHost,
-					HTTPPort:      opts.port,
-					BattleSV:      multiplayer.Endpoint{Host: opts.advertiseHost, Port: uint16(opts.battlePort)},
-				},
-				Multiplayer: multiplayerHub,
-				CDN:         cdn,
-				Logger:      logger,
-			})
-		}
-	default:
+	networkMetrics := &netstats.Counters{}
+	if opts.clientProfile != "cn602-bootstrap" {
 		return fmt.Errorf("unsupported client profile %q", opts.clientProfile)
 	}
+	if opts.cnBattleMasterPath == "" {
+		return errors.New("-cn-battle-master is required for cn602-bootstrap")
+	}
+	if opts.cnCombatCardPath == "" || opts.cnCombatMasterRoot == "" {
+		return errors.New("-cn-combat-card-master and -cn-combat-master-root are required for cn602-bootstrap")
+	}
+	if opts.cnPVPMasterPath == "" {
+		return errors.New("-cn-pvp-master is required for cn602-bootstrap")
+	}
+	if opts.cnPlayerProgressionPath == "" {
+		return errors.New("-cn-player-progression is required for cn602-bootstrap")
+	}
+	if opts.cnLoginBonusPath == "" {
+		return errors.New("-cn-login-bonus is required for cn602-bootstrap")
+	}
+	if opts.cnGachaBannerPath == "" || opts.cnFiveStarGachaBannerPath == "" || opts.cnHomeBannerPath == "" {
+		return errors.New("-cn-gacha-banner, -cn-five-star-gacha-banner and -cn-home-banner are required for cn602-bootstrap")
+	}
+	combatCatalog, catalogErr := multiplayer.LoadCombatCatalog(opts.cnCombatCardPath, opts.cnCombatMasterRoot)
+	if catalogErr != nil {
+		return fmt.Errorf("load CN combat catalog: %w", catalogErr)
+	}
+	multiplayerHub := multiplayer.NewHub()
+	if attachErr := multiplayerHub.AttachCombatCatalog(combatCatalog); attachErr != nil {
+		return fmt.Errorf("attach CN combat catalog: %w", attachErr)
+	}
+	battleServer, err := multiplayer.NewServer(multiplayerHub, logger)
 	if err != nil {
 		return err
 	}
+	handler, err := cnbootstrap.New(cnbootstrap.Config{
+		NetworkMetrics:    networkMetrics,
+		AdminLogFile:      opts.adminLogFile,
+		CombatDefinitions: (*battlemodel.Definitions)(combatCatalog),
+		Persistence: cnbootstrap.PersistenceConfig{
+			RequestLog: opts.requestLog,
+			SavePath:   opts.cnSavePath,
+			SeedPath:   opts.cnSaveSeedPath,
+		},
+		Resources: cnbootstrap.ResourcesConfig{
+			AssetMap:            opts.cnAssetMapPath,
+			GachaBanner:         opts.cnGachaBannerPath,
+			FiveStarGachaBanner: opts.cnFiveStarGachaBannerPath,
+			HomeBanner:          opts.cnHomeBannerPath,
+			CPKRoot:             opts.cnCPKRoot,
+			ImageRoot:           opts.cnImageRoot,
+			CPKAliases:          opts.cnCPKAliasPath,
 
-	if closer, ok := handler.(io.Closer); ok {
-		defer func() {
-			if err := closer.Close(); err != nil {
-				logger.Error("close SQLite connection pools", "error", err)
-			}
-		}()
+			PlatformDeliveries: []string(opts.platformContent),
+		},
+		Masters: cnbootstrap.MastersConfig{
+			Cards:             opts.cnCardMasterPath,
+			Explore:           opts.cnExploreMasterPath,
+			Story:             opts.cnStoryMasterPath,
+			Battle:            opts.cnBattleMasterPath,
+			Navi:              opts.cnNaviMasterPath,
+			Items:             opts.cnItemMasterPath,
+			Avatar:            opts.cnAvatarMasterPath,
+			Stamps:            opts.cnStampMasterPath,
+			Honors:            opts.cnHonorMasterPath,
+			PVP:               opts.cnPVPMasterPath,
+			PlayerProgression: opts.cnPlayerProgressionPath,
+			LoginBonus:        opts.cnLoginBonusPath,
+		},
+		Network: cnbootstrap.NetworkConfig{
+			AdvertiseHost: opts.advertiseHost,
+			HTTPPort:      opts.port,
+			BattleSV:      multiplayer.Endpoint{Host: opts.advertiseHost, Port: uint16(opts.battlePort)},
+		},
+		Multiplayer:  multiplayerHub,
+		CDN:          cdn,
+		ImageStorage: imageStorage,
+		Logger:       logger,
+	})
+	if err != nil {
+		return err
 	}
+	defer func() {
+		if err := handler.Close(); err != nil {
+			logger.Error("close SQLite connection pools", "error", err)
+		}
+	}()
+	// The synchronized Unity client uses HTTP/2 prior knowledge on plain HTTP.
+	// Keep HTTP/1 for resources, browsers and operational clients on this port.
+	protocols := new(http.Protocols)
+	protocols.SetHTTP1(true)
+	protocols.SetUnencryptedHTTP2(true)
 	server := &http.Server{
+		Protocols:         protocols,
 		Addr:              opts.listenHost + ":" + strconv.Itoa(opts.port),
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
@@ -306,23 +377,22 @@ func run(arguments []string, logger *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", server.Addr, err)
 	}
+	listener = networkMetrics.HTTP.WrapListener(listener)
 	defer listener.Close()
 	battleAddress := opts.listenHost + ":" + strconv.Itoa(opts.battlePort)
 	battleListener, err := net.Listen("tcp", battleAddress)
 	if err != nil {
 		return fmt.Errorf("listen on BattleSv %s: %w", battleAddress, err)
 	}
+	battleListener = networkMetrics.BattleTCP.WrapListener(battleListener)
+	battleListener = peerFilteredListener{Listener: battleListener, blocked: handler.IPBlocked}
 	defer battleListener.Close()
 	var adminServer *http.Server
 	var adminListener net.Listener
 	if opts.adminPort != 0 {
-		provider, ok := handler.(interface{ AdminHandler() http.Handler })
-		if !ok || provider.AdminHandler() == nil {
-			return errors.New("selected client profile does not provide Admin Web")
-		}
 		adminServer = &http.Server{
 			Addr:              net.JoinHostPort(opts.adminListenHost, strconv.Itoa(opts.adminPort)),
-			Handler:           provider.AdminHandler(),
+			Handler:           handler.AdminHandler(),
 			ReadHeaderTimeout: 5 * time.Second,
 			ReadTimeout:       15 * time.Second,
 			WriteTimeout:      30 * time.Second,
@@ -332,12 +402,16 @@ func run(arguments []string, logger *slog.Logger) error {
 		if err != nil {
 			return fmt.Errorf("listen on Admin Web %s: %w", adminServer.Addr, err)
 		}
+		adminListener = networkMetrics.Admin.WrapListener(adminListener)
 		defer adminListener.Close()
+	}
+	if err := handler.Activate(); err != nil {
+		return fmt.Errorf("activate account service: %w", err)
 	}
 	attributes := []any{"listen", server.Addr, "advertise_base_url", baseURL}
 	attributes = append(attributes, "client_profile", opts.clientProfile, "request_log", opts.requestLog, "battle_listen", battleListener.Addr().String(), "battle_advertise", net.JoinHostPort(opts.advertiseHost, strconv.Itoa(opts.battlePort)))
 	if adminListener != nil {
-		attributes = append(attributes, "admin_listen", adminListener.Addr().String())
+		attributes = append(attributes, "admin_listen", adminListener.Addr().String(), "admin_image_sync", imageStorage.Credentials != nil)
 	}
 	logger.Info("server ready", attributes...)
 	stop := make(chan os.Signal, 1)
@@ -356,17 +430,25 @@ func run(arguments []string, logger *slog.Logger) error {
 		logger.Info("server stopping; draining requests and SQLite transactions")
 		// Close all admission paths together. Shared SQLite pools close on
 		// return only after every active HTTP/Admin/BattleSv operation drains.
+		drainContext, cancelDrain := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancelDrain()
 		var draining sync.WaitGroup
 		for _, service := range []*http.Server{server, adminServer} {
 			if service != nil {
 				draining.Add(1)
-				go func() { defer draining.Done(); _ = service.Shutdown(context.Background()) }()
+				go func() {
+					defer draining.Done()
+					if err := service.Shutdown(drainContext); err != nil {
+						logger.Warn("HTTP shutdown grace period ended; closing connections", "address", service.Addr, "error", err)
+						_ = service.Close()
+					}
+				}()
 			}
 		}
 		_ = battleListener.Close()
 		_ = battleServer.Close()
 		draining.Wait()
-		logger.Info("server stopped; active operations drained")
+		logger.Info("server stopped; HTTP shutdown completed")
 	}
 	select {
 	case <-requested:

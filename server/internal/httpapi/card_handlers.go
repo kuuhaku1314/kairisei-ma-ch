@@ -48,21 +48,30 @@ func (a *API) cardShow(writer http.ResponseWriter, request *http.Request) {
 		}
 	}
 	_, unlockedSupportSlots := a.account.SupportDeckState()
-	supportSlots := make([]wireSupportSlot, 0, 4)
-	for arthurType := int8(1); arthurType <= 4; arthurType++ {
+	supportSlots := make([]wireSupportSlot, 0, len(unlockedSupportSlots))
+	for index, unlocked := range unlockedSupportSlots {
 		supportSlots = append(supportSlots, wireSupportSlot{
-			ArthurType:    arthurType,
-			UnlockSlotNum: unlockedSupportSlots[arthurType-1],
+			ArthurType:    int8(index + 1),
+			UnlockSlotNum: unlocked,
 		})
 	}
-	a.writeProtocol(writer, wireCardShow{
-		Cards:             toWireCards(cards),
+	view := CardShowView{
+		Cards:             a.toWireCards(cards),
 		StackCards:        toWireStackCards(stackCards),
 		Decks:             toWireDecks(decks),
 		Avatars:           wireAvatars,
 		SupportSlots:      supportSlots,
 		CardCollectionNum: len(a.account.CardCollectionState()),
-	})
+	}
+	var method any = view
+	if a.cardShowProjection != nil {
+		method, err = a.cardShowProjection(view)
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "project card response")
+			return
+		}
+	}
+	a.writeProtocol(writer, method)
 }
 
 func (a *API) sphereShow(writer http.ResponseWriter, _ *http.Request) {
@@ -71,7 +80,7 @@ func (a *API) sphereShow(writer http.ResponseWriter, _ *http.Request) {
 
 func (a *API) cardContainerShow(writer http.ResponseWriter, _ *http.Request) {
 	a.writeProtocol(writer, wireCardContainerShow{
-		Cards: toWireCards(a.account.ContainerShow()),
+		Cards: a.toWireCards(a.account.ContainerShow()),
 	})
 }
 
@@ -93,7 +102,7 @@ func (a *API) cardMove(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	a.writeProtocol(writer, wireCardMove{
-		UpdatedCards: toWireCards(cards),
+		UpdatedCards: a.toWireCards(cards),
 		UpdatedDecks: toWireDecks(decks),
 	})
 }
@@ -140,7 +149,7 @@ func (a *API) cardContainerSell(writer http.ResponseWriter, request *http.Reques
 		a.writeStoreError(writer, err)
 		return
 	}
-	getGold, gold, err := a.account.SellContainerCards(payload.UniqueIDs)
+	result, err := a.account.SellContainerCards(payload.UniqueIDs)
 	if err != nil {
 		a.writeStoreError(writer, err)
 		return
@@ -149,9 +158,12 @@ func (a *API) cardContainerSell(writer http.ResponseWriter, request *http.Reques
 		return
 	}
 	a.writeProtocol(writer, map[string]any{
-		"card_container_num": a.account.ContainerCardCount(),
-		"get_gold":           getGold,
-		"gold":               gold,
+		"card_container_num":               a.account.ContainerCardCount(),
+		"get_gold":                         result.GetGold,
+		"gold":                             result.Gold,
+		"extract_reward":                   battleResultRewardsWire(result.Extract.Rewards),
+		"is_extract_reward_in_present_box": game.BoolInt(result.Extract.InPresentBox),
+		"decks":                            toWireDecks(result.Decks),
 	})
 }
 
@@ -172,7 +184,7 @@ func (a *API) cardLoveUp(writer http.ResponseWriter, request *http.Request) {
 	if !a.persistOrError(writer) {
 		return
 	}
-	card := toWireCard(result.Card)
+	card := a.toWireCard(result.Card)
 	a.writeProtocol(writer, map[string]any{
 		"base_card": card,
 		"item":      a.itemInfosWire(result.Items),
@@ -240,7 +252,7 @@ func (a *API) cardDeckSet(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	a.writeProtocol(writer, wireDeckSet{
-		Cards: toWireCards(cards),
+		Cards: a.toWireCards(cards),
 		Decks: toWireDecks(decks),
 	})
 }
@@ -310,8 +322,8 @@ func (a *API) cardFusion(writer http.ResponseWriter, request *http.Request) {
 	}
 	a.writeProtocol(writer, map[string]any{
 		"result_card": map[string]any{
-			"card":         toWireCard(resultCard),
-			"old_card":     toWireCard(oldCard),
+			"card":         a.toWireCard(resultCard),
+			"old_card":     a.toWireCard(oldCard),
 			"success_type": successType,
 			"exp_up":       experienceUp,
 			"fame_up":      fameUp,
@@ -350,7 +362,7 @@ func (a *API) cardEvolution(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	result, gold, decks, err := a.account.EvolveCard(
-		baseUniqueID, toCardID, materialUniqueIDs, containerUniqueIDs, append(cardIDs, itemIDs...),
+		baseUniqueID, toCardID, materialUniqueIDs, containerUniqueIDs, cardIDs, itemIDs,
 	)
 	if err != nil {
 		a.writeStoreError(writer, err)
@@ -360,7 +372,7 @@ func (a *API) cardEvolution(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	a.writeProtocol(writer, map[string]any{
-		"base_card": toWireCard(result),
+		"base_card": a.toWireCard(result),
 		"gold":      gold,
 		"card_num":  a.account.CardCount(),
 		"decks":     toWireDecks(decks),
@@ -384,7 +396,7 @@ func (a *API) cardSell(writer http.ResponseWriter, request *http.Request) {
 		a.writeStoreError(writer, err)
 		return
 	}
-	getGold, gold, decks, err := a.account.SellCards(uniqueIDs, stackUses)
+	result, err := a.account.SellCards(uniqueIDs, stackUses)
 	if err != nil {
 		a.writeStoreError(writer, err)
 		return
@@ -394,10 +406,10 @@ func (a *API) cardSell(writer http.ResponseWriter, request *http.Request) {
 	}
 	a.writeProtocol(writer, map[string]any{
 		"card_num":                         a.account.CardCount(),
-		"get_gold":                         getGold,
-		"gold":                             gold,
-		"extract_reward":                   []any{},
-		"is_extract_reward_in_present_box": 0,
-		"decks":                            toWireDecks(decks),
+		"get_gold":                         result.GetGold,
+		"gold":                             result.Gold,
+		"extract_reward":                   battleResultRewardsWire(result.Extract.Rewards),
+		"is_extract_reward_in_present_box": game.BoolInt(result.Extract.InPresentBox),
+		"decks":                            toWireDecks(result.Decks),
 	})
 }

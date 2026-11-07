@@ -16,9 +16,12 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"kairisei.local/server/internal/accountstore"
+	"kairisei.local/server/internal/game"
 	"kairisei.local/server/internal/gamestate"
 	"kairisei.local/server/internal/masterdata"
 	"kairisei.local/server/internal/multiplayer"
+	"kairisei.local/server/internal/netstats"
+	"kairisei.local/server/internal/objectstore"
 )
 
 // AccountRuntime coordinates mutations with in-flight gameplay and drops cached
@@ -29,21 +32,28 @@ type AccountRuntime interface {
 }
 
 type Config struct {
-	Accounts      *accountstore.Accounts
-	Runtime       AccountRuntime
-	Operations    *Operations
-	BattleMaster  string
-	CardMaster    string
-	ItemMaster    string
-	Multiplayer   *multiplayer.Hub
-	AdvertiseHost string
-	GamePort      int
-	Logger        *slog.Logger
-	Progression   gamestate.PlayerProgressionPolicy
-	GachaBanners  map[string]string
-	AssetMaps     []string
+	Accounts       *accountstore.Accounts
+	Runtime        AccountRuntime
+	Operations     *Operations
+	BattleMaster   string
+	CardMaster     string
+	ItemMaster     string
+	PVPRanks       []game.PVPRankConfig
+	Multiplayer    *multiplayer.Hub
+	AdvertiseHost  string
+	GamePort       int
+	Logger         *slog.Logger
+	NetworkMetrics *netstats.Counters
+	RuntimeLogPath string
+	Progression    gamestate.PlayerProgressionPolicy
+	GachaBanners   map[string]string
+	AssetMaps      []string
 	// GachaCoverDir is the writable folder for uploaded pool covers (next to the save database).
 	GachaCoverDir string
+	// HomeBannerDir is the writable folder for uploaded home banners (next to the save database).
+	HomeBannerDir string
+	// ImageStorage is the optional cdn-sync.json connection for 同步运营图片; unset leaves it off.
+	ImageStorage objectstore.Setting
 }
 
 func New(config Config) (http.Handler, error) {
@@ -167,7 +177,8 @@ func New(config Config) (http.Handler, error) {
 				ImageURL:      "/gacha-assets/" + gacha.BannerKey + ".png",
 				PaymentItemID: gacha.PayTypeID, PaymentItem: payment,
 				Price: gacha.Price, DrawCount: gacha.CardNum,
-				CardCount: len(gacha.CardIDs) + len(gacha.RewardPool),
+				CardCount:   len(gacha.CardIDs) + len(gacha.RewardPool),
+				CategoryNum: gacha.CategoryNum,
 			}
 			presetsByGroup[gacha.GroupID] = preset
 		} else if preset.PublicationKey != gacha.PublicationKey {
@@ -187,19 +198,28 @@ func New(config Config) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	hasAlchemistCards := false
+	for _, card := range cardMaster.CardTemplates {
+		if card.RarityPlus == 4 {
+			hasAlchemistCards = true
+			break
+		}
+	}
 	combatCardPath := filepath.Join(filepath.Dir(config.CardMaster), "cn602-card-master", "card.csv")
 	if _, statErr := os.Stat(combatCardPath); statErr == nil {
-		info, err := multiplayer.LoadOperationsCardCatalog(combatCardPath, filepath.Join(filepath.Dir(config.BattleMaster), "cn602-battle-master"))
+		var alchemistPaths []string
+		if hasAlchemistCards {
+			alchemistPaths = append(alchemistPaths, filepath.Join(filepath.Dir(combatCardPath), "card_alchemist.csv"))
+		}
+		info, err := multiplayer.LoadOperationsCardCatalog(combatCardPath, filepath.Join(filepath.Dir(config.BattleMaster), "cn602-battle-master"), alchemistPaths...)
 		if err != nil {
 			return nil, fmt.Errorf("load admin card details: %w", err)
 		}
-		for i := range catalog {
-			if catalog[i].Kind == "card" {
-				if detail, ok := info[catalog[i].RewardTypeID]; ok {
-					catalog[i].Combat = &detail
-				}
-			}
+		if err := attachAdminCardDetails(catalog, cardMaster.CardTemplates, info); err != nil {
+			return nil, err
 		}
+	} else if os.IsNotExist(statErr) && hasAlchemistCards {
+		return nil, errors.New("alchemist card combat definitions are unavailable")
 	} else if !os.IsNotExist(statErr) {
 		return nil, statErr
 	}
@@ -229,7 +249,7 @@ func New(config Config) (http.Handler, error) {
 				}
 			}
 			catalog = append(catalog, AdminCatalogEntry{Kind: kind, RewardType: definition.Type, RewardTypeID: definition.ID,
-				Name: definition.Name, Detail: definition.Detail, PictID: definition.PictID, ImageURL: imageURL})
+				Name: definition.Name, Detail: definition.Detail, PictID: definition.PictID, ImageURL: imageURL, StampKind: definition.StampKind})
 		}
 	}
 	catalogByKey := make(map[string]AdminCatalogEntry, len(catalog))
@@ -279,9 +299,13 @@ func New(config Config) (http.Handler, error) {
 		assetsRoot: assetsRoot, assetURLs: assetURLs,
 		knownGroups: knownGroups, bossCount: len(knownBosses),
 		multiplayerHub: config.Multiplayer, advertiseHost: config.AdvertiseHost,
-		gamePort: config.GamePort, logger: config.Logger, progression: config.Progression,
-		gachaPresets: gachaPresets, gachaCoverDir: config.GachaCoverDir,
-		gachaBannerPaths: config.GachaBanners,
+		gamePort: config.GamePort, logger: config.Logger, progression: config.Progression, pvpRanks: config.PVPRanks,
+		networkMetrics: config.NetworkMetrics,
+		gachaPresets:   gachaPresets, gachaCoverDir: config.GachaCoverDir, homeBannerDir: config.HomeBannerDir,
+		gachaBannerPaths: config.GachaBanners, imageStorage: config.ImageStorage, imageSync: &imageSyncState{},
+	}
+	if config.RuntimeLogPath != "" {
+		admin.runtimeLog = &runtimeLogReader{path: config.RuntimeLogPath}
 	}
 	if err := admin.validateStoredGachas(); err != nil {
 		return nil, err
@@ -315,6 +339,8 @@ func New(config Config) (http.Handler, error) {
 	router.Get("/api/maintenance", admin.getMaintenance)
 	router.Put("/api/maintenance", admin.setMaintenance)
 	router.Post("/api/maintenance/cleanup", admin.cleanupOperationalState)
+	router.Get("/api/maintenance/history", admin.getMaintenanceHistory)
+	router.Post("/api/maintenance/battles/interrupt", admin.interruptBattles)
 	router.Get("/api/evolution-policy", admin.evolutionEditor)
 	router.Put("/api/evolution-policy", admin.saveEvolutionPolicy)
 	router.Get("/api/player-policy", admin.playerPolicy)
@@ -325,8 +351,22 @@ func New(config Config) (http.Handler, error) {
 		w.Header().Set("Cache-Control", "no-store")
 		_, _ = w.Write(adminPlayerPolicyJS)
 	})
+	router.Get("/home-banners.js", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		_, _ = w.Write(adminHomeBannersJS)
+	})
 	router.Get("/", admin.index)
-	for path, content := range map[string][]byte{"/admin.js": adminJS, "/accounts.js": adminAccountsJS, "/mail.js": adminMailJS, "/settings.js": adminSettingsJS, "/evolution.js": adminEvolutionJS, "/insights.js": adminInsightsJS, "/admin.css": adminCSS} {
+	for path, content := range map[string][]byte{
+		"/admin.js": adminJS, "/accounts.js": adminAccountsJS, "/mail.js": adminMailJS, "/settings.js": adminSettingsJS,
+		"/evolution.js": adminEvolutionJS, "/insights.js": adminInsightsJS, "/kit.js": adminKitJS, "/missions.js": adminMissionsJS,
+		"/gift-codes.js": adminGiftCodesJS, "/pool-rules.js": adminPoolRulesJS, "/maintenance-history.js": adminMaintenanceHistoryJS,
+		"/image-sync.js":   adminImageSyncJS,
+		"/access.js":       adminAccessJS,
+		"/runtime-logs.js": adminRuntimeLogsJS,
+		"/pool-gifts.js":   adminPoolGiftsJS,
+		"/admin.css":       adminCSS, "/editors.css": adminEditorsCSS,
+	} {
 		router.Get(path, func(w http.ResponseWriter, _ *http.Request) {
 			contentType := "text/javascript; charset=utf-8"
 			if strings.HasSuffix(path, ".css") {
@@ -343,6 +383,15 @@ func New(config Config) (http.Handler, error) {
 		writer.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 		_, _ = writer.Write(adminOperationsJS)
 	})
+	router.Get("/api/gift-code-batches", admin.giftBatches)
+	router.Post("/api/gift-code-batches", admin.saveGiftBatch)
+	router.Post("/api/gift-codes/generate", admin.generateGiftCodes)
+	router.Post("/api/gift-codes/state", admin.changeGiftCode)
+	router.Get("/api/gift-code-batches/{batchID}/codes", admin.listGiftCodes)
+	router.Get("/api/accounts/{userID}/missions", admin.accountMissions)
+	router.Get("/api/mission-series", admin.missionSeriesList)
+	router.Get("/api/mission-targets", admin.missionTargets)
+	router.Post("/api/mission-series", admin.missionSeriesAction)
 	router.Post("/api/mail-preview", admin.mailPreview)
 	router.Post("/api/mail-batches/preview", admin.previewMailBatch)
 	router.Post("/api/mail-batches", admin.createMailBatch)
@@ -351,6 +400,7 @@ func New(config Config) (http.Handler, error) {
 	router.Post("/api/mail-batches/{batchID}/run", admin.runMailBatch)
 	router.Get("/api/health", admin.health)
 	router.Get("/api/status", admin.status)
+	router.Get("/api/runtime-logs", admin.getRuntimeLogs)
 	router.Get("/api/settings", admin.runtimeSettings)
 	router.Get("/content.js", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
@@ -362,15 +412,29 @@ func New(config Config) (http.Handler, error) {
 	router.Get("/api/boss-rules", admin.bossRules)
 	router.Put("/api/boss-rules", admin.saveBossRules)
 	router.Put("/api/boss-drops", admin.saveDropEditor)
+	router.Get("/tower-drops.js", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		_, _ = w.Write(adminTowerDropsJS)
+	})
+	router.Get("/api/tower-drops", admin.towerDropEditor)
+	router.Put("/api/tower-drops", admin.saveTowerDropEditor)
 	router.Get("/api/exchanges", admin.exchangeEditor)
 	router.Put("/api/exchanges/{shopID}", admin.saveExchangeEditor)
 	router.Delete("/api/exchanges/{shopID}", admin.changeExchangeDeletion)
 	router.Post("/api/exchanges/{shopID}/restore", admin.changeExchangeDeletion)
 	router.Put("/api/settings", admin.setRuntimeSettings)
+	router.Get("/api/settings/ip-blacklist", admin.ipBlacklist)
+	router.Put("/api/settings/ip-blacklist", admin.setIPBlacklist)
+	router.Get("/api/settings/login-whitelist", admin.loginWhitelist)
+	router.Put("/api/settings/login-whitelist", admin.setLoginWhitelist)
+	router.Get("/api/settings/module-switches", admin.moduleSwitches)
+	router.Put("/api/settings/module-switches", admin.setModuleSwitches)
 	router.Put("/api/item-shop", admin.setItemShop)
 	router.Get("/api/accounts", admin.accountList)
 	router.Post("/api/accounts/resolve", admin.resolveAccounts)
 	router.Get("/api/accounts/{userID}", admin.accountDetail)
+	router.Put("/api/accounts/{userID}/login-block", admin.changeLoginBlock)
+	router.Delete("/api/accounts/{userID}/login-block", admin.changeLoginBlock)
 	router.Post("/api/accounts/{userID}/grant", admin.grantAccountResources)
 	router.Post("/api/accounts/{userID}/mail", admin.sendAccountMail)
 	router.Get("/api/accounts/{userID}/mail", admin.listAccountMail)
@@ -388,6 +452,11 @@ func New(config Config) (http.Handler, error) {
 	router.Post("/api/gacha-pools/{gachaID}/{action:delete|restore}", admin.changeCustomGachaDeletion)
 	router.Post("/api/gacha-covers", admin.uploadGachaCover)
 	router.Get("/gacha-covers/{file}", ServeGachaCover(config.GachaCoverDir))
+	router.Post("/api/home-banners", admin.uploadHomeBanner)
+	router.Get("/home-banners/{file}", ServeHomeBanner(config.HomeBannerDir))
+	router.Get("/api/image-sync", admin.imageSyncStatus)
+	router.Post("/api/image-sync", admin.startImageSync)
+	router.Post("/api/image-sync/activate", admin.activateImageSync)
 	router.Post("/api/gacha-editor/{action}", admin.gachaEditorAction)
 	router.Post("/api/gacha-editor/group/{action:draft|publish|discard}", admin.gachaGroupAction)
 	router.Get("/api/gacha-presets", admin.gachaPresetList)
@@ -398,5 +467,5 @@ func New(config Config) (http.Handler, error) {
 	router.NotFound(func(writer http.ResponseWriter, _ *http.Request) {
 		WriteAdminError(writer, http.StatusNotFound, "admin route not found")
 	})
-	return router, nil
+	return &lifecycleHandler{Handler: router, images: admin.imageSync}, nil
 }

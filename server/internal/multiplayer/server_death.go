@@ -7,7 +7,7 @@ func detachDeadParticipantsLocked(current *room) ([]*clientConn, bool) {
 	peers := []*clientConn{}
 	changed := false
 	for slot := 1; slot <= maxRoomMembers; slot++ {
-		if current.engine.players[slot-1].HP > 0 {
+		if current.engine.MemberAlive(slot) {
 			continue
 		}
 		if peer := current.connections[slot]; peer != nil {
@@ -19,6 +19,7 @@ func detachDeadParticipantsLocked(current *room) ([]*clientConn, bool) {
 		}
 		if current.comebackTokens[slot] != "" || !current.disconnectedUntil[slot].IsZero() {
 			delete(current.comebackTokens, slot)
+			delete(current.pendingComebackTokens, slot)
 			delete(current.disconnectedUntil, slot)
 			changed = true
 		}

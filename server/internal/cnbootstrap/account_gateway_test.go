@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"kairisei.local/server/internal/accountstore"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -20,11 +21,20 @@ import (
 
 func TestGuestLoginCancelledRequestDoesNotCreateAccount(t *testing.T) {
 	accounts := testfixture.NewFriendCapacityTestAccounts(t)
+	if err := accounts.AttachCreationPolicy(func() accountstore.CreationPolicy {
+		return accountstore.CreationPolicy{DailyLimit: 10, VerificationBits: 0}
+	}); err != nil {
+		t.Fatal(err)
+	}
 	const uuid = "d5750000-0000-4000-8000-000000000099"
-	login := cnBootstrapLogin(accounts, "127.0.0.1", 26020, CDNConfig{}, "test", "test")
+	profiles, err := loadPlatformDeliveries([]string{writePlatformFixture(t, t.TempDir(), "StandaloneWindows64", []byte("menu"))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	login := platformClientLogin(accounts, "127.0.0.1", 26020, CDNConfig{}, "test", profiles)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	r := httptest.NewRequest("POST", "/loginSDK.php", strings.NewReader(`{"uuid":"`+uuid+`","clver":"`+cnMinimumClientVersion+`"}`)).WithContext(ctx)
+	r := httptest.NewRequest("POST", "/local/client/login", strings.NewReader(`{"uuid":"`+uuid+`","clver":"`+cnMinimumClientVersion+`","resource_platform":"StandaloneWindows64","unity_version":"6000.3.26f1"}`)).WithContext(ctx)
 	login(httptest.NewRecorder(), r)
 	if binding, err := accounts.AccountBinding(uuid); err != nil || binding.UserID != 0 {
 		t.Fatalf("cancelled guest request created identity: %+v %v", binding, err)
@@ -33,10 +43,19 @@ func TestGuestLoginCancelledRequestDoesNotCreateAccount(t *testing.T) {
 
 func TestGuestLoginCancellationWhileWaitingAndStableRetries(t *testing.T) {
 	accounts := testfixture.NewFriendCapacityTestAccounts(t)
+	if err := accounts.AttachCreationPolicy(func() accountstore.CreationPolicy {
+		return accountstore.CreationPolicy{DailyLimit: 10, VerificationBits: 0}
+	}); err != nil {
+		t.Fatal(err)
+	}
 	const uuid = "d5750000-0000-4000-8000-000000000098"
-	login := cnBootstrapLogin(accounts, "127.0.0.1", 26020, CDNConfig{}, "test", "test")
+	profiles, err := loadPlatformDeliveries([]string{writePlatformFixture(t, t.TempDir(), "StandaloneWindows64", []byte("menu"))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	login := platformClientLogin(accounts, "127.0.0.1", 26020, CDNConfig{}, "test", profiles)
 	request := func() *http.Request {
-		return httptest.NewRequest("POST", "/loginSDK.php", strings.NewReader(`{"uuid":"`+uuid+`","clver":"`+cnMinimumClientVersion+`"}`))
+		return httptest.NewRequest("POST", "/local/client/login", strings.NewReader(`{"uuid":"`+uuid+`","clver":"`+cnMinimumClientVersion+`","resource_platform":"StandaloneWindows64","unity_version":"6000.3.26f1"}`))
 	}
 	db, err := accounts.Database().Open()
 	if err != nil {
@@ -100,8 +119,13 @@ func TestGuestLoginCancellationWhileWaitingAndStableRetries(t *testing.T) {
 // accounts. Heap figures are evidence only, not a flaky process-RSS assertion.
 func TestAccountGatewayFailuresDoNotRetainAccounts(t *testing.T) {
 	accounts := testfixture.NewFriendCapacityTestAccounts(t)
+	if err := accounts.AttachCreationPolicy(func() accountstore.CreationPolicy {
+		return accountstore.CreationPolicy{DailyLimit: 10, VerificationBits: 0}
+	}); err != nil {
+		t.Fatal(err)
+	}
 	const uuid = "d5750000-0000-4000-8000-000000000001"
-	if _, err := accounts.BindAccount(uuid, "retention_probe", "correct-password"); err != nil {
+	if _, err := accounts.BindInternalAccount(uuid, "retention_probe", "correct-password"); err != nil {
 		t.Fatal(err)
 	}
 	gw := newCNAccountGateway(accounts)
@@ -157,7 +181,13 @@ func TestAccountGatewayFailuresDoNotRetainAccounts(t *testing.T) {
 }
 
 func TestAccountGatewayRequiresBoundedPrivateBody(t *testing.T) {
-	gateway := newCNAccountGateway(testfixture.NewFriendCapacityTestAccounts(t))
+	accounts := testfixture.NewFriendCapacityTestAccounts(t)
+	if err := accounts.AttachCreationPolicy(func() accountstore.CreationPolicy {
+		return accountstore.CreationPolicy{DailyLimit: 10, VerificationBits: 0}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	gateway := newCNAccountGateway(accounts)
 	body := `{"uuid":"d4640000-0000-4000-8000-000000000003","username":"new_guest","password":"new-password"}`
 	request := httptest.NewRequest("POST", "/local/account/bind", strings.NewReader(body))
 	response := httptest.NewRecorder()

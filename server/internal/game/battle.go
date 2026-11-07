@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"kairisei.local/server/battlecodec"
 	"kairisei.local/server/internal/gamestate"
 )
 
@@ -19,7 +20,6 @@ type TeamBattleContinueReport struct {
 
 const (
 	MaxTeamBattleSegments            = 64
-	nativeBattleCommandFieldCount    = 21
 	nativeBattleCommandMaxOpcode     = 34
 	nativeBattleCommandStartOpcode   = 22
 	NativePVPCommandStartOpcode      = 23
@@ -101,10 +101,10 @@ func ValidateNativeBattleCommandStart(command string, required bool, expectedSta
 			continue
 		}
 		fields := strings.Split(line, ",")
-		if len(fields) != nativeBattleCommandFieldCount {
+		if len(fields) != battlecodec.InputCommandFieldCount {
 			return errors.New("native battle command row has an invalid field count")
 		}
-		values := make([]int64, nativeBattleCommandFieldCount)
+		values := make([]int64, battlecodec.InputCommandFieldCount)
 		for index, field := range fields {
 			value, err := strconv.ParseInt(strings.TrimSpace(field), 10, 32)
 			if err != nil {
@@ -152,121 +152,6 @@ func RentalPartnerCount(selected []TeamBattleResultPartner) int {
 		}
 	}
 	return count
-}
-
-func TeamBattleSoloBossBPUse(configuration json.RawMessage, bossID int) (int, bool) {
-	if bossID <= 0 {
-		return 0, false
-	}
-	var top map[string]json.RawMessage
-	if json.Unmarshal(configuration, &top) != nil {
-		return 0, false
-	}
-	for _, groupKey := range []string{"9", "10", "11", "12"} {
-		var groups []map[string]json.RawMessage
-		if json.Unmarshal(top[groupKey], &groups) != nil {
-			continue
-		}
-		for _, group := range groups {
-			var bosses []map[string]json.RawMessage
-			if json.Unmarshal(group["10"], &bosses) != nil {
-				continue
-			}
-			for _, boss := range bosses {
-				var current, bpUse int
-				if json.Unmarshal(boss["0"], &current) == nil && current == bossID &&
-					json.Unmarshal(boss["5"], &bpUse) == nil && bpUse > 0 {
-					return bpUse, true
-				}
-			}
-		}
-	}
-	return 0, false
-}
-
-func markStandaloneTeamBattleClear(
-	configuration json.RawMessage,
-	bossID int,
-) (json.RawMessage, bool, error) {
-	return markTeamBattleClearForArea(configuration, bossID, 0)
-}
-
-func markTeamBattleClearForArea(
-	configuration json.RawMessage,
-	bossID int,
-	stageQuestAreaID int,
-) (json.RawMessage, bool, error) {
-	if bossID <= 0 {
-		return nil, false, errors.New("local team battle boss is invalid")
-	}
-	if stageQuestAreaID < 0 {
-		return nil, false, errors.New("local team battle area is invalid")
-	}
-	var top map[string]json.RawMessage
-	if err := json.Unmarshal(configuration, &top); err != nil {
-		return nil, false, fmt.Errorf("decode local team battle state: %w", err)
-	}
-	found := false
-	firstClear := false
-	for _, groupKey := range []string{"9", "10", "11", "12"} {
-		var groups []map[string]json.RawMessage
-		if err := json.Unmarshal(top[groupKey], &groups); err != nil {
-			return nil, false, fmt.Errorf("decode local team battle groups %s: %w", groupKey, err)
-		}
-		categoryChanged := false
-		for groupIndex := range groups {
-			var groupAreaID int
-			if err := json.Unmarshal(groups[groupIndex]["9"], &groupAreaID); err != nil {
-				return nil, false, errors.New("local team battle group area is invalid")
-			}
-			if groupAreaID != stageQuestAreaID {
-				continue
-			}
-			var bosses []map[string]json.RawMessage
-			if err := json.Unmarshal(groups[groupIndex]["10"], &bosses); err != nil {
-				return nil, false, errors.New("local team battle boss list is invalid")
-			}
-			for bossIndex := range bosses {
-				var currentBossID, state int
-				if json.Unmarshal(bosses[bossIndex]["0"], &currentBossID) != nil ||
-					currentBossID != bossID {
-					continue
-				}
-				if json.Unmarshal(bosses[bossIndex]["10"], &state) != nil || state < 0 || state > 2 {
-					return nil, false, errors.New("local team battle clear state is invalid")
-				}
-				found = true
-				firstClear = state != 2
-				bosses[bossIndex]["10"] = json.RawMessage("2")
-				encodedBosses, err := json.Marshal(bosses)
-				if err != nil {
-					return nil, false, fmt.Errorf("encode local team battle bosses: %w", err)
-				}
-				groups[groupIndex]["10"] = encodedBosses
-				categoryChanged = true
-				break
-			}
-			if found {
-				break
-			}
-		}
-		if categoryChanged {
-			encodedGroups, err := json.Marshal(groups)
-			if err != nil {
-				return nil, false, fmt.Errorf("encode local team battle groups: %w", err)
-			}
-			top[groupKey] = encodedGroups
-			break
-		}
-	}
-	if !found {
-		return nil, false, errors.New("local team battle clear boss is unavailable")
-	}
-	updated, err := json.Marshal(top)
-	if err != nil {
-		return nil, false, fmt.Errorf("encode local team battle state: %w", err)
-	}
-	return updated, firstClear, nil
 }
 
 func stageQuestAreaID(configuration json.RawMessage) (int, error) {
@@ -364,28 +249,6 @@ func releasedStageQuestBattleForBoss(
 		}
 	}
 	return 0, 0, false, nil
-}
-
-func consumeStageQuestNewClear(
-	configuration json.RawMessage,
-) (json.RawMessage, bool, error) {
-	var top map[string]json.RawMessage
-	if err := json.Unmarshal(configuration, &top); err != nil {
-		return nil, false, fmt.Errorf("decode local StageQuest response: %w", err)
-	}
-	var stageIDs []int
-	if err := json.Unmarshal(top["new_clear_stage"], &stageIDs); err != nil {
-		return nil, false, fmt.Errorf("decode local StageQuest new-clear state: %w", err)
-	}
-	if len(stageIDs) == 0 {
-		return append(json.RawMessage(nil), configuration...), false, nil
-	}
-	top["new_clear_stage"] = json.RawMessage("[]")
-	updated, err := json.Marshal(top)
-	if err != nil {
-		return nil, false, fmt.Errorf("encode local StageQuest response: %w", err)
-	}
-	return updated, true, nil
 }
 
 func markStageQuestClear(

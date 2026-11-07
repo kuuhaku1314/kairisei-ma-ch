@@ -127,8 +127,12 @@ func auditCompleteAdminContent(t *testing.T, h http.Handler) {
 	}
 	_ = json.Unmarshal(testfixture.CallContentAdmin(t, admin, "GET", "/api/gacha-presets", nil, 200), &presets)
 	baseFound := map[int]bool{}
+	categories := map[int]string{60200001: "限定扭蛋", 60200101: "友情点扭蛋", 60200201: "超级扭蛋"}
 	for _, p := range presets.Presets {
 		baseFound[p.GroupID] = true
+		if want, ok := categories[p.GroupID]; ok && p.Category != want {
+			t.Fatalf("pool %d category = %d %q, want %q", p.GroupID, p.CategoryNum, p.Category, want)
+		}
 		for _, id := range p.GachaIDs {
 			if id == 90000100 || id == 90000200 {
 				t.Fatal("tutorial exposed")

@@ -66,10 +66,7 @@ func (s *Account) validatePVPDefenseLocked(decks []gamestate.PVPDeckSelection) (
 	if len(decks) != 4 {
 		return nil, errors.New("PVP requires one deck for each of the four Arthur types")
 	}
-	knownCards := make(map[int64]struct{}, len(s.cards))
-	for _, card := range s.cards {
-		knownCards[card.UniqueID] = struct{}{}
-	}
+	knownCards := ownedCardIDs(s.cards)
 	seenArthur := make(map[int8]struct{}, 4)
 	canonical := ClonePVPDeckSelections(decks)
 	for _, deck := range canonical {
@@ -97,6 +94,9 @@ func (s *Account) validatePVPDefenseLocked(decks []gamestate.PVPDeckSelection) (
 				return nil, fmt.Errorf("PVP defense references unknown card %d", uniqueID)
 			}
 		}
+		if err := s.validateDeckComposition(DeckInfo{ArthurType: deck.ArthurType, CardUniqueIDs: deck.CardUniqueIDs}, knownCards, 0, 0, true); err != nil {
+			return nil, err
+		}
 	}
 	sort.Slice(canonical, func(left, right int) bool { return canonical[left].ArthurType < canonical[right].ArthurType })
 	return canonical, nil
@@ -105,6 +105,9 @@ func (s *Account) validatePVPDefenseLocked(decks []gamestate.PVPDeckSelection) (
 func (s *Account) BeginPVP(battleType int, opponentUserID int, decks []gamestate.PVPDeckSelection, config PVPConfig, now time.Time) (gamestate.PVPMatch, int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if source := config.ResultSource; source != PVPResultFixedPolicy && source != PVPResultRecordedReplay {
+		return gamestate.PVPMatch{}, s.pvp.Challenge, errors.New("PVP result source is unavailable")
+	}
 	canonical, err := s.validatePVPDefenseLocked(decks)
 	if err != nil {
 		return gamestate.PVPMatch{}, s.pvp.Challenge, fmt.Errorf("%w: %v", ErrInvalidPVPDeck, err)
@@ -144,12 +147,12 @@ func (s *Account) BeginPVP(battleType int, opponentUserID int, decks []gamestate
 		CompletedAtUnix: now.Unix(),
 	}
 	s.pvp.NextBattleID++
-	// The official asynchronous four-Arthur PVP contract is resolved by
-	// PvpStart2: the response already contains result, before/after points and
-	// the remaining challenge count. PvPMgr stores those fields and presents
-	// them after the AI battle without sending PvpEnd. Commit the authoritative
-	// result before replying so returning Home and restarting both retain it.
+	// This endpoint returns an already-decided local-policy/recorded result.
+	// Native playback does not make that result an engine-computed winner.
+	// The stock client may never send End, so it must not be a later grant.
 	s.pvpPoint = match.PointAfter
+	s.markMissionMetricLocked(gamestate.MissionPVPRank)
+	s.recordMissionEventLocked(missionEvent{kind: gamestate.MissionPVPPlayed}, now)
 	s.pvp.History = append(s.pvp.History, match)
 	if len(s.pvp.History) > pvpHistoryLimit {
 		s.pvp.History = append([]gamestate.PVPMatch(nil), s.pvp.History[len(s.pvp.History)-pvpHistoryLimit:]...)
@@ -165,10 +168,8 @@ func (s *Account) FinishPVP(battleID int, isWin bool, isRetire bool, config PVPC
 		for index := len(s.pvp.History) - 1; index >= 0; index-- {
 			match := s.pvp.History[index]
 			if match.BattleID == battleID {
-				if config.EngineMode == PvpEngineClientNativeLocal && index == len(s.pvp.History)-1 {
-					match = settleNativePVPMatch(match, isWin, isRetire, config, now)
-					s.pvp.History[index] = match
-					s.pvpPoint = match.PointAfter
+				if match.ExpectedWin != (isWin && !isRetire) || match.Retired != isRetire {
+					return gamestate.PVPMatch{}, s.pvp.Challenge, 0, errors.New("PVP report conflicts with the committed result")
 				}
 				return match, s.pvp.Challenge, BoolInt(match.ExpectedWin), nil
 			}
@@ -197,6 +198,8 @@ func (s *Account) FinishPVP(battleID int, isWin bool, isRetire bool, config PVPC
 	}
 	match.CompletedAtUnix = now.Unix()
 	s.pvpPoint = match.PointAfter
+	s.markMissionMetricLocked(gamestate.MissionPVPRank)
+	s.recordMissionEventLocked(missionEvent{kind: gamestate.MissionPVPPlayed}, now)
 	s.pvp.History = append(s.pvp.History, match)
 	if len(s.pvp.History) > pvpHistoryLimit {
 		s.pvp.History = append([]gamestate.PVPMatch(nil), s.pvp.History[len(s.pvp.History)-pvpHistoryLimit:]...)

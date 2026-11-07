@@ -71,21 +71,26 @@ type DropBoss struct {
 	Name       string       `json:"name"`
 	Difficulty string       `json:"difficulty"`
 	Targets    []dropTarget `json:"targets"`
+	TowerID    int          `json:"tower_id,omitempty"`
+	Floor      int          `json:"floor,omitempty"`
 }
 
 type contentStore struct {
-	activities       activityRewards
-	activityRevision int
-	base             gamestate.State
-	bosses           map[int]DropBoss
-	drops            map[int]BossDrops
-	shops            map[int]exchangeShop
-	dropRevision     int
-	shopRevision     int
-	rules            map[int]BossRules
-	ruleRevision     int
-	ruleBases        map[int]bossRuleEntry
-	configuration    game.ContentConfiguration
+	activities        activityRewards
+	activityRevision  int
+	base              gamestate.State
+	bosses            map[int]DropBoss
+	towerBosses       map[string]DropBoss
+	towerDrops        map[string]TowerFloorDrops
+	towerDropRevision int
+	drops             map[int]BossDrops
+	shops             map[int]exchangeShop
+	dropRevision      int
+	shopRevision      int
+	rules             map[int]BossRules
+	ruleRevision      int
+	ruleBases         map[int]bossRuleEntry
+	configuration     game.ContentConfiguration
 }
 
 type exchangeShop struct {
@@ -170,35 +175,13 @@ func (o *Operations) InitializeContent(base gamestate.State, battleMasterPath st
 				} else if _, material := masterdata.BattleMaterialGroupIcons[b.ID/100]; material {
 					row.Category = "material"
 				}
-				r := replays[b.ID]
-				waves := r.Battles
-				if len(waves) == 0 {
-					waves = []gamestate.TeamBattleReplayBattle{{EnemyPartyID: r.EnemyPartyID, EnemyType: r.EnemyType}}
-				}
-				for wave, w := range waves {
-					if w.EnemyType == 4 {
-						continue
-					}
-					for slot, e := range parties[w.EnemyPartyID].Slots {
-						if e.EnemyID > 0 {
-							name := enemies[e.EnemyID].Name
-							if name == "" {
-								name = fmt.Sprintf("敌人 %d", e.EnemyID)
-							}
-							target := dropTarget{BattleIndex: wave, EnemyIndex: slot, Name: name}
-							if def, ok := enemies[e.EnemyID]; ok {
-								target.Stats = &enemyStats{EnemyID: def.ID, Attribute: def.Attribute,
-									HP: def.HP * e.HPRate, Attack: def.Attack, Magic: def.Magic,
-									Defense: def.Defense, MagicDefense: def.MagicDefense,
-									DamageReduction: def.DamageReduction, AttributeFixed: def.AttributeFixed}
-							}
-							row.Targets = append(row.Targets, target)
-						}
-					}
-				}
+				row.Targets = dropTargetsForReplay(replays[b.ID], parties, enemies)
 				c.bosses[b.ID] = row
 			}
 		}
+	}
+	if err := c.initializeTowerDrops(o, replays, parties, enemies); err != nil {
+		return err
 	}
 	for ownID, sourceID := range base.TeamBattleOwnDeckSources {
 		if row, ok := c.ruleBases[sourceID]; ok {
@@ -271,8 +254,12 @@ func (o *Operations) InitializeContent(base gamestate.State, battleMasterPath st
 	if err != nil {
 		return err
 	}
-	c.configuration = game.ContentConfiguration{Revision: 1, State: state}
+	c.configuration, err = game.NewContentConfiguration(1, state)
+	if err != nil {
+		return err
+	}
 	o.content = c
+	o.publishRuntimeLocked()
 	return nil
 }
 
@@ -288,33 +275,7 @@ func (c *contentStore) project(drops map[int]BossDrops, shops map[int]exchangeSh
 		if !ok || p.StageQuestAreaID != 0 || p.TowerID != 0 {
 			continue
 		}
-		// Gold and other pre-existing fixed rewards are not editable here.
-		p.FameRewards = slices.Clone(config.FameRewards)
-		p.EnemyDrops = make([]gamestate.TeamBattleEnemyDrop, 0, len(config.Drops)+1)
-		for _, d := range state.TeamBattleRewards[i].EnemyDrops {
-			if !editableDroppedReward(d.Reward) {
-				p.EnemyDrops = append(p.EnemyDrops, d)
-			}
-		}
-		p.EnemyDrops = append(p.EnemyDrops, config.Drops...)
-		p.ResultRewards = make([]gamestate.Reward, 0)
-		for _, r := range state.TeamBattleRewards[i].ResultRewards {
-			if !multiplayer.ValidBattleDrop(multiplayer.BattleDrop{RewardType: r.Type, RewardTypeID: r.RewardTypeID, Num: r.Num}) {
-				p.ResultRewards = append(p.ResultRewards, r)
-			}
-		}
-		ids := map[int]bool{}
-		view := []map[string]int{}
-		for _, d := range p.EnemyDrops {
-			if d.ChancePerMillion != nil && *d.ChancePerMillion == 0 {
-				continue
-			}
-			p.ResultRewards = append(p.ResultRewards, d.Reward)
-			if (d.Reward.Type == 6 || d.Reward.Type == 13) && !ids[d.Reward.RewardTypeID] {
-				ids[d.Reward.RewardTypeID] = true
-				view = append(view, map[string]int{"0": d.Reward.RewardTypeID, "1": 0})
-			}
-		}
+		p, view := projectBattleDrops(p, config)
 		byBoss[p.BossID] = view
 		state.TeamBattleRewards[i] = p
 	}
@@ -347,6 +308,9 @@ func (c *contentStore) project(drops map[int]BossDrops, shops map[int]exchangeSh
 	sort.Ints(ids)
 	for _, id := range ids {
 		state.TradeShopProfiles = append(state.TradeShopProfiles, merged[id])
+	}
+	if err := c.projectTowerDrops(&state); err != nil {
+		return state, err
 	}
 	err := c.projectBossRules(&state, rules)
 	if err == nil {
@@ -387,15 +351,6 @@ func projectConfiguredDropViews(raw json.RawMessage, byBoss map[int][]map[string
 	return json.Marshal(top)
 }
 
-func (o *Operations) ContentConfiguration() game.ContentConfiguration {
-	o.configMu.RLock()
-	defer o.configMu.RUnlock()
-	if o.content == nil {
-		return game.ContentConfiguration{}
-	}
-	return o.content.configuration
-}
-
 func (a *API) validateContentReward(r gamestate.Reward) error {
 	if r.Type != 6 && r.Type != 8 && r.Type != 13 && r.Type != 15 && r.Type != 19 && !gamestate.IsCollectionReward(r.Type) {
 		return errors.New("请选择卡牌、素材、道具、召唤石、传承卡、皮肤、对话表情或称号")
@@ -415,6 +370,10 @@ func (a *API) validateDropConfig(c BossDrops) error {
 	if !ok {
 		return errors.New("该BOSS没有可编辑的活动掉落配置")
 	}
+	return a.validateDropsFor(row, c)
+}
+
+func (a *API) validateDropsFor(row DropBoss, c BossDrops) error {
 	if c.Drops == nil || len(c.Drops) > 120 {
 		return errors.New("掉落表须为数组，每个难度最多120项")
 	}
@@ -533,6 +492,11 @@ func (a *API) saveDropEditor(w http.ResponseWriter, r *http.Request) {
 		WriteAdminError(w, 400, err.Error())
 		return
 	}
+	configuration, err := game.NewContentConfiguration(c.configuration.Revision+1, state)
+	if err != nil {
+		WriteAdminError(w, 400, err.Error())
+		return
+	}
 	doc, err := o.writeDocument(bossDropsKey, *body.Expected, next)
 	if err != nil {
 		writeContentError(w, err)
@@ -540,7 +504,8 @@ func (a *API) saveDropEditor(w http.ResponseWriter, r *http.Request) {
 	}
 	c.drops = next
 	c.dropRevision = doc.Revision
-	c.configuration = game.ContentConfiguration{Revision: c.configuration.Revision + 1, State: state}
+	c.configuration = configuration
+	o.publishRuntimeLocked()
 	WriteAdminJSON(w, 200, map[string]any{"state": "PASS", "revision": doc.Revision})
 }
 
@@ -701,6 +666,11 @@ func (a *API) saveExchangeEditor(w http.ResponseWriter, r *http.Request) {
 		WriteAdminError(w, 400, "最多50个兑换所")
 		return
 	}
+	configuration, err := game.NewContentConfiguration(c.configuration.Revision+1, state)
+	if err != nil {
+		WriteAdminError(w, 400, err.Error())
+		return
+	}
 	doc, err := o.writeDocument(exchangesKey, *body.Expected, next)
 	if err != nil {
 		writeContentError(w, err)
@@ -708,6 +678,7 @@ func (a *API) saveExchangeEditor(w http.ResponseWriter, r *http.Request) {
 	}
 	c.shops = next
 	c.shopRevision = doc.Revision
-	c.configuration = game.ContentConfiguration{Revision: c.configuration.Revision + 1, State: state}
+	c.configuration = configuration
+	o.publishRuntimeLocked()
 	WriteAdminJSON(w, 200, map[string]any{"state": "PASS", "revision": doc.Revision, "shop": body.Shop})
 }

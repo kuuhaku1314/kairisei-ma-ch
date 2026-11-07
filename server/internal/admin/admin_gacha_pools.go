@@ -25,10 +25,8 @@ import (
 	"kairisei.local/server/internal/gamestate"
 )
 
-// Operator-created pools (LOCAL_POLICY, user request 2026-09-27). A new pool copies every draw variant of
-// an existing card-pool group (ticket, single, ten-draw …) into a new publication group; each variant keeps
-// its template's payment and draw rules. Deletion is soft and covers the whole group, so play counts, audit
-// history and identities survive and the pool can be restored.
+// Operator pools own their rules and publication group. Deletion is soft so
+// play counts, audit history and identities survive and the pool can be restored.
 const (
 	customGachaKey     = "gacha-custom"
 	customGachaFirstID = gamestate.OperatorGachaFirstID
@@ -43,13 +41,14 @@ var gachaCoverPathPattern = regexp.MustCompile(`^gacha-covers/[0-9a-f]{64}\.(png
 var gachaCoverDecodeSlot = make(chan struct{}, 1)
 
 type customGachaPool struct {
-	GachaID     int    `json:"gacha_id"`
-	GroupID     int    `json:"group_id"`
-	TemplateID  int    `json:"template_id"`
-	Name        string `json:"name"`
-	Deleted     bool   `json:"deleted,omitempty"`
-	RuleVersion int    `json:"rule_version,omitempty"` // 0: legacy copy; 1: complete built-in rule template.
-	ArthurType  int8   `json:"arthur_type,omitempty"`  // Native profession picker: 1–4 professions, 5 mixed.
+	GachaID     int            `json:"gacha_id"`
+	GroupID     int            `json:"group_id"`
+	TemplateID  int            `json:"template_id,omitempty"` // Read existing template-based pools only.
+	Name        string         `json:"name"`
+	Deleted     bool           `json:"deleted,omitempty"`
+	RuleVersion int            `json:"rule_version,omitempty"` // 0: legacy copy; 1: complete built-in rule template.
+	ArthurType  int8           `json:"arthur_type,omitempty"`  // Native profession picker: 1–4 professions, 5 mixed.
+	Rule        *gachaPoolRule `json:"rule,omitempty"`
 }
 
 type customGachaDocument struct {
@@ -110,18 +109,34 @@ func (operations *Operations) loadCustomGachas() error {
 }
 
 func (operations *Operations) registerCustomGacha(pool customGachaPool) error {
-	template, exists := operations.gachaBases[pool.TemplateID]
-	allowed := customGachaTemplateAllowed(template)
-	if pool.RuleVersion == 1 {
-		allowed = ruleTemplateAllowed(template)
+	var base gamestate.GachaProfile
+	if pool.Rule != nil {
+		if err := pool.Rule.validate(); err != nil {
+			return fmt.Errorf("operator gacha %d: %w", pool.GachaID, err)
+		}
+		base = pool.Rule.profile()
+		base.GachaID, base.GroupID, base.Name, base.ArthurType = pool.GachaID, pool.GroupID, pool.Name, pool.ArthurType
+		base.PublicationKey, base.PoolSourceState, base.WeightSourceState = "operator", "LOCAL_POLICY", "LOCAL_POLICY"
+	} else {
+		// Existing records retain the rules they were created with. New writes
+		// never create a template reference or introduce another rule version.
+		template, exists := operations.gachaBases[pool.TemplateID]
+		allowed := customGachaTemplateAllowed(template)
+		if pool.RuleVersion == 1 {
+			allowed = template.GroupID > 0 && template.PublicationKey != "operator" && template.UserSelectMax == 0 && template.CardNum > 0 && template.CardNumMax <= 100 && gamestate.ValidateGachaRules(template) == nil
+		}
+		if !exists || !allowed || pool.RuleVersion < 0 || pool.RuleVersion > 1 {
+			return fmt.Errorf("operator gacha %d references unavailable template %d", pool.GachaID, pool.TemplateID)
+		}
+		base = operations.filterGachaProfession(customGachaBase(template, pool))
 	}
-	if !exists || !allowed || pool.RuleVersion < 0 || pool.RuleVersion > 1 || pool.ArthurType < 0 || pool.ArthurType > 5 {
-		return fmt.Errorf("operator gacha %d references unavailable template %d", pool.GachaID, pool.TemplateID)
+	if pool.ArthurType < 0 || pool.ArthurType > 5 {
+		return errors.New("invalid operator gacha profession")
 	}
 	if _, taken := operations.gachaBases[pool.GachaID]; taken {
 		return fmt.Errorf("operator gacha %d collides with an existing pool", pool.GachaID)
 	}
-	operations.gachaBases[pool.GachaID] = operations.filterGachaProfession(customGachaBase(template, pool))
+	operations.gachaBases[pool.GachaID] = base
 	operations.customGachas[pool.GachaID] = pool
 	operations.managedGachaGroups[pool.GroupID] = struct{}{}
 	operations.managedGachaGroupByID[pool.GachaID] = pool.GroupID
@@ -170,14 +185,14 @@ func (admin *API) createCustomGacha(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		SourceID       int    `json:"source_id"`
-		RuleTemplateID int    `json:"rule_template_id"`
-		Name           string `json:"name"`
-		Expected       *int   `json:"expected_revision"`
-		Professions    []int8 `json:"professions"`
+		SourceID    int             `json:"source_id"`
+		Rules       []gachaPoolRule `json:"rules"`
+		Name        string          `json:"name"`
+		Expected    *int            `json:"expected_revision"`
+		Professions []int8          `json:"professions"`
 	}
 	if err := decodeAdminJSON(r, &body); err != nil || body.Expected == nil {
-		WriteAdminError(w, 400, "请选择规则模板或复制来源、填写卡池名称并携带配置版本")
+		WriteAdminError(w, 400, "请选择规则类型或复制来源、填写卡池名称并携带配置版本")
 		return
 	}
 	name := strings.TrimSpace(body.Name)
@@ -192,40 +207,48 @@ func (admin *API) createCustomGacha(w http.ResponseWriter, r *http.Request) {
 		WriteAdminError(w, 409, accountstore.ErrDocumentConflict.Error())
 		return
 	}
-	members := make([]int, 0, 4)
-	ruleVersion := 0
-	if body.RuleTemplateID != 0 {
-		if body.SourceID != 0 {
-			WriteAdminError(w, 400, "规则模板和复制来源只能选择一种")
+	profiles := []gamestate.GachaProfile{}
+	contents := []AdminGachaConfig{}
+	if body.SourceID == 0 {
+		if err := validateCreationRules(body.Rules); err != nil {
+			WriteAdminError(w, 400, err.Error())
 			return
 		}
-		members = o.ruleTemplateMembers(body.RuleTemplateID)
-		if len(members) == 0 {
-			WriteAdminError(w, 400, "规则模板不可用，请重新载入后选择")
-			return
+		for _, rule := range body.Rules {
+			p := rule.profile()
+			profiles = append(profiles, p)
+			contents = append(contents, AdminGachaConfigFromProfile(p))
 		}
-		ruleVersion = 1
 	} else {
+		if len(body.Rules) != 0 {
+			WriteAdminError(w, 400, "规则类型和复制来源只能选择一种")
+			return
+		}
 		source, exists := o.gachaBases[body.SourceID]
 		if copied, isCustom := o.customGachas[body.SourceID]; !exists || (isCustom && copied.Deleted) {
 			WriteAdminError(w, 400, "复制来源不存在或已删除")
 			return
 		}
-		for id, base := range o.gachaBases {
-			if base.GroupID != source.GroupID {
-				continue
-			}
-			if !customGachaTemplateAllowed(base) || base.UnownedOnly {
-				WriteAdminError(w, 400, "只能复制普通卡牌卡池（不含混合奖励、阶段或必得未入手池）")
+		for _, id := range o.gachaGroupMembers(source.GroupID) {
+			content, err := o.effectiveGachaConfig(id)
+			if err != nil {
+				WriteAdminError(w, 500, err.Error())
 				return
 			}
-			members = append(members, id)
+			profile := adminConfiguredGacha(o.gachaBases[id], content).Profile
+			rule, err := copiedGachaRule(profile)
+			if err != nil || o.mixedGacha(id) {
+				WriteAdminError(w, 400, "只能复制已有完整卡牌内容的普通或友情点卡池；其他规则请按类型新建")
+				return
+			}
+			content.RandomGifts = nil
+			body.Rules = append(body.Rules, rule)
+			profiles, contents = append(profiles, profile), append(contents, content)
 		}
 	}
-	slices.Sort(members)
 	if len(body.Professions) > 0 {
-		if !o.professionChoicesAllowed(members) {
-			WriteAdminError(w, 400, "此模板不能使用职业选择：需要普通固定抽数卡池，且每种抽数只能有一种消耗方式")
+		if !professionChoicesAllowed(profiles) || body.Rules[0].mixed() {
+			WriteAdminError(w, 400, "此规则不能使用职业选择：需要普通固定抽数卡池，且每种抽数只能有一种消耗方式")
 			return
 		}
 		slices.Sort(body.Professions)
@@ -237,21 +260,21 @@ func (admin *API) createCustomGacha(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	type variant struct {
-		source     int
+		index      int
 		profession int8
 	}
 	variants := []variant{}
-	for _, id := range members {
+	for i, profile := range profiles {
 		if len(body.Professions) == 0 {
-			variants = append(variants, variant{source: id})
+			variants = append(variants, variant{index: i, profession: profile.ArthurType})
 		}
 		for _, profession := range body.Professions {
-			variants = append(variants, variant{source: id, profession: profession})
+			variants = append(variants, variant{index: i, profession: profession})
 		}
 	}
 	first := o.nextCustomGachaID()
 	pools := make([]customGachaPool, len(variants))
-	contents := make([]AdminGachaConfig, len(variants))
+	drafts := make([]AdminGachaConfig, len(variants))
 	undo := func() {
 		for _, pool := range pools {
 			if pool.GachaID != 0 {
@@ -263,54 +286,36 @@ func (admin *API) createCustomGacha(w http.ResponseWriter, r *http.Request) {
 		delete(o.managedGachaGroups, first)
 	}
 	for i, variant := range variants {
-		sourceID := variant.source
-		templateID := sourceID
-		if copied, isCustom := o.customGachas[sourceID]; isCustom {
-			templateID = copied.TemplateID
-		}
-		content := AdminGachaConfigFromProfile(o.gachaBases[sourceID])
-		if ruleVersion == 0 {
-			var err error
-			content, err = o.effectiveGachaConfig(sourceID)
-			if err != nil {
-				undo()
-				WriteAdminError(w, 500, err.Error())
-				return
-			}
-		}
-		pool := customGachaPool{GachaID: first + i, GroupID: first, TemplateID: templateID, Name: name, RuleVersion: ruleVersion, ArthurType: variant.profession}
-		if source, ok := o.customGachas[sourceID]; ok && pool.ArthurType == 0 {
-			pool.ArthurType = source.ArthurType
-		}
+		rule := body.Rules[variant.index]
+		pool := customGachaPool{GachaID: first + i, GroupID: first, Name: name, Rule: &rule, ArthurType: variant.profession}
 		if err := o.registerCustomGacha(pool); err != nil {
 			undo()
 			WriteAdminError(w, 400, err.Error())
 			return
 		}
 		pools[i] = pool
+		content := contents[variant.index]
 		content.GachaID, content.Name = pool.GachaID, name
 		filtered := o.filterGachaProfession(adminConfiguredGacha(o.gachaBases[pool.GachaID], content).Profile)
 		content.CardIDs, content.Weights, content.CardFames = filtered.CardIDs, filtered.CardWeights, filtered.CardFames
 		if i > 0 {
-			lead := contents[0]
+			lead := drafts[0]
 			content.CoverPath, content.StartUnix, content.EndUnix = lead.CoverPath, lead.StartUnix, lead.EndUnix
+			content.OddsMessage = lead.OddsMessage
+			content.DailyPlayMax, content.CategoryNum = lead.DailyPlayMax, lead.CategoryNum
 		}
-		if _, err := admin.validateGachaConfig(content); err != nil {
-			undo()
-			WriteAdminError(w, 400, err.Error())
-			return
+		if body.SourceID != 0 {
+			if _, err := admin.validateGachaConfig(content); err != nil {
+				undo()
+				WriteAdminError(w, 400, err.Error())
+				return
+			}
 		}
-		contents[i] = content
-	}
-	nextConfigs, _, err := o.readGachaConfigurations()
-	if err != nil {
-		undo()
-		WriteAdminError(w, 500, err.Error())
-		return
+		drafts[i] = content
 	}
 	writes := []accountstore.DocumentWrite{{Key: customGachaKey, Expected: o.customGachaRevision, Value: o.customGachaDocument(), Operation: customGachaKey}}
 	for i, pool := range pools {
-		writes = append(writes, accountstore.DocumentWrite{Key: "gacha-draft:" + strconv.Itoa(pool.GachaID), Value: contents[i], Operation: "gacha-draft"})
+		writes = append(writes, accountstore.DocumentWrite{Key: "gacha-draft:" + strconv.Itoa(pool.GachaID), Value: drafts[i], Operation: "gacha-draft"})
 	}
 	documents, err := o.storage.WriteDocuments(writes)
 	if err != nil {
@@ -319,8 +324,7 @@ func (admin *API) createCustomGacha(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	o.customGachaRevision = documents[0].Revision
-	o.gachaConfigurations = nextConfigs
-	o.gachaRevision++
+	o.publishRuntimeLocked()
 	// New content starts as drafts: publish the whole group, then open it in
 	// 扭蛋发布. Until then players cannot see it.
 	ids := make([]int, len(pools))
@@ -380,39 +384,46 @@ func (admin *API) changeCustomGachaDeletion(w http.ResponseWriter, r *http.Reque
 	o.customGachaRevision = doc.Revision
 	o.gachaConfigurations = nextConfigs
 	o.gachaRevision++
+	o.publishRuntimeLocked()
 	WriteAdminJSON(w, 200, map[string]any{"state": "PASS", "revision": doc.Revision})
 }
 
 // uploadGachaCover stores a PNG/JPEG under the covers folder named by its SHA-256, so files are immutable
 // and can be mirrored to a storage container unchanged. The pool references it on its next draft.
 func (admin *API) uploadGachaCover(w http.ResponseWriter, r *http.Request) {
+	storeUploadedImage(w, r, admin.gachaCoverDir, gachaCoverFolder, "封面")
+}
+
+// storeUploadedImage is shared by pool covers and home banners; each kind keeps its own folder and the
+// response names the file as "<folder>/<sha256>.<ext>".
+func storeUploadedImage(w http.ResponseWriter, r *http.Request, dir, folder, noun string) {
 	if err := requireAdminMutation(r); err != nil {
 		WriteAdminError(w, 403, err.Error())
 		return
 	}
-	if admin.gachaCoverDir == "" {
-		WriteAdminError(w, 503, "服务器未配置封面目录")
+	if dir == "" {
+		WriteAdminError(w, 503, "服务器未配置"+noun+"目录")
 		return
 	}
 	var body struct {
 		Data string `json:"data_base64"`
 	}
 	if err := DecodeAdminJSONLimit(r, &body, gachaCoverMaxBytes*4/3+1024); err != nil {
-		WriteAdminError(w, 400, "封面文件最大 2 MiB")
+		WriteAdminError(w, 400, noun+"文件最大 2 MiB")
 		return
 	}
 	data, err := base64.StdEncoding.DecodeString(body.Data)
 	if err != nil || len(data) == 0 || len(data) > gachaCoverMaxBytes {
-		WriteAdminError(w, 400, "封面须为 2 MiB 以内的 PNG 或 JPEG 图片")
+		WriteAdminError(w, 400, noun+"须为 2 MiB 以内的 PNG 或 JPEG 图片")
 		return
 	}
 	config, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil || (format != "png" && format != "jpeg") {
-		WriteAdminError(w, 400, "封面须为 PNG 或 JPEG 图片")
+		WriteAdminError(w, 400, noun+"须为 PNG 或 JPEG 图片")
 		return
 	}
 	if config.Width < 64 || config.Height < 32 || config.Width > 4096 || config.Height > 4096 {
-		WriteAdminError(w, 400, "封面尺寸须在 64×32 到 4096×4096 之间")
+		WriteAdminError(w, 400, noun+"尺寸须在 64×32 到 4096×4096 之间")
 		return
 	}
 	select {
@@ -429,13 +440,13 @@ func (admin *API) uploadGachaCover(w http.ResponseWriter, r *http.Request) {
 	extension := map[string]string{"png": ".png", "jpeg": ".jpg"}[format]
 	digest := sha256.Sum256(data)
 	name := hex.EncodeToString(digest[:]) + extension
-	target := filepath.Join(admin.gachaCoverDir, name)
+	target := filepath.Join(dir, name)
 	if _, err := os.Stat(target); errors.Is(err, os.ErrNotExist) {
-		if err := os.MkdirAll(admin.gachaCoverDir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			WriteAdminError(w, 500, err.Error())
 			return
 		}
-		temp, err := os.CreateTemp(admin.gachaCoverDir, ".upload-*")
+		temp, err := os.CreateTemp(dir, ".upload-*")
 		if err != nil {
 			WriteAdminError(w, 500, err.Error())
 			return
@@ -444,7 +455,7 @@ func (admin *API) uploadGachaCover(w http.ResponseWriter, r *http.Request) {
 		closeErr := temp.Close()
 		if writeErr != nil || closeErr != nil {
 			_ = os.Remove(temp.Name())
-			WriteAdminError(w, 500, "封面写入失败")
+			WriteAdminError(w, 500, noun+"写入失败")
 			return
 		}
 		if err := os.Rename(temp.Name(), target); err != nil {
@@ -460,15 +471,19 @@ func (admin *API) uploadGachaCover(w http.ResponseWriter, r *http.Request) {
 		WriteAdminError(w, 500, err.Error())
 		return
 	}
-	WriteAdminJSON(w, 200, map[string]any{"state": "PASS", "cover_path": gachaCoverFolder + "/" + name, "width": config.Width, "height": config.Height, "bytes": len(data)})
+	WriteAdminJSON(w, 200, map[string]any{"state": "PASS", "cover_path": folder + "/" + name, "width": config.Width, "height": config.Height, "bytes": len(data)})
 }
 
 // ServeGachaCover serves a stored cover by its content-addressed name; it is shared by the admin preview
 // route and the game server's /local/gacha-covers/ route.
 func ServeGachaCover(dir string) http.HandlerFunc {
+	return serveUploadedImage(dir, gachaCoverFolder, gachaCoverPathPattern)
+}
+
+func serveUploadedImage(dir, folder string, pattern *regexp.Regexp) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		path := gachaCoverFolder + "/" + chi.URLParam(r, "file")
-		if dir == "" || !gachaCoverPathPattern.MatchString(path) {
+		path := folder + "/" + chi.URLParam(r, "file")
+		if dir == "" || !pattern.MatchString(path) {
 			http.NotFound(w, r)
 			return
 		}
@@ -512,6 +527,7 @@ func (admin *API) customGachaPresets() []AdminGachaPreset {
 		}
 		base := o.gachaBases[pool.GachaID]
 		preset.Name, preset.Price, preset.CardCount = base.Name, base.Price, len(base.CardIDs)
+		preset.CategoryNum = base.CategoryNum
 		result = append(result, preset)
 	}
 	return result

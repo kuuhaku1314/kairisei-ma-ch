@@ -21,48 +21,35 @@ func (operations *Operations) loadRuntimeSettings() error {
 	if err != nil {
 		return err
 	}
-	settings := game.RuntimeSettings{TeamBattleSpeed: multiplayer.DefaultGameSpeed}
+	settings := game.RuntimeSettings{AccountCreationDailyLimit: game.DefaultAccountCreationDailyLimit}
 	if doc.Revision != 0 {
-		if err := json.Unmarshal(doc.Payload, &settings); err != nil {
+		stored := struct {
+			*game.RuntimeSettings
+			CreationLimit            json.RawMessage `json:"account_creation_daily_limit"`
+			CreationVerificationBits json.RawMessage `json:"account_creation_verification_bits"`
+		}{RuntimeSettings: &settings}
+		if err := json.Unmarshal(doc.Payload, &stored); err != nil {
+			return err
+		}
+		settings.AccountCreationDailyLimit, err = game.ParseAccountCreationDailyLimit(stored.CreationLimit, game.DefaultAccountCreationDailyLimit)
+		if err != nil {
+			return err
+		}
+		settings.AccountCreationVerificationBits, err = game.ParseAccountCreationVerificationBits(stored.CreationVerificationBits, 0)
+		if err != nil {
 			return err
 		}
 	}
 	if err := operations.validateItemShopSettings(settings.ItemShop); err != nil {
 		return err
 	}
-	if !multiplayer.ValidGameSpeed(settings.TeamBattleSpeed) {
-		return errors.New("组队倍速须为1、1.5或2倍")
+	if !multiplayer.ValidOperatorGameSpeed(settings.TeamBattleSpeed) {
+		return errors.New("组队倍速须为不限（0）、1、1.5或2倍")
 	}
 	operations.configMu.Lock()
 	defer operations.configMu.Unlock()
 	operations.runtimeSettings, operations.runtimeSettingsRevision = settings, doc.Revision
 	return nil
-}
-
-func (operations *Operations) TeamBattleSpeed() int {
-	operations.configMu.RLock()
-	defer operations.configMu.RUnlock()
-	return operations.runtimeSettings.TeamBattleSpeed
-}
-
-func (operations *Operations) PrepareBusiness(handler http.Handler) {
-	if target, ok := handler.(game.EvolutionConfigurator); ok {
-		operations.configMu.RLock()
-		policy := operations.evolutionPolicy
-		operations.configMu.RUnlock()
-		target.ApplyEvolutionRestrictions(policy)
-	}
-	operations.preparePlayerPolicy(handler)
-	operations.prepareGachas(handler)
-	if target, ok := handler.(game.ContentConfigurator); ok {
-		target.ApplyContentConfiguration(operations.ContentConfiguration())
-	}
-	if target, ok := handler.(game.RuntimeConfigurator); ok {
-		operations.configMu.RLock()
-		settings := operations.runtimeSettings
-		operations.configMu.RUnlock()
-		target.ApplyRuntimeSettings(settings)
-	}
 }
 
 func (admin *API) runtimeSettings(w http.ResponseWriter, _ *http.Request) {
@@ -163,7 +150,8 @@ func (admin *API) writeRuntimeSettings(w http.ResponseWriter, settings game.Runt
 
 // validGachaCoverBase accepts "server" (local folder) or "storage", which requires an absolute http(s)
 // prefix. A prefix kept while serving locally is validated the same way so switching back is safe. The
-// stored prefix always ends with "/" so it joins the "gacha-covers/<file>" suffix directly.
+// stored prefix always ends with "/" so it joins the "gacha-covers/<file>" and "home-banners/<file>"
+// suffixes directly.
 func validGachaCoverBase(source, base string) (string, error) {
 	if source != "" && source != "server" && source != "storage" {
 		return "", errors.New("未知的封面来源")
@@ -190,12 +178,14 @@ func (admin *API) setRuntimeSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Enabled         *bool                  `json:"crystal_purchase_enabled"`
-		Expected        *int                   `json:"expected_revision"`
-		ItemShop        []game.ItemShopSetting `json:"item_shop"`
-		TeamBattleSpeed *int                   `json:"team_battle_speed"`
-		CoverSource     *string                `json:"gacha_cover_source"`
-		CoverBaseURL    *string                `json:"gacha_cover_base_url"`
+		Enabled                  *bool                  `json:"crystal_purchase_enabled"`
+		Expected                 *int                   `json:"expected_revision"`
+		ItemShop                 []game.ItemShopSetting `json:"item_shop"`
+		TeamBattleSpeed          *int                   `json:"team_battle_speed"`
+		CreationLimit            json.RawMessage        `json:"account_creation_daily_limit"`
+		CreationVerificationBits json.RawMessage        `json:"account_creation_verification_bits"`
+		CoverSource              *string                `json:"gacha_cover_source"`
+		CoverBaseURL             *string                `json:"gacha_cover_base_url"`
 	}
 	if err := decodeAdminJSON(r, &body); err != nil || body.Enabled == nil || body.Expected == nil {
 		WriteAdminError(w, 400, "缺少开关或配置版本，请重新加载")
@@ -205,8 +195,8 @@ func (admin *API) setRuntimeSettings(w http.ResponseWriter, r *http.Request) {
 		WriteAdminError(w, 400, err.Error())
 		return
 	}
-	if body.TeamBattleSpeed != nil && !multiplayer.ValidGameSpeed(*body.TeamBattleSpeed) {
-		WriteAdminError(w, 400, "组队倍速须为1、1.5或2倍")
+	if body.TeamBattleSpeed != nil && !multiplayer.ValidOperatorGameSpeed(*body.TeamBattleSpeed) {
+		WriteAdminError(w, 400, "组队倍速须为不限（0）、1、1.5或2倍")
 		return
 	}
 	coverBase := ""
@@ -221,6 +211,16 @@ func (admin *API) setRuntimeSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	admin.saveRuntimeSettings(w, *body.Expected, "runtime-settings", func(settings *game.RuntimeSettings) error {
+		limit, err := game.ParseAccountCreationDailyLimit(body.CreationLimit, settings.AccountCreationDailyLimit)
+		if err != nil {
+			return err
+		}
+		settings.AccountCreationDailyLimit = limit
+		bits, err := game.ParseAccountCreationVerificationBits(body.CreationVerificationBits, settings.AccountCreationVerificationBits)
+		if err != nil {
+			return err
+		}
+		settings.AccountCreationVerificationBits = bits
 		// The settings page no longer sends the shop; a request without it keeps the saved shop.
 		if body.ItemShop != nil {
 			rows, err := admin.operations.mergeItemShop(body.ItemShop)
@@ -319,6 +319,7 @@ func (admin *API) saveRuntimeSettings(w http.ResponseWriter, expected int, opera
 	doc, err := admin.operations.storage.WriteDocument(runtimeSettingsKey, expected, settings, operation)
 	if err == nil {
 		admin.operations.runtimeSettings, admin.operations.runtimeSettingsRevision = settings, doc.Revision
+		admin.operations.publishRuntimeLocked()
 	}
 	admin.operations.configMu.Unlock()
 	if errors.Is(err, accountstore.ErrDocumentConflict) {

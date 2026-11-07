@@ -66,9 +66,17 @@ func (accounts *Accounts) AccountBinding(uuid string) (AccountBinding, error) {
 	return result, err
 }
 
-// Binding requires possession of the same random UUID already used by the
-// game's guest login. Public callers cannot choose a user ID or rebind a user.
-func (accounts *Accounts) BindAccount(uuid, name, password string) (AccountBinding, error) {
+// BindInternalAccount is trusted provisioning, never a client route entry.
+func (accounts *Accounts) BindInternalAccount(uuid, name, password string) (AccountBinding, error) {
+	return accounts.bindAccount(context.Background(), uuid, name, password, nil)
+}
+
+// Binding requires possession of the random UUID used by guest login. Hashing
+// takes place after the creation precheck, outside account and database locks.
+func (accounts *Accounts) bindAccount(ctx context.Context, uuid, name, password string, admission *creationAdmission) (AccountBinding, error) {
+	if err := ctx.Err(); err != nil {
+		return AccountBinding{}, err
+	}
 	name, err := NormalizeUsername(name)
 	if err != nil {
 		return AccountBinding{}, err
@@ -77,26 +85,46 @@ func (accounts *Accounts) BindAccount(uuid, name, password string) (AccountBindi
 	if !validLoginUUID(uuid) {
 		return AccountBinding{}, errors.New("本机登录凭据无效")
 	}
+	if len(password) < 8 || len(password) > 128 {
+		return AccountBinding{}, errors.New("密码须为 8–128 字节")
+	}
+	if admission != nil {
+		if err := accounts.precheckCreation(ctx, uuid, admission); err != nil {
+			return AccountBinding{}, err
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return AccountBinding{}, err
+	}
 	salt, hash, err := PasswordHash(password)
 	if err != nil {
 		return AccountBinding{}, err
 	}
+	if err := ctx.Err(); err != nil {
+		return AccountBinding{}, err
+	}
 	accounts.mu.Lock()
 	defer accounts.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return AccountBinding{}, err
+	}
 	db, err := accounts.storage.Open()
 	if err != nil {
 		return AccountBinding{}, err
 	}
-	tx, err := db.Begin()
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return AccountBinding{}, err
 	}
 	defer tx.Rollback()
-	identity, err := accounts.resolveLoginTransaction(context.Background(), tx, uuid, false)
+	identity, err := accounts.resolveLoginTransaction(ctx, tx, uuid, false, admission)
 	if err != nil {
 		return AccountBinding{}, err
 	}
 	if err := writeCredentialsTransaction(tx, identity.UserID, name, salt, hash, false); err != nil {
+		return AccountBinding{}, err
+	}
+	if err := ctx.Err(); err != nil {
 		return AccountBinding{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -202,13 +230,36 @@ func writeCredentialsTransaction(tx *sql.Tx, userID int, name string, salt, hash
 }
 
 func (accounts *Accounts) LoginAccount(name, password string) (AccountBinding, error) {
-	name, err := NormalizeUsername(name)
-	if err != nil || len(password) < 8 || len(password) > 128 {
-		return AccountBinding{}, errAccountCredentials
+	identity, _, err := accounts.authenticateAccount(name, password)
+	if err != nil {
+		return AccountBinding{}, err
 	}
 	db, err := accounts.storage.OpenRead()
 	if err != nil {
 		return AccountBinding{}, err
+	}
+	var until sql.NullInt64
+	err = db.QueryRow(`SELECT login_block_until_unix FROM cn_local_account WHERE user_id = ?`, identity.UserID).Scan(&until)
+	if err != nil {
+		return AccountBinding{}, err
+	}
+	if loginBlockActive(until, time.Now().Unix()) {
+		return AccountBinding{}, &LoginBlockedError{UntilUnix: until.Int64}
+	}
+	if guard := accounts.creation.Load(); guard != nil && !guard.policy().LoginWhitelist.Allows(identity.UserID) {
+		return AccountBinding{}, ErrLoginWhitelist
+	}
+	return identity, nil
+}
+
+func (accounts *Accounts) authenticateAccount(name, password string) (AccountBinding, []byte, error) {
+	name, err := NormalizeUsername(name)
+	if err != nil || len(password) < 8 || len(password) > 128 {
+		return AccountBinding{}, nil, errAccountCredentials
+	}
+	db, err := accounts.storage.OpenRead()
+	if err != nil {
+		return AccountBinding{}, nil, err
 	}
 	var result AccountBinding
 	var salt, expected []byte
@@ -218,20 +269,20 @@ func (accounts *Accounts) LoginAccount(name, password string) (AccountBinding, e
 		Scan(&result.UserID, &result.Username, &result.LoginUUID, &salt, &expected, &iterations)
 	missing := errors.Is(err, sql.ErrNoRows)
 	if err != nil && !missing {
-		return AccountBinding{}, err
+		return AccountBinding{}, nil, err
 	}
 	if missing {
 		salt, expected, iterations = make([]byte, 16), make([]byte, 32), passwordIterations
 	}
 	if iterations != passwordIterations || len(salt) != 16 || len(expected) != 32 {
-		return AccountBinding{}, errAccountCredentials
+		return AccountBinding{}, nil, errAccountCredentials
 	}
 	actual, err := pbkdf2.Key(sha256.New, password, salt, iterations, 32)
 	if err != nil {
-		return AccountBinding{}, err
+		return AccountBinding{}, nil, err
 	}
 	if subtle.ConstantTimeCompare(actual, expected) != 1 || missing {
-		return AccountBinding{}, errAccountCredentials
+		return AccountBinding{}, nil, errAccountCredentials
 	}
-	return result, nil
+	return result, expected, nil
 }

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"kairisei.local/server/battlecore"
 	"kairisei.local/server/internal/gamestate"
 )
 
@@ -35,7 +36,7 @@ func TestLobbyVacanciesFollowMissingProfessions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := owner.handleCreate(joinCSV(strconv.Itoa(spec.Owner.UserID), "1", "0", "", "4", "0", "0", "0", "0", credential.AuthToken, credential.Signature, "android")); err != nil {
+	if err := owner.handleCreate(joinCSV(strconv.Itoa(spec.Owner.UserID), "1", "0", "", "4", "4", "0", "0", "0", credential.AuthToken, credential.Signature, "android")); err != nil {
 		t.Fatal(err)
 	}
 	created := h.rooms[owner.roomID]
@@ -44,7 +45,7 @@ func TestLobbyVacanciesFollowMissingProfessions(t *testing.T) {
 		t.Fatal("singer owner lost its profession slot, host identity or reconnect binding")
 	}
 	response := strings.SplitN(strings.SplitN(output.output.String(), "RoomCreateRequestResult{\n", 2)[1], "\n", 2)[0]
-	if fields := splitCSV(response); len(fields) != 8 || fields[4] != "4" {
+	if fields := splitCSV(response); len(fields) != 10 || fields[9] != "2" || fields[4] != "4" || fields[8] != "0" {
 		t.Fatal("native room response did not identify the non-slot-one owner", response)
 	}
 	visible := map[string][]string{}
@@ -353,7 +354,7 @@ func TestComebackDuringInitialLoading(t *testing.T) {
 		t.Run(map[bool]string{false: "only_player", true: "peer_loading"}[peerLoading], func(t *testing.T) {
 			reference, members := nextBattleFixture(t)
 			h := NewHub()
-			h.combat = reference.catalog
+			h.combat = roomFixtureCatalog()
 			s := &Server{hub: h, logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
 			left, right := net.Pipe()
 			defer right.Close()
@@ -429,8 +430,24 @@ func TestComebackDuringInitialLoading(t *testing.T) {
 			if _, err := reference.TurnPhase(); err != nil {
 				t.Fatal(err)
 			}
-			if !current.turnPhaseStarted || current.engine.rng != reference.rng {
-				t.Fatal("loading recovery restarted or changed RNG order")
+			actual, err := current.engine.ResumeResults()
+			if err != nil {
+				t.Fatal(err)
+			}
+			want, err := reference.ResumeResults()
+			if err != nil {
+				t.Fatal(err)
+			}
+			actualCSV, err := encodeBattleResults(actual)
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantCSV, err := encodeBattleResults(want)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !current.turnPhaseStarted || actualCSV != wantCSV {
+				t.Fatal("loading recovery restarted or changed the public battle snapshot")
 			}
 		})
 	}
@@ -491,17 +508,23 @@ func TestBattleStartAuthorizationAndCancellation(t *testing.T) {
 
 func TestCompletedRoomFreezesReleasedDropsForAllClaimants(t *testing.T) {
 	h := NewHub()
-	current := &room{RoomSnapshot: RoomSnapshot{RoomID: 1, BossID: 11, State: RoomStateBattle},
+	engine, _ := wonRoomBattle(t)
+	current := &room{RoomSnapshot: RoomSnapshot{RoomID: 1, BossID: 11, StageType: gamestate.BattleStageScore, State: RoomStateBattle},
+		battles:      []gamestate.TeamBattleReplayBattle{{EnemyPartyID: 1, EnemyType: 1}},
+		engine:       engine,
 		connections:  map[int]*clientConn{1: {userID: 1001}, 2: {userID: 1002}},
-		hostCostPaid: true, dropLedgerVersion: 1, engine: &BattleEngine{enemyCount: 3}, engineBattleEnd: 1,
+		hostCostPaid: true, dropLedgerVersion: 1, engineBattleEnd: 1,
+		destroyedEnemyBits: 7, waveOutcomes: map[int]battlecore.WaveOutcome{0: {DestroyedEnemyBits: 7}},
 	}
 	for index := 0; index < 3; index++ {
-		current.engine.enemies[index] = battleEnemy{HP: 0, DropReleased: index != 2}
 		current.dropPlan = append(current.dropPlan, gamestate.TeamBattleEnemyDrop{EnemyIndex: index, Reward: gamestate.Reward{Type: 4, Num: index + 1}})
 	}
+	// This boundary consumes an already recorded combat ledger. Freeze that
+	// input independently of core damage/drop generation (covered in core).
+	current.releasedDrops = current.dropPlan[:2]
 	h.rooms[1] = current
 	session := h.lockRoomSession(current.RoomID)
-	err := completeBattleLocked(h, current, time.Now())
+	err := completeBattle(session, current, time.Now())
 	session.Unlock()
 	if err != nil {
 		t.Fatal(err)
@@ -512,9 +535,10 @@ func TestCompletedRoomFreezesReleasedDropsForAllClaimants(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !result.HostCostPaid || result.DropLedgerVersion != 1 || result.DestroyedEnemyBits != 7 || len(result.ReleasedDrops) != 2 || result.ReleasedDrops[0].Reward.Num != 1 {
+		if !result.HostCostPaid || result.DropLedgerVersion != 1 || result.DestroyedEnemyBits != 7 || len(result.ReleasedDrops) != 2 || result.ReleasedDrops[0].Reward.Num != 1 || result.StageType != gamestate.BattleStageScore || len(result.EnemyDeadBits) != 1 || result.EnemyDeadBits[0] != 7 {
 			t.Fatalf("claimant %d received an unfrozen/incorrect drop ledger: %+v", user, result)
 		}
 		result.ReleasedDrops[0].Reward.Num = 888
+		result.EnemyDeadBits[0] = 0
 	}
 }

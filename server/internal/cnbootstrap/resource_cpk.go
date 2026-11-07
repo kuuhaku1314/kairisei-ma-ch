@@ -44,6 +44,7 @@ func cnBootstrapCPKResource(delivery []cpk.File) http.HandlerFunc {
 		}
 		writer.Header().Set("Content-Type", "application/octet-stream")
 		writer.Header().Set("Cache-Control", "no-store")
+		allowResourceTransfer(writer, file.Size)
 		http.ServeFile(writer, request, file.SourcePath)
 	}
 }

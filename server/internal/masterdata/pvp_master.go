@@ -49,6 +49,9 @@ func LoadPVPRuntimeMaster(masterPath string) (game.PVPConfig, error) {
 	if config.EngineMode != "server_replay" && config.EngineMode != "client_native_local" {
 		return game.PVPConfig{}, errors.New("CN PVP runtime engine mode is invalid")
 	}
+	if (config.ResultSource != game.PVPResultFixedPolicy && config.ResultSource != game.PVPResultRecordedReplay) || (config.ResultSource == game.PVPResultRecordedReplay && config.EngineMode != game.PvpEngineServerReplay) {
+		return game.PVPConfig{}, errors.New("CN PVP result source is invalid")
+	}
 	if config.EngineMode == "server_replay" && len(config.ResultCommands) == 0 {
 		return game.PVPConfig{}, errors.New("CN PVP server replay mode requires result commands")
 	}

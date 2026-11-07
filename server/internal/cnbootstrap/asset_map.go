@@ -191,7 +191,8 @@ func loadCNAssetMap(
 	}
 
 	assets := make([]cnCatalogBundleAsset, 0, len(manifest.CatalogAssets))
-	written := make(map[string]string, len(manifest.CatalogAssets))
+	owners := make(map[string]string, len(manifest.CatalogAssets))
+	written := make(map[string]struct{}, len(manifest.CatalogAssets))
 	for index, entry := range manifest.CatalogAssets {
 		if err := validateCNAssetMapEntry(entry, availableBundles); err != nil {
 			return nil, nil, fmt.Errorf("official CN asset map entry %d: %w", index, err)
@@ -200,11 +201,22 @@ func loadCNAssetMap(
 		if entry.Directory != "" {
 			logicalName = entry.Directory + "/" + entry.Name
 		}
-		key := strings.ToLower(logicalName)
-		if previous, exists := written[key]; exists {
-			return nil, nil, fmt.Errorf("official CN asset map repeats logical asset %q (previous spelling %q)", logicalName, previous)
+		logicalKey := strings.ToLower(logicalName)
+		if previous, exists := owners[logicalKey]; exists && previous != entry.Bundle {
+			return nil, nil, fmt.Errorf("official CN asset map logical asset %q has multiple bundle owners", logicalName)
 		}
-		written[key] = logicalName
+		owners[logicalKey] = entry.Bundle
+		baseDir := entry.BaseDir
+		if baseDir == "" {
+			baseDir = "Assets/Resources/"
+		}
+		physicalKey := strings.ToLower(baseDir + logicalName + entry.Extension)
+		if _, exists := written[physicalKey]; exists {
+			return nil, nil, fmt.Errorf("official CN asset map repeats physical asset %q", physicalKey)
+		}
+		written[physicalKey] = struct{}{}
+		// Preserve physical variants and source order. The original FileCatalog
+		// accepts both rows and retains the first extension for a logical lookup.
 		assets = append(assets, cnCatalogBundleAsset{
 			directory: entry.Directory,
 			name:      entry.Name,
@@ -214,35 +226,6 @@ func loadCNAssetMap(
 		})
 	}
 	return assets, bundleMetadata, nil
-}
-
-func loadCNAssetMapBundleSet(assetMapPath string) (map[string]struct{}, error) {
-	contents, err := os.ReadFile(assetMapPath)
-	if err != nil {
-		return nil, fmt.Errorf("read CN asset map bundle set: %w", err)
-	}
-	var manifest struct {
-		Bundles []struct {
-			Bundle string `json:"bundle"`
-		} `json:"bundles"`
-	}
-	if err := json.Unmarshal(contents, &manifest); err != nil {
-		return nil, fmt.Errorf("parse CN asset map bundle set: %w", err)
-	}
-	if len(manifest.Bundles) == 0 {
-		return nil, errors.New("CN asset map bundle set is empty")
-	}
-	result := make(map[string]struct{}, len(manifest.Bundles))
-	for index, bundle := range manifest.Bundles {
-		if bundle.Bundle == "" {
-			return nil, fmt.Errorf("CN asset map bundle set entry %d is empty", index)
-		}
-		if _, duplicate := result[bundle.Bundle]; duplicate {
-			return nil, fmt.Errorf("CN asset map bundle set repeats %q", bundle.Bundle)
-		}
-		result[bundle.Bundle] = struct{}{}
-	}
-	return result, nil
 }
 
 func validateCNAssetMapEntry(entry cnAssetMapEntry, availableBundles map[string]struct{}) error {

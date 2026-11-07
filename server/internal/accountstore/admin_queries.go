@@ -149,18 +149,19 @@ func (storage *Database) ActionReceipt(key string, userID int, requestSHA string
 
 // List summaries read the compact projection, not full inventory snapshots.
 type AccountListItem struct {
-	Level        int    `json:"level"`
-	ArthurType   int    `json:"arthur_type"`
-	Gold         int    `json:"gold"`
-	Crystals     int    `json:"crystals"`
-	Name         string `json:"name"`
-	Username     string `json:"username"`
-	UserID       int    `json:"user_id"`
-	LoginUUID    string `json:"login_uuid"`
-	CreatedUTC   string `json:"created_utc"`
-	LastLoginUTC string `json:"last_login_utc"`
-	Revision     int    `json:"revision"`
-	UpdatedUTC   string `json:"updated_utc"`
+	LoginBlock   LoginBlock `json:"login_block"`
+	Level        int        `json:"level"`
+	ArthurType   int        `json:"arthur_type"`
+	Gold         int        `json:"gold"`
+	Crystals     int        `json:"crystals"`
+	Name         string     `json:"name"`
+	Username     string     `json:"username"`
+	UserID       int        `json:"user_id"`
+	LoginUUID    string     `json:"login_uuid"`
+	CreatedUTC   string     `json:"created_utc"`
+	LastLoginUTC string     `json:"last_login_utc"`
+	Revision     int        `json:"revision"`
+	UpdatedUTC   string     `json:"updated_utc"`
 }
 
 func (accounts *Accounts) QueryAccounts(search string, includeSystem bool, limit, offset int, ids ...int) ([]AccountListItem, int, error) {
@@ -178,6 +179,7 @@ type AccountFilter struct {
 	Sort          string
 	ActiveOnly    bool
 	ActiveIDs     []int
+	LoginBlock    string
 	// Optional projection filters; zero means unrestricted.
 	LevelMin   int
 	LevelMax   int
@@ -201,6 +203,15 @@ func (accounts *Accounts) QueryFilteredAccounts(filter AccountFilter, limit, off
 	job := `COALESCE(json_extract(CAST(p.payload_json AS TEXT),'$.user.active_arthur_type'),0)`
 	where := ` WHERE (? OR a.user_id<?)`
 	args := []any{PrimaryUserID, filter.IncludeSystem, SystemPartnerUserIDBase}
+	now := time.Now().Unix()
+	switch filter.LoginBlock {
+	case "blocked":
+		where += ` AND (a.login_block_until_unix = 0 OR a.login_block_until_unix > ?)`
+		args = append(args, now)
+	case "unblocked":
+		where += ` AND (a.login_block_until_unix IS NULL OR a.login_block_until_unix BETWEEN 1 AND ?)`
+		args = append(args, now)
+	}
 	for _, q := range strings.Fields(strings.ToLower(filter.Search)) {
 		where += ` AND instr(lower(CAST(a.user_id AS TEXT)||' '||a.login_uuid||' '||COALESCE(c.username,'')||' '||` + name + `),?)>0`
 		args = append(args, q)
@@ -270,7 +281,8 @@ func (accounts *Accounts) QueryFilteredAccounts(filter AccountFilter, limit, off
 		` + level + `,
 		` + job + `,
 		COALESCE(json_extract(CAST(p.payload_json AS TEXT),'$.user.gold'),0),
-		COALESCE(json_extract(CAST(p.payload_json AS TEXT),'$.user.coin'),0)+COALESCE(json_extract(CAST(p.payload_json AS TEXT),'$.user.coin_free'),0)` + from + where + ` ORDER BY ` + order
+		COALESCE(json_extract(CAST(p.payload_json AS TEXT),'$.user.coin'),0)+COALESCE(json_extract(CAST(p.payload_json AS TEXT),'$.user.coin_free'),0),
+		a.login_block_until_unix` + from + where + ` ORDER BY ` + order
 	if limit > 0 {
 		query += ` LIMIT ? OFFSET ?`
 		args = append(args, limit, offset)
@@ -283,9 +295,11 @@ func (accounts *Accounts) QueryFilteredAccounts(filter AccountFilter, limit, off
 	result := []AccountListItem{}
 	for rows.Next() {
 		var a AccountListItem
-		if err := rows.Scan(&a.UserID, &a.LoginUUID, &a.Username, &a.Name, &a.CreatedUTC, &a.LastLoginUTC, &a.Revision, &a.UpdatedUTC, &a.Level, &a.ArthurType, &a.Gold, &a.Crystals); err != nil {
+		var until sql.NullInt64
+		if err := rows.Scan(&a.UserID, &a.LoginUUID, &a.Username, &a.Name, &a.CreatedUTC, &a.LastLoginUTC, &a.Revision, &a.UpdatedUTC, &a.Level, &a.ArthurType, &a.Gold, &a.Crystals, &until); err != nil {
 			return nil, 0, err
 		}
+		a.LoginBlock = loginBlockAt(until, now)
 		result = append(result, a)
 	}
 	return result, total, rows.Err()
@@ -336,6 +350,32 @@ func (accounts *Accounts) LoginMetadata(userID int) (LoginMetadata, error) {
 	err = db.QueryRowContext(context.Background(), `SELECT login_uuid, created_utc, last_login_utc FROM cn_local_account WHERE user_id = ?`, userID).Scan(&result.LoginUUID, &result.CreatedUTC, &result.LastLoginUTC)
 	return result, err
 }
+
+// PlayerIDs reads actual players within an inclusive range, without decoding saves.
+func (accounts *Accounts) PlayerIDs(ctx context.Context, startUID, endUID int) ([]int, error) {
+	if startUID < PrimaryUserID || endUID >= SystemPartnerUserIDBase || startUID > endUID {
+		return nil, errors.New("player ID range is outside the real-player namespace")
+	}
+	db, err := accounts.storage.OpenRead()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.QueryContext(ctx, `SELECT user_id FROM cn_local_account WHERE user_id >= ? AND user_id <= ? ORDER BY user_id`, startUID, endUID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := []int{}
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 func (accounts *Accounts) CountIDs(ids []int) (int, error) {
 	db, err := accounts.storage.OpenRead()
 	if err != nil {

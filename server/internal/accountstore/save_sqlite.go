@@ -122,7 +122,7 @@ func (storage *Database) LoadOrImport() (gamestate.State, error) {
 		if loadErr != nil {
 			return gamestate.State{}, loadErr
 		}
-		if err := writeAccountRows(transaction, state); err != nil {
+		if err := writeSnapshotRows(transaction, state, content); err != nil {
 			return gamestate.State{}, err
 		}
 		digest := sha256.Sum256(content)
@@ -235,7 +235,7 @@ func (storage *Database) persistWithAudit(state gamestate.State, audit *AdminAud
 }
 
 func writePrimaryAccountSnapshot(transaction *sql.Tx, state gamestate.State, content []byte, digestText, updatedUTC string, audit *AdminAudit) error {
-	if err := writeAccountRows(transaction, state); err != nil {
+	if err := writeSnapshotRows(transaction, state, content); err != nil {
 		return err
 	}
 	result, err := transaction.ExecContext(

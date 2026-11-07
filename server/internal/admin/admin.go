@@ -25,9 +25,12 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"kairisei.local/server/internal/accountstore"
+	"kairisei.local/server/internal/game"
 	"kairisei.local/server/internal/gamestate"
 	"kairisei.local/server/internal/masterdata"
 	"kairisei.local/server/internal/multiplayer"
+	"kairisei.local/server/internal/netstats"
+	"kairisei.local/server/internal/objectstore"
 )
 
 //go:embed web/admin_ui.html
@@ -35,6 +38,24 @@ var adminHTML []byte
 
 //go:embed web/admin_operations.js
 var adminOperationsJS []byte
+
+//go:embed web/admin_kit.js
+var adminKitJS []byte
+
+//go:embed web/admin_missions.js
+var adminMissionsJS []byte
+
+//go:embed web/admin_gift_codes.js
+var adminGiftCodesJS []byte
+
+//go:embed web/admin_pool_rules.js
+var adminPoolRulesJS []byte
+
+//go:embed web/admin_maintenance_history.js
+var adminMaintenanceHistoryJS []byte
+
+//go:embed web/admin_editors.css
+var adminEditorsCSS []byte
 
 //go:embed web/admin_ui.js
 var adminJS []byte
@@ -57,8 +78,14 @@ var adminEvolutionJS []byte
 //go:embed web/admin_content.js
 var adminContentJS []byte
 
+//go:embed web/admin_tower_drops.js
+var adminTowerDropsJS []byte
+
 //go:embed web/admin_player_policy.js
 var adminPlayerPolicyJS []byte
+
+//go:embed web/admin_home_banners.js
+var adminHomeBannersJS []byte
 
 //go:embed web/admin_insights.js
 var adminInsightsJS []byte
@@ -84,23 +111,25 @@ type AdminBattleGroup struct {
 }
 
 type AdminCatalogEntry struct {
-	Combat        *multiplayer.OperationsCardInfo `json:"combat,omitempty"`
-	Parameters    *gamestate.CardParameter        `json:"parameters,omitempty"`
-	ResourceState string                          `json:"resource_state,omitempty"`
-	Kind          string                          `json:"kind"`
-	RewardType    int                             `json:"reward_type"`
-	RewardTypeID  int                             `json:"reward_type_id"`
-	Name          string                          `json:"name"`
-	Detail        string                          `json:"detail"`
-	ImageURL      string                          `json:"image_url,omitempty"`
-	Rarity        int                             `json:"rarity,omitempty"`
-	ArthurType    int8                            `json:"arthur_type,omitempty"`
-	LevelMax      int                             `json:"level_max,omitempty"`
-	FameMax       int                             `json:"fame_max,omitempty"`
-	LoveMax       int                             `json:"love_max,omitempty"`
-	PictID        int                             `json:"pict_id,omitempty"`
-	SourceTags    []string                        `json:"source_tags,omitempty"`
-	GachaEligible bool                            `json:"gacha_eligible"`
+	Combat         *multiplayer.OperationsCardInfo `json:"combat,omitempty"`
+	Parameters     *gamestate.CardParameter        `json:"parameters,omitempty"`
+	ResourceState  string                          `json:"resource_state,omitempty"`
+	Kind           string                          `json:"kind"`
+	RewardType     int                             `json:"reward_type"`
+	RewardTypeID   int                             `json:"reward_type_id"`
+	Name           string                          `json:"name"`
+	Detail         string                          `json:"detail"`
+	ImageURL       string                          `json:"image_url,omitempty"`
+	StampKind      string                          `json:"stamp_kind,omitempty"`
+	Rarity         int                             `json:"rarity,omitempty"`
+	ArthurType     int8                            `json:"arthur_type,omitempty"`
+	LevelMax       int                             `json:"level_max,omitempty"`
+	FixedCardLevel int                             `json:"fixed_card_level,omitempty"`
+	FameMax        int                             `json:"fame_max,omitempty"`
+	LoveMax        int                             `json:"love_max,omitempty"`
+	PictID         int                             `json:"pict_id,omitempty"`
+	SourceTags     []string                        `json:"source_tags,omitempty"`
+	GachaEligible  bool                            `json:"gacha_eligible"`
 }
 
 type adminCatalogImageCoverage struct {
@@ -114,6 +143,7 @@ type adminCatalogImageCoverage struct {
 
 type adminAssetManifest struct {
 	SchemaVersion               int                                  `json:"schema_version"`
+	CardImageIdentity           string                               `json:"card_image_identity"`
 	ClientProfile               string                               `json:"client_profile"`
 	State                       string                               `json:"state"`
 	Purpose                     string                               `json:"purpose"`
@@ -138,10 +168,16 @@ type API struct {
 	advertiseHost    string
 	gamePort         int
 	logger           *slog.Logger
+	networkMetrics   *netstats.Counters
+	runtimeLog       *runtimeLogReader
 	progression      gamestate.PlayerProgressionPolicy
+	pvpRanks         []game.PVPRankConfig
 	gachaPresets     []AdminGachaPreset
 	gachaCoverDir    string
+	homeBannerDir    string
 	gachaBannerPaths map[string]string
+	imageStorage     objectstore.Setting
+	imageSync        *imageSyncState
 }
 
 type AdminGachaPreset struct {
@@ -156,49 +192,53 @@ type AdminGachaPreset struct {
 	DrawCount      int    `json:"draw_count"`
 	CardCount      int    `json:"card_count"`
 	GachaIDs       []int  `json:"gacha_ids"`
+	// The game-list entry players see: the published category, or the pool's own preset.
+	CategoryNum int    `json:"category_num"`
+	Category    string `json:"category,omitempty"`
 }
 
 type adminAccount struct {
-	Username            string `json:"username"`
-	ContainerCards      int    `json:"container_cards"`
-	ContainerMax        int    `json:"container_max"`
-	Spheres             int    `json:"spheres"`
-	Buddies             int    `json:"buddies"`
-	Decks               int    `json:"decks"`
-	Items               int    `json:"item_kinds"`
-	PendingMail         int    `json:"pending_mail"`
-	Experience          int    `json:"experience"`
-	NextLevelExperience int    `json:"next_level_experience"`
-	NaviID              int8   `json:"navi_id"`
-	UnlockedNavis       int    `json:"unlocked_navis"`
-	ActiveBossID        int    `json:"active_boss_id"`
-	ActiveRoomID        int64  `json:"active_room_id"`
-	ActivePVP           bool   `json:"active_pvp"`
-	RecentActivity      string `json:"recent_activity,omitempty"`
-	TrainingStep        int    `json:"training_step"`
-	ArthurRank          int    `json:"arthur_rank"`
-	CardMax             int    `json:"card_max"`
-	FeatureIDs          []uint `json:"unlocked_features"`
-	UserID              int    `json:"user_id"`
-	LoginUUID           string `json:"login_uuid"`
-	Name                string `json:"name"`
-	CreatedUTC          string `json:"created_utc"`
-	LastLoginUTC        string `json:"last_login_utc"`
-	Revision            int    `json:"revision"`
-	UpdatedUTC          string `json:"updated_utc"`
-	Level               int    `json:"level"`
-	Gold                int    `json:"gold"`
-	FriendPoint         int    `json:"friend_point"`
-	PaidCrystal         int    `json:"paid_crystal"`
-	FreeCrystal         int    `json:"free_crystal"`
-	AP                  int    `json:"ap"`
-	APMax               int    `json:"ap_max"`
-	BP                  int    `json:"bp"`
-	BPMax               int    `json:"bp_max"`
-	CardCount           int    `json:"card_count"`
-	StackCardKinds      int    `json:"stack_card_kinds"`
-	PVPPoint            int    `json:"pvp_point"`
-	ActiveArthurType    int    `json:"active_arthur_type"`
+	LoginBlock          accountstore.LoginBlock `json:"login_block"`
+	Username            string                  `json:"username"`
+	ContainerCards      int                     `json:"container_cards"`
+	ContainerMax        int                     `json:"container_max"`
+	Spheres             int                     `json:"spheres"`
+	Buddies             int                     `json:"buddies"`
+	Decks               int                     `json:"decks"`
+	Items               int                     `json:"item_kinds"`
+	PendingMail         int                     `json:"pending_mail"`
+	Experience          int                     `json:"experience"`
+	NextLevelExperience int                     `json:"next_level_experience"`
+	NaviID              int8                    `json:"navi_id"`
+	UnlockedNavis       int                     `json:"unlocked_navis"`
+	ActiveBossID        int                     `json:"active_boss_id"`
+	ActiveRoomID        int64                   `json:"active_room_id"`
+	ActivePVP           bool                    `json:"active_pvp"`
+	RecentActivity      string                  `json:"recent_activity,omitempty"`
+	TrainingStep        int                     `json:"training_step"`
+	ArthurRank          int                     `json:"arthur_rank"`
+	CardMax             int                     `json:"card_max"`
+	FeatureIDs          []uint                  `json:"unlocked_features"`
+	UserID              int                     `json:"user_id"`
+	LoginUUID           string                  `json:"login_uuid"`
+	Name                string                  `json:"name"`
+	CreatedUTC          string                  `json:"created_utc"`
+	LastLoginUTC        string                  `json:"last_login_utc"`
+	Revision            int                     `json:"revision"`
+	UpdatedUTC          string                  `json:"updated_utc"`
+	Level               int                     `json:"level"`
+	Gold                int                     `json:"gold"`
+	FriendPoint         int                     `json:"friend_point"`
+	PaidCrystal         int                     `json:"paid_crystal"`
+	FreeCrystal         int                     `json:"free_crystal"`
+	AP                  int                     `json:"ap"`
+	APMax               int                     `json:"ap_max"`
+	BP                  int                     `json:"bp"`
+	BPMax               int                     `json:"bp_max"`
+	CardCount           int                     `json:"card_count"`
+	StackCardKinds      int                     `json:"stack_card_kinds"`
+	PVPPoint            int                     `json:"pvp_point"`
+	ActiveArthurType    int                     `json:"active_arthur_type"`
 }
 
 type adminPublicationState struct {
@@ -268,6 +308,12 @@ func applyAdminCatalogAssetCoverage(catalog []AdminCatalogEntry, assetsRoot stri
 		manifest.CatalogMissingOutputCount != 0 || manifest.BossGroupMissingOutputCount != 0 {
 		return nil, errors.New("manifest identity or output closure is invalid")
 	}
+	if manifest.CardImageIdentity != "" && manifest.CardImageIdentity != "picture_id" {
+		return nil, errors.New("manifest card image identity is unsupported")
+	}
+	if manifest.CardImageIdentity == "picture_id" && (len(resources) == 0 || resources[0] == nil) {
+		return nil, errors.New("picture-ID thumbnails require the verified card source")
+	}
 	expectedKinds := map[string]struct{}{
 		"card": {}, "item": {}, "material": {}, "sphere": {}, "buddy": {},
 	}
@@ -307,8 +353,9 @@ func applyAdminCatalogAssetCoverage(catalog []AdminCatalogEntry, assetsRoot stri
 	for index := range catalog {
 		entry := &catalog[index]
 		if entry.Kind == "currency" {
-			if entry.ImageURL != "" {
-				return nil, fmt.Errorf("currency reward %d unexpectedly has an image URL", entry.RewardType)
+			entry.ImageURL, err = adminOptionalImageURL(assetsRoot, fmt.Sprintf("/assets/currency/%d.webp", entry.RewardType))
+			if err != nil {
+				return nil, fmt.Errorf("currency reward %d image: %w", entry.RewardType, err)
 			}
 			publishable = append(publishable, *entry)
 			continue
@@ -324,6 +371,13 @@ func applyAdminCatalogAssetCoverage(catalog []AdminCatalogEntry, assetsRoot stri
 				publishable = append(publishable, copy)
 			}
 			continue
+		}
+		if manifest.CardImageIdentity == "picture_id" && (entry.Kind == "card" || entry.Kind == "material") {
+			resource, exists := resources[0][entry.RewardTypeID]
+			if !exists || resource.PictID < 10000000 {
+				return nil, fmt.Errorf("catalog reward %s/%d has no picture identity", entry.Kind, entry.RewardTypeID)
+			}
+			entry.ImageURL = fmt.Sprintf("/assets/card-picture/%d.webp", resource.PictID)
 		}
 		if err := requireAdminAsset(assetsRoot, entry.ImageURL); err != nil {
 			return nil, fmt.Errorf("catalog reward %s/%d: %w", entry.Kind, entry.RewardTypeID, err)
@@ -363,14 +417,42 @@ func applyAdminCatalogAssetCoverage(catalog []AdminCatalogEntry, assetsRoot stri
 	return publishable, nil
 }
 
+func attachAdminCardDetails(entries []AdminCatalogEntry, templates []gamestate.Card, details map[int]multiplayer.OperationsCardInfo) error {
+	alchemistIDs := make(map[int]struct{})
+	for _, card := range templates {
+		if card.RarityPlus == 4 {
+			alchemistIDs[card.CardID] = struct{}{}
+		}
+	}
+	for i := range entries {
+		if entries[i].Kind != "card" {
+			continue
+		}
+		detail, exists := details[entries[i].RewardTypeID]
+		_, alchemist := alchemistIDs[entries[i].RewardTypeID]
+		if alchemist && !exists {
+			return fmt.Errorf("alchemist card %d has no combat definition", entries[i].RewardTypeID)
+		}
+		if exists {
+			entries[i].Combat = &detail
+			if alchemist && detail.SummonID == 0 {
+				entries[i].FixedCardLevel = entries[i].LevelMax
+			}
+		}
+	}
+	return nil
+}
+
 func BuildAdminCatalog(cardMaster masterdata.CardRuntimeMaster, itemMaster masterdata.ItemRuntimeMaster) ([]AdminCatalogEntry, map[string]AdminCatalogEntry, error) {
 	jpCards, err := adminJPCardIDs(cardMaster.Source)
 	if err != nil {
 		return nil, nil, fmt.Errorf("read catalog import provenance: %w", err)
 	}
 	evolved := make(map[int]bool)
+	evolutionSources := make(map[int][]int)
 	for _, transition := range cardMaster.EvolutionTransitions {
 		evolved[transition.ToCardID] = true
+		evolutionSources[transition.ToCardID] = append(evolutionSources[transition.ToCardID], transition.Type)
 	}
 	entries := []AdminCatalogEntry{
 		{Kind: "currency", RewardType: 0, Name: "亚瑟经验", Detail: "玩家等级经验"},
@@ -380,7 +462,7 @@ func BuildAdminCatalog(cardMaster masterdata.CardRuntimeMaster, itemMaster maste
 		{Kind: "currency", RewardType: 12, Name: "体力", Detail: "领取时补充 BP，上限封顶"},
 	}
 	for _, card := range cardMaster.CardTemplates {
-		sourceTags := cardSourceTags(card.AcquisitionText)
+		sourceTags := cardSourceTags(card.AcquisitionText, evolutionSources[card.CardID])
 		if jpCards[card.CardID] {
 			sourceTags = append(sourceTags, "jp_import")
 		}
@@ -493,7 +575,7 @@ func requireAdminMutation(request *http.Request) error {
 }
 
 func decodeAdminJSON(request *http.Request, target any) error {
-	return DecodeAdminJSONLimit(request, target, 64*1024)
+	return DecodeAdminJSONLimit(request, target, 1024*1024)
 }
 
 func DecodeAdminJSONLimit(request *http.Request, target any, maxBodyBytes int) error {
@@ -536,7 +618,7 @@ func (admin *API) health(writer http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-func (admin *API) status(writer http.ResponseWriter, _ *http.Request) {
+func (admin *API) status(writer http.ResponseWriter, request *http.Request) {
 	accountSummary, err := admin.accounts.AccountSummary()
 	if err != nil {
 		WriteAdminError(writer, http.StatusInternalServerError, err.Error())
@@ -554,16 +636,26 @@ func (admin *API) status(writer http.ResponseWriter, _ *http.Request) {
 		maintenance["enabled"], maintenance["busy"] = state.Enabled, state.Busy
 		maintenance["revision"] = state.Revision
 	}
-	WriteAdminJSON(writer, http.StatusOK, map[string]any{
+	response := map[string]any{
 		"state": "PASS", "client_profile": "cn602-bootstrap", "maintenance": maintenance,
 		"game_endpoint": fmt.Sprintf("http://%s:%d", admin.advertiseHost, admin.gamePort),
 		"battle_port":   admin.gamePort + 1, "active_rooms": admin.multiplayerHub.RoomCount(),
 		"max_player_level": admin.progression.MaxLevel, "account_count": accountSummary.Players, "boss_group_count": len(admin.groups),
 		"accounts": accountSummary, "activity": admin.activity(),
-		"boss_count": admin.bossCount, "publication": policy,
+		"account_creation_rejections": admin.accounts.CreationRejections(),
+		"go_runtime":                  readGoRuntime(time.Now()),
+		"database":                    admin.accounts.Database().Statistics(),
+		"boss_count":                  admin.bossCount, "publication": policy,
 		"sqlite_schema_version": accountstore.SaveDatabaseSchemaVersion,
 		"server_time_utc":       time.Now().UTC().Format(time.RFC3339),
-	})
+	}
+	if admin.networkMetrics != nil {
+		response["network"] = admin.networkMetrics.Snapshot()
+	}
+	if request.URL.Query().Get("room_diagnostics") == "1" {
+		response["room_synchronization"] = admin.multiplayerHub.RoomSynchronizationSnapshot()
+	}
+	WriteAdminJSON(writer, http.StatusOK, response)
 }
 
 // loadAccountState applies the same player progression migration used when a
@@ -639,6 +731,7 @@ func (admin *API) accountDetail(writer http.ResponseWriter, request *http.Reques
 	}
 	if len(rows) > 0 {
 		account.Username = rows[0].Username
+		account.LoginBlock = rows[0].LoginBlock
 	}
 	metadata, err := admin.accounts.LoginMetadata(userID)
 	if err != nil {
@@ -679,8 +772,8 @@ func (admin *API) catalogEntries(writer http.ResponseWriter, request *http.Reque
 	arthurType := 0
 	if raw := request.URL.Query().Get("arthur_type"); raw != "" {
 		parsed, err := strconv.Atoi(raw)
-		if err != nil || parsed < -1 || parsed > 4 {
-			WriteAdminError(writer, http.StatusBadRequest, "card arthur_type must be -1 (common), 0 (all), or 1 through 4")
+		if err != nil || parsed < -1 || parsed > 5 {
+			WriteAdminError(writer, http.StatusBadRequest, "card arthur_type must be -1 (common), 0 (all), or 1 through 5")
 			return
 		}
 		arthurType = parsed
@@ -693,6 +786,15 @@ func (admin *API) catalogEntries(writer http.ResponseWriter, request *http.Reque
 			return
 		}
 		rarity = parsed
+	}
+	limitCount := -1
+	if raw := request.URL.Query().Get("limit_count"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 0 || parsed > 2 {
+			WriteAdminError(writer, http.StatusBadRequest, "catalog limit_count must be 0, 1, or 2")
+			return
+		}
+		limitCount = parsed
 	}
 	query := strings.ToLower(strings.TrimSpace(request.URL.Query().Get("q")))
 	limit := 80
@@ -721,8 +823,16 @@ func (admin *API) catalogEntries(writer http.ResponseWriter, request *http.Reque
 		}
 	}
 	filtered := make([]AdminCatalogEntry, 0, limit)
+	stampKind := request.URL.Query().Get("stamp_kind")
+	if stampKind != "" && (kind != "stamp" || stampKind != "dialog" && stampKind != "image" && stampKind != "voice") {
+		WriteAdminError(writer, http.StatusBadRequest, "stamp_kind requires kind=stamp and dialog, image or voice")
+		return
+	}
 	total := 0
 	for _, entry := range admin.catalog {
+		if stampKind != "" && entry.StampKind != stampKind {
+			continue
+		}
 		if attribute != "" && (entry.Combat == nil || !slices.Contains(strings.Split(entry.Combat.Attribute, "_"), attribute)) {
 			continue
 		}
@@ -742,6 +852,9 @@ func (admin *API) catalogEntries(writer http.ResponseWriter, request *http.Reque
 			continue
 		}
 		if rarity != 0 && entry.Rarity != rarity {
+			continue
+		}
+		if limitCount >= 0 && (entry.Kind != "card" || entry.Combat == nil || entry.Combat.LimitCount != limitCount) {
 			continue
 		}
 		text := fmt.Sprintf("%s %s %d %d", entry.Name, entry.Detail, entry.RewardTypeID, entry.PictID)
@@ -839,6 +952,13 @@ func (admin *API) mailReward(request AdminMailRequest) (gamestate.Reward, AdminC
 	if entry.ResourceState == "unavailable" {
 		return gamestate.Reward{}, AdminCatalogEntry{}, errors.New("该卡牌尚未进入当前运行资源清单")
 	}
+	reward, err := adminCatalogReward(request, entry)
+	return reward, entry, err
+}
+
+// adminCatalogReward validates values against a resolved catalog entry.
+// Callers decide whether unavailable assets block a draft or only publication.
+func adminCatalogReward(request AdminMailRequest, entry AdminCatalogEntry) (gamestate.Reward, error) {
 	maximum := adminMaximumStackedRewardQuantity
 	if gamestate.IsCollectionReward(request.RewardType) {
 		maximum = 1
@@ -847,19 +967,32 @@ func (admin *API) mailReward(request AdminMailRequest) (gamestate.Reward, AdminC
 		maximum = adminMaximumInstanceRewardQuantity
 	}
 	if request.Quantity < 1 || request.Quantity > maximum {
-		return gamestate.Reward{}, AdminCatalogEntry{}, fmt.Errorf("reward quantity must be 1 through %d", maximum)
+		return gamestate.Reward{}, fmt.Errorf("reward quantity must be 1 through %d", maximum)
 	}
 	reward := gamestate.Reward{
 		Type: request.RewardType, Num: request.Quantity,
 		RewardTypeID: request.RewardTypeID, CardSkillLevels: []int16{},
 	}
+	if request.RewardType == 19 {
+		if request.CardLevel < 0 || request.CardLevel > entry.LevelMax || request.CardLevel > math.MaxInt16 ||
+			request.CardFame != 0 || request.CardLove != 0 {
+			return gamestate.Reward{}, errors.New("传承卡只支持按当前形态等级上限配置等级")
+		}
+		reward.CardLevel = int16(request.CardLevel)
+		return reward, nil
+	}
 	if request.RewardType != 6 {
 		if request.CardLevel != 0 || request.CardFame != 0 || request.CardLove != 0 {
-			return gamestate.Reward{}, AdminCatalogEntry{}, errors.New("card progression fields require a card reward")
+			return gamestate.Reward{}, errors.New("card progression fields require a card reward")
 		}
-		return reward, entry, nil
+		return reward, nil
 	}
-	if request.CardLevel == 0 {
+	if entry.FixedCardLevel > 0 {
+		if request.CardLevel != 0 && request.CardLevel != entry.FixedCardLevel {
+			return gamestate.Reward{}, errors.New("炼金技能卡获得时固定为满级")
+		}
+		request.CardLevel = entry.FixedCardLevel
+	} else if request.CardLevel == 0 {
 		request.CardLevel = 1
 	}
 	if request.CardFame == 0 {
@@ -869,13 +1002,13 @@ func (admin *API) mailReward(request AdminMailRequest) (gamestate.Reward, AdminC
 		request.CardFame < 1 || request.CardFame > entry.FameMax ||
 		request.CardLove < 0 || request.CardLove > entry.LoveMax ||
 		request.CardLevel > math.MaxInt16 || request.CardFame > math.MaxInt16 {
-		return gamestate.Reward{}, AdminCatalogEntry{}, errors.New("card progression values exceed the official card definition")
+		return gamestate.Reward{}, errors.New("card progression values exceed the official card definition")
 	}
 	reward.CardLevel = int16(request.CardLevel)
 	reward.CardFame = int16(request.CardFame)
 	reward.CardLove = request.CardLove
 	reward.CardSkillLevels = []int16{1}
-	return reward, entry, nil
+	return reward, nil
 }
 
 func (admin *API) sendAccountMail(writer http.ResponseWriter, request *http.Request) {
@@ -1144,7 +1277,7 @@ func applyAdminTargetLevel(state *gamestate.State, policy gamestate.PlayerProgre
 		state.User.NextLevelExperience = policy.ExperienceRequired(target)
 	}
 	state.User.BPMax = policy.BattlePointMaximum(target)
-	state.User.FriendMax = policy.FriendMaximum(target)
+	state.User.FollowMax = policy.FollowMaximum(target)
 	state.User.Jobs = policy.JobsAtLevel(target)
 	state.User.AP = state.User.APMax
 	state.Explore.APNextRecoveryUnix = 0
@@ -1202,7 +1335,11 @@ func (admin *API) bossPolicy(writer http.ResponseWriter, request *http.Request) 
 		WriteAdminError(writer, http.StatusInternalServerError, err.Error())
 		return
 	}
-	WriteAdminJSON(writer, http.StatusOK, map[string]any{"state": "PASS", "publication": policy})
+	result := map[string]any{"state": "PASS", "publication": policy}
+	if key == towerPublicationKey {
+		result["towers"] = admin.towerPublicationOptions(policy)
+	}
+	WriteAdminJSON(writer, http.StatusOK, result)
 }
 
 func (admin *API) setBossPolicy(writer http.ResponseWriter, request *http.Request) {
@@ -1228,7 +1365,12 @@ func (admin *API) setBossPolicy(writer http.ResponseWriter, request *http.Reques
 			}
 		}
 	}
-	doc, err := admin.operations.setBattlePublication(key, publication)
+	var doc accountstore.Document
+	if key == towerPublicationKey {
+		doc, err = admin.operations.SetTowerPublication(publication)
+	} else {
+		doc, err = admin.operations.setBattlePublication(key, publication)
+	}
 	if err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, accountstore.ErrDocumentConflict) {
@@ -1242,7 +1384,11 @@ func (admin *API) setBossPolicy(writer http.ResponseWriter, request *http.Reques
 		WriteAdminError(writer, http.StatusInternalServerError, err.Error())
 		return
 	}
-	WriteAdminJSON(writer, http.StatusOK, map[string]any{"state": "PASS", "publication": policy})
+	result := map[string]any{"state": "PASS", "publication": policy}
+	if key == towerPublicationKey {
+		result["towers"] = admin.towerPublicationOptions(policy)
+	}
+	WriteAdminJSON(writer, http.StatusOK, result)
 }
 
 func (admin *API) gachaPresetList(writer http.ResponseWriter, _ *http.Request) {
@@ -1255,10 +1401,17 @@ func (admin *API) gachaPresetList(writer http.ResponseWriter, _ *http.Request) {
 				presets[i].Name = config.Profile.Name
 				presets[i].Price = config.Profile.Price
 				presets[i].CardCount = len(config.Profile.CardIDs) + len(config.Profile.RewardPool)
+				presets[i].CategoryNum = config.Profile.CategoryNum
 				if config.Profile.CoverPath != "" {
 					presets[i].ImageURL = "/" + config.Profile.CoverPath
 				}
 			}
+		}
+	}
+
+	for i := range presets {
+		if category, ok := gachaEditorCategoryByID(presets[i].CategoryNum); ok && category.ID != 0 {
+			presets[i].Category = category.Name
 		}
 	}
 
@@ -1293,7 +1446,7 @@ func (admin *API) gachaPublicationState() (adminGachaPublicationState, error) {
 }
 
 func (admin *API) gachaPublicationFromDocument(doc accountstore.Document) (adminGachaPublicationState, error) {
-	active, err := admin.operations.gachaPublicationFromDocument(doc)
+	active, err := admin.operations.DecodeGachaPublication(doc)
 	if err != nil {
 		return adminGachaPublicationState{}, err
 	}

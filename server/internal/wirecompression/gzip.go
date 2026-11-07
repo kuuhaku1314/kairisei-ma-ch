@@ -9,7 +9,7 @@ import (
 	"sync"
 )
 
-const Threshold = 1024
+const Threshold = 256
 
 var writers = sync.Pool{New: func() any { w, _ := gzip.NewWriterLevel(io.Discard, 6); return w }}
 

@@ -12,7 +12,7 @@ func TestExperienceRewardRefillsPointsOnlyOnLevelUp(t *testing.T) {
 	policy := gamestate.PlayerProgressionPolicy{ConfigVersion: 1, MaxLevel: 3}
 	policy.Experience.Base = 100
 	policy.BattlePoints.Base, policy.BattlePoints.LevelsPerPoint, policy.BattlePoints.Maximum = 20, 2, 21
-	policy.Friends.Minimum, policy.Friends.Numerator, policy.Friends.Denominator, policy.Friends.Maximum = 20, 2, 3, 65
+	policy.Friends.Base, policy.Friends.IncreaseFromLevel, policy.Friends.Maximum = 100, 201, 200
 	policy.JobParameters.MaxStatusLevel = 80
 	policy.JobParameters.Maximum = make([]gamestate.JobParameter, 5)
 	for _, tc := range []struct {
@@ -51,7 +51,7 @@ func TestSettlementOverflowPreservesProgressAndClaimableReward(t *testing.T) {
 			var complete func() (PresentReceiveResult, error)
 			switch kind {
 			case "battle":
-				s.teamBattleSolo = json.RawMessage(`{"9":[],"10":[{"0":100001,"9":0,"10":[{"0":10000101,"10":0}]}],"11":[],"12":[]}`)
+				s.teamBattleSolo = battleCatalogFixture(t, json.RawMessage(`{"9":[],"10":[{"0":100001,"9":0,"10":[{"0":10000101,"10":0}]}],"11":[],"12":[]}`))
 				s.activeBattle = &TeamBattleContext{BossID: 10000101}
 				profile := gamestate.TeamBattleRewardProfile{BossID: 10000101,
 					ResultRewards:     []gamestate.Reward{{Type: 4, Num: 5}, reward},

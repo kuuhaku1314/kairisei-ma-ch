@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"slices"
 
+	"kairisei.local/server/battlecore"
 	"kairisei.local/server/internal/gamestate"
-	"kairisei.local/server/internal/multiplayer"
 )
 
 func cloneTeamBattleDropPlan(source []gamestate.TeamBattleEnemyDrop) []gamestate.TeamBattleEnemyDrop {
@@ -72,15 +72,14 @@ func PlanTeamBattleDrops(profile gamestate.TeamBattleRewardProfile, enemyTypes [
 }
 
 func isTangibleTeamBattleReward(reward gamestate.Reward) bool {
-	return multiplayer.ValidBattleDrop(multiplayer.BattleDrop{RewardType: reward.Type, RewardTypeID: reward.RewardTypeID, Num: reward.Num})
+	return battlecore.ValidBattleDrop(battlecore.BattleDrop{RewardType: reward.Type, RewardTypeID: reward.RewardTypeID, Num: reward.Num})
 }
 
 // A native solo report provides dead bits per wave. A completed authoritative
 // room instead provides exactly the drops its engine released (DESTRUCT can
 // destroy an enemy without releasing a drop). Never re-roll either at result.
 type TeamBattleDropReport struct {
-	// Set only by the validated solo result route. Solo cups award every
-	// unclaimed grade on a clear; no damage estimate or NPC replay is used.
+	// Set by the solo result route to select its separate grade progress.
 	SoloChallenge  bool
 	ScoreVerified  bool
 	ScoreDamage    int64

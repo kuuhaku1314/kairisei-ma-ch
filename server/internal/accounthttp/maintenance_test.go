@@ -16,7 +16,7 @@ func TestMaintenanceWaitsForAccountWritesAndInvalidatesCache(t *testing.T) {
 		builds++
 		return http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), nil
 	}})
-	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/", nil))
+	r.ServeHTTP(httptest.NewRecorder(), primaryAccountRequest(http.MethodPost, "/", nil))
 	lock := r.AccountLock(accountstore.PrimaryUserID)
 	lock.Lock()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Millisecond)
@@ -28,7 +28,7 @@ func TestMaintenanceWaitsForAccountWritesAndInvalidatesCache(t *testing.T) {
 	if err := r.WithAccountMaintenance(context.Background(), func() error { return nil }); err != nil {
 		t.Fatal(err)
 	}
-	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/", nil))
+	r.ServeHTTP(httptest.NewRecorder(), primaryAccountRequest(http.MethodPost, "/", nil))
 	if builds != 2 {
 		t.Fatal("cached pre-cleanup account was reused", builds)
 	}

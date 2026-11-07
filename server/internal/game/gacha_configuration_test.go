@@ -65,6 +65,24 @@ func TestGachaGroupLimitCountsRequestsAcrossVariants(t *testing.T) {
 	if success != 1 || s.gachaGroupPlaysLocked()[7] != 2 {
 		t.Fatal("concurrent draws overran group quota")
 	}
+	// The daily quota keeps the row visible and limits all draw methods.
+	for i := range s.gachas {
+		s.gachas[i].PlayCountMax, s.gachas[i].DailyPlayMax = 0, 1
+	}
+	if visible := s.GachaState(); len(visible) != 2 || !visible[0].DailyExhausted() || !visible[1].DailyExhausted() {
+		t.Fatalf("daily quota was not shared or hid its row: %+v", visible)
+	}
+	before = s.coinFree
+	if _, err := s.PlayGacha(11, 3, nil); err != errGachaDailyLimit || s.coinFree != before {
+		t.Fatalf("daily limit did not block a stale variant before charging: %v", err)
+	}
+	for id, claim := range s.gachaDailyClaims {
+		claim.Day = gachaLocalDayKey(time.Now().Add(-24 * time.Hour))
+		s.gachaDailyClaims[id] = claim
+	}
+	if _, err := s.PlayGacha(12, 3, nil); err != nil || s.GachaState()[0].DailyGroupPlays != 1 {
+		t.Fatalf("new business day did not reset quota: %v", err)
+	}
 }
 
 func TestGachaStepPaymentUsesCurrentStage(t *testing.T) {
@@ -105,13 +123,13 @@ func TestGachaConfigurationPreservesPlayerStateAndScheduledPaymentFallback(t *te
 		{GachaID: 11, GroupID: 1, PayType: 4, PayTypeID: 99, Price: 1, PlayCount: 7, CardNum: 1, CardNumMax: 1, CardIDs: []int{100}, CardWeights: []int{1}},
 		{GachaID: 12, GroupID: 1, PayType: 3, Price: 5, CardNum: 1, CardNumMax: 1, CardIDs: []int{100}, CardWeights: []int{1}},
 	}
-	s := &Account{gachas: CloneGachaProfiles(profiles), items: map[int]gamestate.Item{99: {Num: 5}}, gachaDailyClaims: map[int]string{11: "2026-09-06"}, gachaSelections: map[int][]gamestate.Reward{}}
+	s := &Account{gachas: CloneGachaProfiles(profiles), items: map[int]gamestate.Item{99: {Num: 5}}, gachaDailyClaims: map[int]gamestate.GachaDailyClaim{11: {GachaID: 11, Day: "2026-09-06", PlayCount: 1}}, gachaSelections: map[int][]gamestate.Reward{}}
 	configured := profiles[0]
 	configured.Price = 2
 	configured.CardIDs = []int{200}
 	configured.PlayCount = 0
 	s.ApplyGachaConfiguration(1, []GachaConfiguration{{Profile: configured, StartUnix: time.Now().Add(time.Hour).Unix()}})
-	if s.gachas[0].Price != 2 || s.gachas[0].PlayCount != 7 || s.gachaDailyClaims[11] != "2026-09-06" || s.gachas[0].CardIDs[0] != 200 {
+	if s.gachas[0].Price != 2 || s.gachas[0].PlayCount != 7 || s.gachaDailyClaims[11].Day != "2026-09-06" || s.gachas[0].CardIDs[0] != 200 {
 		t.Fatal("operator config overwrote player state or did not update the pool")
 	}
 	visible := s.VisibleGachasLocked()
@@ -135,6 +153,18 @@ func TestGachaConfigurationPreservesPlayerStateAndScheduledPaymentFallback(t *te
 	if len(visible) != 1 || visible[0].GachaID != 12 || s.GachaAvailableForPlayLocked(11) || s.gachas[0].PlayCount != 7 {
 		t.Fatal("disabled single draw did not fall back without changing player count")
 	}
+	// In ID order the ticket is first and the substitute single follows the ten-draw.
+	// An expired ticket with a positive balance must leave two usable buttons.
+	multi := profiles[1]
+	multi.GachaID, multi.CardNum, multi.CardNumMax = 13, 10, 10
+	s.gachas = []gamestate.GachaProfile{profiles[0], multi, profiles[1]}
+	s.gachaWindows = nil
+	s.coinFree = 10
+	s.items[99] = gamestate.Item{Num: 5, LimitTime: int(time.Now().Add(-time.Hour).Unix())}
+	visible = s.GachaState()
+	if len(visible) != 2 || visible[0].GachaID != 12 || visible[1].GachaID != 13 {
+		t.Fatalf("expired ticket hid the usable single draw or its button: %+v", visible)
+	}
 }
 
 func TestGachaStepsCommitWithLimitedGifts(t *testing.T) {
@@ -153,20 +183,28 @@ func TestGachaStepsCommitWithLimitedGifts(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(result.Reward.Rewards) != 1 || len(result.Gifts) != min(1, 6-play) {
+		if len(result.Reward.Rewards) != 1 || len(result.PresentGifts) != min(1, 6-play) {
 			t.Fatal("gift was lost or animated as an extra draw")
 		}
 		// Simulate a serialization boundary: counters persist, publication rules do not change.
 		s.gachas = gamestate.CloneGachas(s.gachas)
 	}
-	if s.coinFree != 89 || s.items[10].Num != 38 || s.items[9].Num != 5 || s.gachas[0].PlayCount != 6 || profile.PlayCount != 0 {
+	if s.coinFree != 89 || s.items[10].Num != 38 || s.items[9].Num != 0 || len(s.presents) != 5 || s.gachas[0].PlayCount != 6 || profile.PlayCount != 0 {
 		t.Fatal("step price, gift limit, or account isolation failed")
 	}
-	// A full gift inventory must not prevent the paid draw or claim direct delivery.
+	giftID := s.presents[0].PresentID
+	if claim, err := s.ReceivePresent(giftID); err != nil || len(claim.PresentID) != 1 || s.items[9].Num != 1 {
+		t.Fatal("claiming the gift did not credit inventory", err)
+	}
+	if claim, err := s.ReceivePresent(giftID); err != nil || len(claim.PresentID) != 0 || s.items[9].Num != 1 {
+		t.Fatal("claiming a second time duplicated the gift", err)
+	}
+	// A full gift inventory must still allow the draw and create the gift mail.
+	s.items[9] = gamestate.Item{ItemID: 9, Num: 5}
 	s.gachas[0].PlayCount = 0
 	result, err := s.PlayGacha(7, 3, nil)
-	if err != nil || s.coinFree != 88 || len(result.Gifts) != 0 || len(result.PresentGifts) != 1 ||
-		len(s.presents) != 1 || s.presents[0].Reward.RewardTypeID != 9 || len(result.Reward.Rewards) != 1 || result.Reward.Rewards[0].InPresentBox {
+	if err != nil || s.coinFree != 88 || len(result.PresentGifts) != 1 ||
+		len(s.presents) != 6 || s.presents[5].Reward.RewardTypeID != 9 || len(result.Reward.Rewards) != 1 || result.Reward.Rewards[0].InPresentBox {
 		t.Fatalf("full gift inventory blocked or duplicated draw: %v", err)
 	}
 	// Operator switches this pool to a named item. Insufficient items cannot

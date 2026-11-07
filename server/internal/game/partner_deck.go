@@ -18,7 +18,11 @@ func PartnerDeckWire(
 	buddies map[int64]gamestate.Buddy,
 	supportUnlocked int8,
 	isBurst int8,
+	calculated *gamestate.CardParameter,
 ) (map[string]any, error) {
+	if arthurType == 5 && calculated == nil {
+		return nil, fmt.Errorf("alchemist partner deck requires calculated parameters")
+	}
 	cardDeck := make([]any, 0, len(deck.CardUniqueIDs))
 	for _, uniqueID := range deck.CardUniqueIDs {
 		card, exists := cards[uniqueID]
@@ -51,7 +55,12 @@ func PartnerDeckWire(
 		}
 		supportDeck[index] = PartnerCardWire(card)
 	}
-	hp, attack, magic, mind := PartnerDeckStats(deck, cards, job)
+	hp, attack, magic, mind := 0, 0, 0, 0
+	if calculated != nil {
+		hp, attack, magic, mind = calculated.HP, calculated.Attack, calculated.Magic, calculated.Mind
+	} else {
+		hp, attack, magic, mind = PartnerDeckStats(deck, cards, job)
+	}
 	if len(deck.SphereUniqueIDs) != DeckSphereSlots {
 		return nil, fmt.Errorf("team battle deck must contain %d sphere slots", DeckSphereSlots)
 	}

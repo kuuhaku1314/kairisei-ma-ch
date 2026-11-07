@@ -20,7 +20,7 @@ func TestImportedBossRuntime(t *testing.T) {
 		t.Fatalf("imported entries missing: %v", err)
 	}
 	for uid, entry := range entries {
-		if entry.DifficultyKind != "LOCAL_CHALLENGE" {
+		if entry.DifficultyKind != "LEVEL" {
 			continue
 		}
 		// Removing the scoped source record must not make an arbitrary label
@@ -35,9 +35,9 @@ func TestImportedBossRuntime(t *testing.T) {
 			t.Fatal(err)
 		}
 		if err := validateBattleRuntimeMaster(master); err == nil {
-			t.Fatalf("challenge %d accepted without its source metadata", uid)
+			t.Fatalf("level %d accepted without its source metadata", uid)
 		}
 		return
 	}
-	t.Fatal("imported fixture has no numbered challenge")
+	t.Fatal("imported fixture has no numbered level")
 }

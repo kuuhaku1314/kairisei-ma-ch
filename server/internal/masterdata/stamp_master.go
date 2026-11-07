@@ -15,11 +15,15 @@ import (
 const maxStampMasterBytes = 4 * 1024 * 1024
 
 type stampDefinition struct {
-	StampID      int    `json:"stamp_id"`
-	Category     int    `json:"category"`
-	Label        string `json:"label"`
-	DisplayText  string `json:"display_text"`
-	DefaultOwned bool   `json:"default_owned"`
+	StampID       int    `json:"stamp_id"`
+	Category      int    `json:"category"`
+	Label         string `json:"label"`
+	DisplayText   string `json:"display_text"`
+	PictID        int    `json:"pict_id,omitempty"`
+	SEID          int    `json:"se_id,omitempty"`
+	VoiceID       int    `json:"voice_id,omitempty"`
+	ArthurVoiceID string `json:"arthur_voice_id,omitempty"`
+	DefaultOwned  bool   `json:"default_owned"`
 }
 
 type stampRuntimeMaster struct {
@@ -112,7 +116,15 @@ func ApplyStampRuntimeMaster(state *gamestate.State, master stampRuntimeMaster) 
 		if name == "" {
 			name = stamp.Label
 		}
-		definitions = append(definitions, gamestate.CollectionRewardDefinition{Type: 16, ID: stamp.StampID, Name: name, Detail: "战斗对话／表情 · 领取后在聊天编成中使用"})
+		kind, label := "dialog", "对话"
+		if stamp.PictID > 0 {
+			kind, label = "image", "表情"
+			if stamp.SEID > 0 || stamp.VoiceID > 0 || stamp.ArthurVoiceID != "" {
+				kind, label = "voice", "语音表情"
+			}
+		}
+		definitions = append(definitions, gamestate.CollectionRewardDefinition{Type: 16, ID: stamp.StampID, Name: name,
+			Detail: label + " · 领取后在聊天编成中使用", PictID: stamp.PictID, StampKind: kind})
 	}
 	state.SetCollectionRewardDefinitions(16, definitions)
 	available := make(map[int]struct{}, len(master.Stamps))

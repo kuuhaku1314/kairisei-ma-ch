@@ -1,28 +1,32 @@
 {
   "schema_version": 2,
   "client_profile": "cn602-bootstrap",
-  "config_version": 6,
-  "max_level": 200,
+  "config_version": 10,
+  "max_level": 350,
   "experience_to_next": {
     "base": 100,
-    "per_level": 50
+    "per_level": 50,
+    "higher_levels": {
+      "from_level": 200,
+      "base": 50000,
+      "per_level": 2000
+    }
   },
   "battle_points": {
     "base": 20,
     "levels_per_point": 2,
-    "maximum": 120
+    "maximum": 195
   },
   "friends": {
-    "minimum": 20,
-    "offset": 19,
-    "numerator": 2,
-    "denominator": 3,
-    "maximum": 65,
+    "maximum": 200,
     "helper_reward": {
       "other_per_partner": 10,
       "friend_per_partner": 20,
       "maximum_partners": 3
-    }
+    },
+    "follower_display_limit": 200,
+    "base": 100,
+    "increase_from_level": 201
   },
   "job_parameters": {
     "max_status_level": 80,
@@ -50,6 +54,12 @@
         "atkp": 100,
         "intp": 480,
         "mndp": 240
+      },
+      {
+        "hp": 2190,
+        "atkp": 50,
+        "intp": 330,
+        "mndp": 480
       },
       {
         "hp": 2190,

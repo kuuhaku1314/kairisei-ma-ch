@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"kairisei.local/server/internal/game"
@@ -28,42 +29,72 @@ func (a *API) towerQuestShow(writer http.ResponseWriter, request *http.Request) 
 	loses := []any{}
 	if progress.LastResult == "win" {
 		wins = append(wins, map[string]any{
-			"0": game.BoolInt(progress.LastRankUp),
-			"1": progress.LastResultLoseCount,
+			"is_rank_up": game.BoolInt(progress.LastRankUp),
+			"lose_count": progress.LastResultLoseCount,
 		})
 	} else if progress.LastResult == "lose" {
-		loses = append(loses, map[string]any{"0": progress.LastResultLoseCount})
+		loses = append(loses, map[string]any{"lose_count": progress.LastResultLoseCount})
+	}
+	// The client excludes the challenge rank to build its lower-rank replay
+	// list, so this projection must not include ranks the player has not reached.
+	challengeRank := 0
+	if progress.Floor != 0 {
+		challengeRank = profile.Floors[progress.Floor-1].Rank
 	}
 	ranks := make([]any, 0, len(profile.Ranks))
 	for _, rank := range profile.Ranks {
-		ranks = append(ranks, map[string]any{"0": rank.Rank, "1": rank.RankName})
+		if challengeRank != 0 && rank.Rank > challengeRank {
+			continue
+		}
+		ranks = append(ranks, map[string]any{"rank": rank.Rank, "rank_name": rank.RankName})
 	}
 	floors := make([]any, 0, len(profile.Floors))
 	for _, floor := range profile.Floors {
+		var source map[string]any
+		if err := json.Unmarshal(floor.Boss, &source); err != nil {
+			a.writeStoreError(writer, err)
+			return
+		}
+		boss, err := teamBattleBossNamedDTO(source)
+		if err != nil {
+			a.writeStoreError(writer, err)
+			return
+		}
+		trimQuestBossDecorations(boss)
 		clearRewards := make([]any, 0, len(floor.ClearRewards))
 		for _, reward := range floor.ClearRewards {
 			clearRewards = append(clearRewards, towerRewardWire(reward))
 		}
 		floors = append(floors, map[string]any{
-			"0": floor.Rank,
-			"1": floor.Floor,
-			"2": floor.Boss,
-			"3": clearRewards,
-			"4": profile.ItemID,
-			"5": profile.ItemUse,
+			"rank": floor.Rank, "floor": floor.Floor,
+			"boss": boss, "story": floor.Story,
+			"clear_rewards": clearRewards,
+			"itemid":        floor.ItemID, "item_use": floor.ItemUse,
+			"bp_use": floor.BPUse, "clear_rating_flag": []int{progress.ClearRatings[floor.Floor]},
 		})
 	}
 	a.writeProtocol(writer, map[string]any{
-		"0": wins,
-		"1": loses,
-		"2": progress.Floor,
-		"3": progress.LastBattleFloor,
-		"4": progress.LoseCount,
-		"5": profile.LoseCountMax,
-		"6": ranks,
-		"7": floors,
-		"8": profile.AllClearText,
+		"user": a.userPayload(), "win": wins, "lose": loses,
+		"floor": progress.Floor, "last_battle_floor": progress.LastBattleFloor,
+		"lose_count_now": progress.LoseCount, "lose_count_max": profile.LoseCountMax,
+		"ranks": ranks, "floors": floors,
+		"is_all_clear": game.BoolInt(progress.Floor == 0), "all_clear_text": profile.AllClearText,
 	})
+}
+
+type towerRankWire struct {
+	RankNumber     int    `json:"rank_number"`
+	UserID         int    `json:"userid"`
+	Level          int    `json:"lv"`
+	Name           string `json:"name"`
+	Rank           int    `json:"rank"`
+	Floor          int    `json:"floor"`
+	Score          int64  `json:"score"`
+	RankName       string `json:"rank_name"`
+	LeaderCardID   int    `json:"leader_cardid"`
+	LeaderCardLV   int    `json:"leader_card_lv"`
+	LeaderCardLove int    `json:"leader_card_love"`
+	LeaderCardFame int    `json:"leader_card_fame"`
 }
 
 func (a *API) towerRankingShow(writer http.ResponseWriter, request *http.Request) {
@@ -74,57 +105,44 @@ func (a *API) towerRankingShow(writer http.ResponseWriter, request *http.Request
 		a.writeStoreError(writer, err)
 		return
 	}
-	profile, progress, err := a.account.TowerQuestRankingState(payload.TowerID)
+	profile, _, err := a.account.TowerQuestRankingState(payload.TowerID)
 	if err != nil {
 		a.writeStoreError(writer, err)
 		return
 	}
-	rank := 1
-	floor := progress.Floor
-	if floor == 0 {
-		floor = len(profile.Floors)
+	if a.towerRankings == nil {
+		writeError(writer, http.StatusServiceUnavailable, "tower ranking is unavailable")
+		return
 	}
-	if floor > 0 && floor <= len(profile.Floors) {
-		rank = profile.Floors[floor-1].Rank
+	// The original request has no paging parameters. LOCAL_POLICY: show the
+	// top ten plus the requesting player's actual rank when outside that page.
+	page, err := a.towerRankings.TowerRanking(payload.TowerID, len(profile.Floors), a.initialState.User.UserID, 0, 10)
+	if err != nil {
+		a.writeStoreError(writer, err)
+		return
 	}
-	rankName := profile.Ranks[rank-1].RankName
-	leaderLevel := 1
-	leaderLove := 0
-	leaderFame := int16(1)
-	for _, card := range a.account.ShowCards() {
-		if card.UniqueID == a.initialState.User.LeaderCardUniqueID {
-			leaderLevel = card.Level
-			leaderLove = card.Love
-			leaderFame = int16(card.Fame)
-			break
-		}
+	entries := page.Entries
+	if page.Self != nil && page.Self.RankNumber > 10 {
+		entries = append(entries, *page.Self)
 	}
-	a.writeProtocol(writer, map[string]any{
-		"0": []any{map[string]any{
-			"0":  1,
-			"1":  a.initialState.User.UserID,
-			"2":  a.account.UserLevel(),
-			"3":  a.account.UserName(),
-			"4":  rank,
-			"5":  floor,
-			"6":  int64(len(progress.ClearedFloors)) * 1000,
-			"7":  rankName,
-			"8":  a.initialState.User.LeaderCardID,
-			"9":  leaderLevel,
-			"10": leaderLove,
-			"11": leaderFame,
-		}},
-	})
+	ranking := make([]towerRankWire, 0, len(entries))
+	for _, row := range entries {
+		rank := profile.Floors[row.Floor-1].Rank
+		ranking = append(ranking, towerRankWire{RankNumber: row.RankNumber, UserID: row.UserID, Level: row.Level,
+			Name: row.Name, Rank: rank, Floor: row.Floor, Score: row.Score, RankName: profile.Ranks[rank-1].RankName,
+			LeaderCardID: row.LeaderCardID, LeaderCardLV: row.LeaderCardLV, LeaderCardLove: row.LeaderCardLove, LeaderCardFame: row.LeaderCardFame})
+	}
+	a.writeProtocol(writer, struct {
+		Ranking []towerRankWire `json:"ranking"`
+	}{ranking})
 }
 
 func towerRewardWire(reward gamestate.Reward) map[string]any {
 	return map[string]any{
-		"0": reward.Type,
-		"1": reward.Num,
-		"2": reward.RewardTypeID,
-		"3": reward.CardLevel,
-		"4": reward.CardFame,
-		"5": reward.CardLove,
-		"6": append([]int16(nil), reward.CardSkillLevels...),
+		"type": reward.Type, "num": reward.Num,
+		"reward_typeid": reward.RewardTypeID,
+		"card_lv":       reward.CardLevel, "card_fame": reward.CardFame,
+		"card_love":     reward.CardLove,
+		"card_skill_lv": append([]int16(nil), reward.CardSkillLevels...),
 	}
 }

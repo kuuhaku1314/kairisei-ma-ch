@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"kairisei.local/server/internal/accountstore"
@@ -152,18 +151,25 @@ func cnBootstrapPushRegistration(writer http.ResponseWriter, _ *http.Request) {
 	_, _ = writer.Write([]byte("{}"))
 }
 
-func cnBootstrapModuleSwitches(writer http.ResponseWriter, _ *http.Request) {
+func (app *application) moduleSwitches(writer http.ResponseWriter, _ *http.Request) {
 	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	writer.Header().Set("Cache-Control", "no-store")
 	_ = json.NewEncoder(writer).Encode(map[string]any{
 		"res_code":   0,
-		"mods_state": cn602LocalModuleSwitchState,
+		"mods_state": app.operations.ModuleSwitches(),
 	})
 }
 
-func cnBootstrapLogin(accounts *accountstore.Accounts, advertiseHost string, port int, cdn CDNConfig, versionNamespace, imageNamespace string) http.HandlerFunc {
-	baseURL := "http://" + advertiseHost + ":" + strconv.Itoa(port)
-	patchURL, cpkURL, imageURL := cdn.resourceURLs(baseURL, imageNamespace)
+type localLoginPayload struct {
+	UUID             string                     `json:"uuid"`
+	ClientVersion    string                     `json:"clver"`
+	ResourcePlatform string                     `json:"resource_platform"`
+	UnityVersion     string                     `json:"unity_version"`
+	CreationProof    accountstore.CreationProof `json:"creation_proof"`
+}
+
+// Resource selection precedes the shared account/session business operation.
+func localClientLogin(accounts *accountstore.Accounts, baseURL, cpkURL, imageURL string, selectResources func(localLoginPayload) (patchURL, versionURL string, err error)) http.HandlerFunc {
 	// Bound UUID-login processing and waiters too; the password gateway has its
 	// own separate limit. Do not queue unlimited retries behind the DB writer.
 	loginSlots := make(chan struct{}, 8)
@@ -183,10 +189,7 @@ func cnBootstrapLogin(accounts *accountstore.Accounts, advertiseHost string, por
 			http.Error(writer, "read CN local login", http.StatusBadRequest)
 			return
 		}
-		var payload struct {
-			UUID          string `json:"uuid"`
-			ClientVersion string `json:"clver"`
-		}
+		var payload localLoginPayload
 		if err := json.Unmarshal(body, &payload); err != nil {
 			http.Error(writer, "decode CN local login", http.StatusBadRequest)
 			return
@@ -199,9 +202,22 @@ func cnBootstrapLogin(accounts *accountstore.Accounts, advertiseHost string, por
 			cnRejectOldClient(writer)
 			return
 		}
-		identity, err := accounts.ResolveLoginContext(request.Context(), payload.UUID)
+		patchURL, versionURL, err := selectResources(payload)
+		if err != nil {
+			http.Error(writer, err.Error(), http.StatusBadRequest)
+			return
+		}
+		source, err := accountSource(request)
+		if err != nil {
+			http.Error(writer, "CN local login source is invalid", http.StatusBadRequest)
+			return
+		}
+		identity, err := accounts.ResolveClientLogin(request.Context(), payload.UUID, source, payload.CreationProof)
 		if err != nil {
 			if request.Context().Err() != nil {
+				return
+			}
+			if writeAccountAccessRejection(writer, err, true) || writeCreationRejection(writer, err, true) {
 				return
 			}
 			http.Error(writer, "resolve CN local account", http.StatusBadRequest)
@@ -221,7 +237,7 @@ func cnBootstrapLogin(accounts *accountstore.Accounts, advertiseHost string, por
 			"sess_key":         identity.SessionKey,
 			"api_url":          baseURL + "/",
 			"res_patch_url":    patchURL,
-			"version_url":      baseURL + "/local/version/" + versionNamespace + "/",
+			"version_url":      versionURL,
 			"res_img_url":      imageURL,
 			"res_cpk_url":      cpkURL,
 			"web_url":          baseURL + "/disabled/web",

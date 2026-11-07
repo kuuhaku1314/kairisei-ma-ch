@@ -24,7 +24,10 @@ func TestMarkStandaloneTeamBattleClearOnlyClearsSelectedDifficulty(t *testing.T)
 		t.Fatal(err)
 	}
 
-	updated, firstClear, err := markStandaloneTeamBattleClear(configuration, 30010102)
+	state := battleCatalogFixture(t, configuration)
+	firstClear, err := state.firstClear(30010102, 0)
+	state.markClear(30010102, 0)
+	updated := state.saved()
 	if err != nil {
 		t.Fatalf("mark clear: %v", err)
 	}
@@ -47,7 +50,7 @@ func TestMarkStandaloneTeamBattleClearOnlyClearsSelectedDifficulty(t *testing.T)
 		}
 	}
 
-	_, firstClear, err = markStandaloneTeamBattleClear(updated, 30010102)
+	firstClear, err = state.firstClear(30010102, 0)
 	if err != nil {
 		t.Fatalf("repeat clear: %v", err)
 	}
@@ -58,7 +61,10 @@ func TestMarkStandaloneTeamBattleClearOnlyClearsSelectedDifficulty(t *testing.T)
 
 func TestMarkStageTeamBattleClearUsesMatchingArea(t *testing.T) {
 	configuration := json.RawMessage(`{"9":[{"0":100001,"9":100001,"10":[{"0":10000101,"10":0}]},{"0":100002,"9":100002,"10":[{"0":10000101,"10":0}]}],"10":[],"11":[],"12":[]}`)
-	updated, firstClear, err := markTeamBattleClearForArea(configuration, 10000101, 100001)
+	state := battleCatalogFixture(t, configuration)
+	firstClear, err := state.firstClear(10000101, 100001)
+	state.markClear(10000101, 100001)
+	updated := state.saved()
 	if err != nil {
 		t.Fatalf("mark stage clear: %v", err)
 	}

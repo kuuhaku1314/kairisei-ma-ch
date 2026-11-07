@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"kairisei.local/server/internal/game"
 	"kairisei.local/server/internal/gamestate"
 	"kairisei.local/server/internal/masterdata"
 )
@@ -403,19 +404,13 @@ func validateCNStoryGate(story gamestate.StoryCatalogState, summary *cnRuntimeCo
 	if story.MainParts == nil || story.CNMainParts == nil || story.SubCharacters == nil || story.Events == nil {
 		return errors.New("CN runtime story catalog arrays must be non-null")
 	}
-	mainFlags, mainCount, err := collectCNMainStoryFlags(story.MainParts)
+	mainCount, err := validateCNMainStoryParts(story.MainParts)
 	if err != nil {
 		return err
 	}
-	cnFlags, cnCount, err := collectCNMainStoryFlags(story.CNMainParts)
+	cnCount, err := validateCNMainStoryParts(story.CNMainParts)
 	if err != nil {
 		return err
-	}
-	if err := validateCNStoryProgress(mainFlags, false); err != nil {
-		return fmt.Errorf("normal story availability: %w", err)
-	}
-	if err := validateCNStoryProgress(cnFlags, false); err != nil {
-		return fmt.Errorf("CN story availability: %w", err)
 	}
 	summary.MainStories = mainCount
 	summary.CNMainStories = cnCount
@@ -551,40 +546,49 @@ func validateCNStoryGate(story gamestate.StoryCatalogState, summary *cnRuntimeCo
 	return nil
 }
 
-func collectCNMainStoryFlags(parts []gamestate.StoryMainPart) ([]int, int, error) {
-	flags := make([]int, 0)
+func validateCNMainStoryParts(parts []gamestate.StoryMainPart) (int, error) {
+	flags := make(map[int][]int)
 	seenParts := make(map[int]struct{}, len(parts))
 	seenSections := make(map[int]struct{})
 	seenStories := make(map[int]struct{})
 	for _, part := range parts {
 		if part.StoryMainPartID <= 0 || part.Name == "" || len(part.Sections) == 0 {
-			return nil, 0, errors.New("CN main story part is incomplete")
+			return 0, errors.New("CN main story part is incomplete")
 		}
 		if _, duplicate := seenParts[part.StoryMainPartID]; duplicate {
-			return nil, 0, fmt.Errorf("duplicate CN main story part %d", part.StoryMainPartID)
+			return 0, fmt.Errorf("duplicate CN main story part %d", part.StoryMainPartID)
 		}
 		seenParts[part.StoryMainPartID] = struct{}{}
+		chain := game.MainStoryProgressionChain(part.StoryMainPartID)
 		for _, section := range part.Sections {
 			if section.StoryMainSectionID <= 0 || section.SectionTitle == "" || len(section.Stories) == 0 {
-				return nil, 0, fmt.Errorf("CN main story section %d is incomplete", section.StoryMainSectionID)
+				return 0, fmt.Errorf("CN main story section %d is incomplete", section.StoryMainSectionID)
 			}
 			if _, duplicate := seenSections[section.StoryMainSectionID]; duplicate {
-				return nil, 0, fmt.Errorf("duplicate CN main story section %d", section.StoryMainSectionID)
+				return 0, fmt.Errorf("duplicate CN main story section %d", section.StoryMainSectionID)
 			}
 			seenSections[section.StoryMainSectionID] = struct{}{}
 			for _, item := range section.Stories {
 				if item.StoryMainID <= 0 || item.Title == "" {
-					return nil, 0, fmt.Errorf("CN main story section %d has an incomplete story", section.StoryMainSectionID)
+					return 0, fmt.Errorf("CN main story section %d has an incomplete story", section.StoryMainSectionID)
 				}
 				if _, duplicate := seenStories[item.StoryMainID]; duplicate {
-					return nil, 0, fmt.Errorf("duplicate CN main story %d", item.StoryMainID)
+					return 0, fmt.Errorf("duplicate CN main story %d", item.StoryMainID)
 				}
 				seenStories[item.StoryMainID] = struct{}{}
-				flags = append(flags, item.StateFlag)
+				flags[chain] = append(flags[chain], item.StateFlag)
 			}
 		}
 	}
-	return flags, len(seenStories), nil
+	if len(flags) == 0 {
+		return 0, errors.New("story sequence is empty")
+	}
+	for chain, states := range flags {
+		if err := validateCNStoryProgress(states, false); err != nil {
+			return 0, fmt.Errorf("main story chain %d availability: %w", chain, err)
+		}
+	}
+	return len(seenStories), nil
 }
 
 func validateCNStoryProgress(flags []int, allowAllLocked bool) error {

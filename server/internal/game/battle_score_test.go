@@ -14,7 +14,7 @@ func TestScoreSettlementKeepsBestAndDoesNotRepeatAwards(t *testing.T) {
 	}
 	s := onboardingTestStore()
 	s.teamBattleScores = map[int]gamestate.TeamBattleScoreProgress{}
-	s.teamBattleSolo = json.RawMessage(`{"9":[{"0":1,"9":0,"10":[{"0":123,"10":0}]}],"10":[],"11":[],"12":[]}`)
+	s.teamBattleSolo = battleCatalogFixture(t, json.RawMessage(`{"9":[{"0":1,"9":0,"10":[{"0":123,"10":0}]}],"10":[],"11":[],"12":[]}`))
 	profiles := []gamestate.TeamBattleRewardProfile{{BossID: 123, ScorePolicy: p}}
 	play := func(turns int) teamBattleSettlement {
 		t.Helper()
@@ -50,7 +50,7 @@ func TestScoreSettlementKeepsBestAndDoesNotRepeatAwards(t *testing.T) {
 	if s.coinFree != 450 || len(third.Score.Rewards) != 0 || s.teamBattleScores[123].HighScore != 9000000 {
 		t.Fatal("lower score repeated rewards or erased best")
 	}
-	high, rows := s.ScoreLineup(123, profiles)
+	high, rows := s.ScoreLineup(123, profiles, gamestate.BattleScoreMultiplayer)
 	if high != 9000000 || len(rows) != 9 {
 		t.Fatal("lineup lost saved best")
 	}
@@ -92,39 +92,58 @@ func TestDamageScoreTimeoutFreezesPolicyAndAwardsOnlyNewGrades(t *testing.T) {
 	if err != nil || s.coinFree != 40 || s.teamBattleScores[123].HighScore != 450 {
 		t.Fatal("lower result erased progress", err)
 	}
+	// A late JP body alone has one trillion HP; its parts add valid score.
+	s.activeBattle = &TeamBattleContext{BossID: 123, ScorePolicy: p}
+	_, err = s.CompleteTeamBattle(123, false, profiles, TeamBattleDropReport{ScoreVerified: true, ScoreDamage: 1000000000250})
+	if err != nil || s.teamBattleScores[123].HighScore != 1000000000250 {
+		t.Fatal("valid body and part damage above one trillion was rejected", err)
+	}
 }
 
-func TestSoloCupClearAwardsAllGradesAndFailureAwardsNothing(t *testing.T) {
+func TestSoloDamageScoreSeparatesGradesAndExcludesRentalRank(t *testing.T) {
 	p := &gamestate.TeamBattleScorePolicy{SourceState: "LOCAL_POLICY_DAMAGE_SCORE", EndTurn: 5, Rate: 150}
 	for i := range 9 {
 		p.Grades = append(p.Grades, gamestate.TeamBattleScoreGrade{Score: int64(i+1) * 100, Rewards: []gamestate.Reward{{Type: 10, Num: 10, CardSkillLevels: []int16{}}}})
 	}
 	s := onboardingTestStore()
-	s.teamBattleScores = map[int]gamestate.TeamBattleScoreProgress{}
-	s.teamBattleSolo = json.RawMessage(`{"9":[{"0":1,"9":0,"10":[{"0":123,"10":0}]}],"10":[],"11":[],"12":[]}`)
+	s.teamBattleSolo = battleCatalogFixture(t, json.RawMessage(`{"9":[{"0":1,"9":0,"10":[{"0":123,"10":0}]}],"10":[],"11":[],"12":[]}`))
 	profiles := []gamestate.TeamBattleRewardProfile{{BossID: 123, ScorePolicy: gamestate.CloneTeamBattleScorePolicy(p), ResultRewards: []gamestate.Reward{{Type: 4, Num: 100}}}}
-	// Later changes to the top threshold and multiplier do not change this run.
-	profiles[0].ScorePolicy.Grades[8].Score = 10000
 	profiles[0].ScorePolicy.Rate = 1000
-	for _, turns := range []int{1, 5, 8} {
-		s.activeBattle = &TeamBattleContext{BossID: 123, ScorePolicy: p}
-		r, err := s.CompleteTeamBattle(123, false, profiles, TeamBattleDropReport{SoloChallenge: true, Turns: turns})
-		if err != nil || len(r.ScoreInfo) != 0 || s.coinFree != 0 || s.gold != 0 || s.teamBattleScores[123].Claimed != 0 {
-			t.Fatalf("failed/retired/timeout solo earned rewards: %+v %v", r, err)
+	play := func(solo, clear bool, damage int64, partners []TeamBattleResultPartner) teamBattleSettlement {
+		t.Helper()
+		s.activeBattle = &TeamBattleContext{BossID: 123, ScorePolicy: p, SelectedPartners: partners}
+		r, err := s.CompleteTeamBattle(123, clear, profiles, TeamBattleDropReport{SoloChallenge: solo, ScoreVerified: true, ScoreDamage: damage, Turns: 4})
+		if err != nil {
+			t.Fatal(err)
 		}
+		return r
 	}
-	for attempt := range 2 {
-		s.activeBattle = &TeamBattleContext{BossID: 123, ScorePolicy: p}
-		r, err := s.CompleteTeamBattle(123, true, profiles, TeamBattleDropReport{SoloChallenge: true, Turns: 4})
-		if err != nil || len(r.ScoreInfo) != 1 || s.coinFree != 90 || s.teamBattleScores[123].Claimed != 511 || s.teamBattleScores[123].HighScore != 900 {
-			t.Fatalf("clear must earn only unclaimed grades: %+v %v", r, err)
-		}
-		info := r.ScoreInfo[0].(map[string]any)
-		if info["damage"] != int64(900) || info["rate"] != 100 || info["grade"] != 8 || (attempt == 1 && len(r.Score.Rewards) != 0) {
-			t.Fatal("clear score multiplied or rewards repeated", r)
-		}
-		if _, err := s.CompleteTeamBattle(123, true, profiles, TeamBattleDropReport{SoloChallenge: true}); err == nil {
-			t.Fatal("duplicate result accepted without entry")
-		}
+	failed := play(true, false, 250, nil)
+	if s.coinFree != 30 || s.gold != 0 || s.teamBattleSoloScores[123].HighScore != 375 || s.teamBattleScores[123].Claimed != 0 || failed.RankingScore == nil || failed.RankingScore.Score != 375 {
+		t.Fatal("solo defeat lost actual score or mixed modes", failed)
+	}
+	lower := play(true, false, 100, nil)
+	if s.coinFree != 30 || len(lower.Score.Rewards) != 0 {
+		t.Fatal("lower solo score repeated awards")
+	}
+	friend := play(true, false, 500, []TeamBattleResultPartner{{IsSelf: false}})
+	if s.coinFree != 70 || friend.RankingScore != nil || s.teamBattleSoloScores[123].HighScore != 750 {
+		t.Fatal("rental challenge lost grades or entered own-deck ranking", friend)
+	}
+	play(false, false, 500, nil)
+	if s.coinFree != 140 || s.teamBattleScores[123].HighScore != 750 || s.teamBattleScores[123].Claimed != 127 {
+		t.Fatal("multiplayer did not have independent grade claims")
+	}
+	won := play(true, true, 600, []TeamBattleResultPartner{{IsSelf: true}})
+	if s.coinFree != 160 || s.gold != 100 || won.RankingScore == nil || won.RankingScore.Grade != 8 || won.RankingScore.Score != 900 {
+		t.Fatal("solo clear ignored frozen multiplier or repeated grades", won)
+	}
+	if _, err := s.CompleteTeamBattle(123, true, profiles, TeamBattleDropReport{SoloChallenge: true, ScoreVerified: true, ScoreDamage: 600}); err == nil {
+		t.Fatal("solo retry accepted without an entry")
+	}
+	solo, _ := s.ScoreLineup(123, profiles, gamestate.BattleScoreSolo)
+	multi, _ := s.ScoreLineup(123, profiles, gamestate.BattleScoreMultiplayer)
+	if solo != 900 || multi != 750 {
+		t.Fatal("reward lineup mixed participation modes", solo, multi)
 	}
 }

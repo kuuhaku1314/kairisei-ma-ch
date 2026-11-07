@@ -71,16 +71,12 @@ func (c *contentStore) projectActivityRewards(state *gamestate.State) error {
 	policies := defaults.Cups
 	for id, p := range c.activities.Cups {
 		if policies[id] == nil || p == nil || p.SourceState != "LOCAL_POLICY_DAMAGE_SCORE" {
-			return errors.New("圣剑杯身份或计分方式无效")
+			return errors.New("计分副本身份或计分方式无效")
 		}
 		if err := gamestate.ValidateTeamBattleScorePolicy(p); err != nil {
 			return err
 		}
-		// Encounter ending is evidence-backed resource data, not an economy
-		// override. Old saved documents must not erase a newly corrected rule.
-		policy := gamestate.CloneTeamBattleScorePolicy(p)
-		policy.MemberDeadEnd = policies[id].MemberDeadEnd
-		policies[id] = policy
+		policies[id] = gamestate.CloneTeamBattleScorePolicy(p)
 	}
 	state.TeamBattleReplays = slices.Clone(c.base.TeamBattleReplays)
 	for i := range state.TeamBattleRewards {
@@ -157,6 +153,7 @@ func (a *API) activityRewardEditor(w http.ResponseWriter, r *http.Request) {
 		config.Explore = c.activities.Explore
 	}
 	names := map[int]string{}
+	targets := map[int][]dropTarget{}
 	for id, p := range config.Cups {
 		policy := gamestate.CloneTeamBattleScorePolicy(p)
 		if policy.TeamCostInitial == 0 {
@@ -165,8 +162,9 @@ func (a *API) activityRewardEditor(w http.ResponseWriter, r *http.Request) {
 		config.Cups[id] = policy
 		b := c.bosses[id]
 		names[id] = b.Name + " · " + b.Difficulty
+		targets[id] = b.Targets
 	}
-	WriteAdminJSON(w, 200, map[string]any{"state": "PASS", "revision": c.activityRevision, "config": config, "names": names})
+	WriteAdminJSON(w, 200, map[string]any{"state": "PASS", "revision": c.activityRevision, "config": config, "names": names, "boss_targets": targets})
 }
 
 func (a *API) validateActivityReward(r gamestate.Reward) error {
@@ -189,7 +187,7 @@ func (a *API) saveActivityRewards(w http.ResponseWriter, r *http.Request) {
 		Config   activityRewards `json:"config"`
 	}
 	if err := decodeAdminJSON(r, &body); err != nil || body.Expected == nil || body.Config.Cups == nil || body.Config.Explore == nil {
-		WriteAdminError(w, 400, "请提交版本、圣剑杯与探索奖励配置")
+		WriteAdminError(w, 400, "请提交版本、计分副本与探索奖励配置")
 		return
 	}
 	o := a.operations
@@ -202,13 +200,13 @@ func (a *API) saveActivityRewards(w http.ResponseWriter, r *http.Request) {
 	}
 	for id, p := range body.Config.Cups {
 		if p == nil {
-			WriteAdminError(w, 400, "圣剑杯规则不能为空")
+			WriteAdminError(w, 400, "计分副本规则不能为空")
 			return
 		}
 		for _, g := range p.Grades {
 			for _, reward := range g.Rewards {
 				if err := a.validateActivityReward(reward); err != nil {
-					WriteAdminError(w, 400, fmt.Sprintf("圣剑杯%d：%v", id, err))
+					WriteAdminError(w, 400, fmt.Sprintf("计分副本%d：%v", id, err))
 					return
 				}
 			}
@@ -229,12 +227,18 @@ func (a *API) saveActivityRewards(w http.ResponseWriter, r *http.Request) {
 		WriteAdminError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	configuration, err := game.NewContentConfiguration(c.configuration.Revision+1, state)
+	if err != nil {
+		WriteAdminError(w, 400, err.Error())
+		return
+	}
 	doc, err := o.writeDocument(activityRewardsKey, *body.Expected, body.Config)
 	if err != nil {
 		writeContentError(w, err)
 		return
 	}
 	c.activities, c.activityRevision = body.Config, doc.Revision
-	c.configuration = game.ContentConfiguration{Revision: c.configuration.Revision + 1, State: state}
+	c.configuration = configuration
+	o.publishRuntimeLocked()
 	WriteAdminJSON(w, 200, map[string]any{"state": "PASS", "revision": doc.Revision})
 }

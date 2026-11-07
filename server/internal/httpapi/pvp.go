@@ -234,21 +234,21 @@ func (a *API) pvpEnd(writer http.ResponseWriter, request *http.Request) {
 		InputCmd []string `json:"input_cmd"`
 	}
 	if err := decodeExact(request, []string{"btluid", "is_win", "is_retire", "input_cmd"}, &payload); err != nil {
-		a.writeStoreError(writer, err)
+		a.writeExpiredBattleReport(writer)
 		return
 	}
 	if (payload.IsWin != 0 && payload.IsWin != 1) || (payload.IsRetire != 0 && payload.IsRetire != 1) {
-		writeError(writer, http.StatusBadRequest, "invalid PVP settlement flags")
+		a.writeExpiredBattleReport(writer)
 		return
 	}
 	if a.pvpConfig.EngineMode == game.PvpEngineClientNativeLocal {
 		if len(payload.InputCmd) != 1 {
-			writeError(writer, http.StatusBadRequest, "native PVP report does not contain exactly one battle command")
+			a.writeExpiredBattleReport(writer)
 			return
 		}
 		commandRequired := payload.IsRetire == 0
 		if err := game.ValidateNativeBattleCommandStart(payload.InputCmd[0], commandRequired, game.NativePVPCommandStartOpcode); err != nil {
-			writeError(writer, http.StatusBadRequest, "invalid native PVP report: "+err.Error())
+			a.writeExpiredBattleReport(writer)
 			return
 		}
 	}
@@ -262,7 +262,7 @@ func (a *API) pvpEnd(writer http.ResponseWriter, request *http.Request) {
 	defer a.clientResultMu.Unlock()
 	if receipt, exists := a.account.PvpResultReceipt(payload.BattleID); exists {
 		if receipt.RequestSHA256 != requestDigest {
-			writeError(writer, http.StatusConflict, "PVP result conflicts with the completed battle")
+			a.writeExpiredBattleReport(writer)
 			return
 		}
 		a.writeProtocol(writer, receipt.Response)
@@ -273,7 +273,7 @@ func (a *API) pvpEnd(writer http.ResponseWriter, request *http.Request) {
 		a.pvpConfig, time.Now(),
 	)
 	if err != nil {
-		writeError(writer, http.StatusConflict, err.Error())
+		a.writeExpiredBattleReport(writer)
 		return
 	}
 	response := map[string]any{

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
@@ -31,6 +32,7 @@ const (
 // profile, so changing character data cannot change the local network boundary.
 type saveState struct {
 	TeamBattleScores               map[int]gamestate.TeamBattleScoreProgress `json:"team_battle_scores,omitempty"`
+	TeamBattleSoloScores           map[int]gamestate.TeamBattleScoreProgress `json:"team_battle_solo_scores,omitempty"`
 	LocalShop                      gamestate.LocalShopState                  `json:"local_shop,omitempty"`
 	SchemaVersion                  int                                       `json:"schema_version"`
 	User                           gamestate.User                            `json:"user"`
@@ -66,6 +68,7 @@ type saveState struct {
 	ExploreConfigVersion           int                                       `json:"explore_config_version"`
 	Explore                        gamestate.ExploreProgressState            `json:"explore"`
 	Engagement                     gamestate.EngagementState                 `json:"engagement"`
+	MissionDefinitions             map[int]gamestate.MissionDefinition       `json:"mission_definitions,omitempty"`
 	Options                        gamestate.OptionState                     `json:"options"`
 	LoginBonus                     gamestate.LoginBonusState                 `json:"login_bonus"`
 	LocalAccountConfigVersion      int                                       `json:"local_account_config_version"`
@@ -374,6 +377,7 @@ func releaseStateFromSave(save saveState) gamestate.State {
 		ExploreConfigVersion:         save.ExploreConfigVersion,
 		Explore:                      save.Explore,
 		Engagement:                   save.Engagement,
+		MissionDefinitions:           save.MissionDefinitions,
 		Options:                      save.Options,
 		LoginBonus:                   save.LoginBonus,
 		LocalAccountConfigVersion:    save.LocalAccountConfigVersion,
@@ -383,6 +387,7 @@ func releaseStateFromSave(save saveState) gamestate.State {
 		EventShopPurchases:           append([]gamestate.EventShopPurchase(nil), save.EventShopPurchases...),
 		TradeShopPurchases:           append([]gamestate.TradeShopPurchase(nil), save.TradeShopPurchases...),
 		TeamBattleScores:             save.TeamBattleScores,
+		TeamBattleSoloScores:         save.TeamBattleSoloScores,
 		LocalShop:                    save.LocalShop,
 		GachaConfigVersion:           save.GachaConfigVersion,
 		Gachas:                       save.Gachas,
@@ -429,11 +434,10 @@ func ValidateSave(save saveState) error {
 		save.User.CardMax <= 0 || save.User.CardContainerMax <= 0 || save.User.SphereMax <= 0 ||
 		save.User.Gold < 0 || save.User.FriendPoint < 0 || save.User.Coin < 0 || save.User.CoinFree < 0 ||
 		save.User.TutorialFlag < 0 ||
-		save.User.TutorialFlag >= int64(1)<<26 {
+		save.User.TutorialFlag >= int64(1)<<gamestate.TutorialFlagCount {
 		return errors.New("CN save user state is invalid")
 	}
-	if save.PlayerProgressionConfigVersion < 0 ||
-		(save.PlayerProgressionConfigVersion > 0 && len(save.User.Jobs) != 5) {
+	if save.PlayerProgressionConfigVersion < 0 {
 		return errors.New("CN save player progression state is invalid")
 	}
 	if save.CardProgressionConfigVersion < 0 {
@@ -694,25 +698,24 @@ func ValidateSave(save saveState) error {
 		seenSelections := make(map[int]struct{}, len(save.GachaSelections))
 		for _, selection := range save.GachaSelections {
 			gacha, exists := seenGachas[selection.GachaID]
-			if !exists {
+			if !exists && selection.GachaID < gamestate.OperatorGachaFirstID {
 				return fmt.Errorf("CN save gacha selection %d has no profile", selection.GachaID)
 			}
 			if _, duplicate := seenSelections[selection.GachaID]; duplicate {
 				return fmt.Errorf("CN save gacha selection %d is duplicated", selection.GachaID)
 			}
-			if err := validateGachaSelection(gacha, selection.Rewards); err != nil {
-				return err
+			if exists {
+				if err := validateGachaSelection(gacha, selection.Rewards); err != nil {
+					return err
+				}
 			}
 			seenSelections[selection.GachaID] = struct{}{}
 		}
 		seenDailyClaims := make(map[int]struct{}, len(save.GachaDailyClaims))
 		for _, claim := range save.GachaDailyClaims {
-			gacha, exists := seenGachas[claim.GachaID]
-			// Operator profiles are attached after account load. Keep their claim
-			// dates even while hidden or after changing payment, so restoring the
-			// daily rule cannot grant a second free draw on the same day.
-			operator := claim.GachaID >= gamestate.OperatorGachaFirstID && (!exists || gacha.PublicationKey == "operator")
-			if ((!exists || !gacha.DailyFirstFree) && !operator) || !masterdata.LoginBonusDayPattern.MatchString(claim.Day) {
+			_, exists := seenGachas[claim.GachaID]
+			if (!exists && claim.GachaID < gamestate.OperatorGachaFirstID) || claim.PlayCount < 0 || claim.PlayCount > math.MaxInt32 ||
+				!masterdata.LoginBonusDayPattern.MatchString(claim.Day) {
 				return errors.New("CN save gacha daily claim is invalid")
 			}
 			if _, duplicate := seenDailyClaims[claim.GachaID]; duplicate {
@@ -894,13 +897,9 @@ func ValidateSave(save saveState) error {
 	}
 	seenReceiptRooms := make(map[int64]struct{}, len(save.TeamBattleResultReceipts))
 	for _, receipt := range save.TeamBattleResultReceipts {
-		if receipt.RoomID <= 0 || receipt.ClaimedAtUnix <= 0 || len(receipt.Response) == 0 ||
-			len(receipt.Response) > maxTeamBattleResultReceiptBytes || !json.Valid(receipt.Response) {
+		if receipt.RoomID <= 0 || receipt.ClaimedAtUnix <= 0 ||
+			len(receipt.Snapshot) > maxTeamBattleResultReceiptBytes || (len(receipt.Snapshot) != 0 && !json.Valid(receipt.Snapshot)) {
 			return errors.New("CN save team battle result receipt is invalid")
-		}
-		var method map[string]json.RawMessage
-		if err := json.Unmarshal(receipt.Response, &method); err != nil || method["user"] == nil || method["members"] == nil {
-			return errors.New("CN save team battle result receipt response is incomplete")
 		}
 		if _, duplicate := seenReceiptRooms[receipt.RoomID]; duplicate {
 			return errors.New("CN save team battle result receipt room is duplicated")
@@ -913,14 +912,9 @@ func ValidateSave(save saveState) error {
 	seenSoloReceiptDigests := make(map[string]struct{}, len(save.TeamBattleSoloResultReceipts))
 	for _, receipt := range save.TeamBattleSoloResultReceipts {
 		if !isLowerSHA256(receipt.RequestSHA256) || receipt.BossID <= 0 || receipt.ClaimedAtUnix <= 0 ||
-			len(receipt.Response) == 0 || len(receipt.Response) > maxTeamBattleResultReceiptBytes ||
-			!json.Valid(receipt.Response) {
+			len(receipt.Snapshot) > maxTeamBattleResultReceiptBytes ||
+			(len(receipt.Snapshot) != 0 && !json.Valid(receipt.Snapshot)) {
 			return errors.New("CN save solo team battle result receipt is invalid")
-		}
-		var method map[string]json.RawMessage
-		if err := json.Unmarshal(receipt.Response, &method); err != nil || method["is_clear"] == nil ||
-			method["user"] == nil || method["partners"] == nil {
-			return errors.New("CN save solo team battle result receipt response is incomplete")
 		}
 		if _, duplicate := seenSoloReceiptDigests[receipt.RequestSHA256]; duplicate {
 			return errors.New("CN save solo team battle result receipt digest is duplicated")
@@ -1100,6 +1094,7 @@ func SaveFromState(state gamestate.State) saveState {
 		ExploreConfigVersion:           state.ExploreConfigVersion,
 		Explore:                        state.Explore,
 		Engagement:                     state.Engagement,
+		MissionDefinitions:             state.MissionDefinitions,
 		Options:                        state.Options,
 		LoginBonus:                     state.LoginBonus,
 		LocalAccountConfigVersion:      state.LocalAccountConfigVersion,
@@ -1109,6 +1104,7 @@ func SaveFromState(state gamestate.State) saveState {
 		EventShopPurchases:             append([]gamestate.EventShopPurchase(nil), state.EventShopPurchases...),
 		TradeShopPurchases:             append([]gamestate.TradeShopPurchase(nil), state.TradeShopPurchases...),
 		TeamBattleScores:               state.TeamBattleScores,
+		TeamBattleSoloScores:           state.TeamBattleSoloScores,
 		LocalShop:                      state.LocalShop,
 		GachaConfigVersion:             state.GachaConfigVersion,
 		Gachas:                         state.Gachas,
@@ -1145,7 +1141,7 @@ func cloneTeamBattleResultReceipts(source []gamestate.TeamBattleResultReceipt) [
 	result := make([]gamestate.TeamBattleResultReceipt, len(source))
 	for index := range source {
 		result[index] = source[index]
-		result[index].Response = append(json.RawMessage(nil), source[index].Response...)
+		result[index].Snapshot = append(json.RawMessage(nil), source[index].Snapshot...)
 	}
 	return result
 }
@@ -1154,7 +1150,7 @@ func cloneTeamBattleSoloResultReceipts(source []gamestate.TeamBattleSoloResultRe
 	result := make([]gamestate.TeamBattleSoloResultReceipt, len(source))
 	for index := range source {
 		result[index] = source[index]
-		result[index].Response = append(json.RawMessage(nil), source[index].Response...)
+		result[index].Snapshot = append(json.RawMessage(nil), source[index].Snapshot...)
 	}
 	return result
 }
@@ -1216,7 +1212,10 @@ func validateActiveTeamBattle(active *gamestate.TeamBattleActiveState) error {
 	if active == nil {
 		return nil
 	}
-	if active.PrepaidRoomID < 0 || (active.PrepaidRoomID != 0 && !active.ConsumesBattlePoints) {
+	if active.EntryRole < gamestate.BattleEntrySolo || active.EntryRole > gamestate.BattleEntryMultiplayerGuest {
+		return errors.New("CN save active battle admission role is invalid")
+	}
+	if active.PrepaidRoomID < 0 || (active.PrepaidRoomID != 0 && active.EntryRole != gamestate.BattleEntryMultiplayerHost) {
 		return errors.New("CN save active battle prepaid identity is invalid")
 	}
 	if len(active.DropPlan) > 512 || (!active.DropPlanSet && len(active.DropPlan) != 0) {
@@ -1244,16 +1243,16 @@ func validateActiveTeamBattle(active *gamestate.TeamBattleActiveState) error {
 	}
 	switch {
 	case stageBattle:
-		if active.ConsumesBattlePoints != (active.BPUse > 0) {
+		if !active.EntryRole.PaysEntryCost() && active.BPUse != 0 {
 			return errors.New("CN save active StageQuest cost is invalid")
 		}
 	case towerBattle:
-		if active.TowerID <= 0 || active.TowerFloor <= 0 || active.ItemID <= 0 ||
-			active.ItemUse <= 0 || active.BPUse != 0 {
+		if active.TowerID <= 0 || active.TowerFloor <= 0 || active.ItemID < 0 ||
+			active.ItemUse < 0 || (active.ItemUse > 0 && active.ItemID == 0) {
 			return errors.New("CN save active tower battle cost is invalid")
 		}
 	default:
-		if active.ConsumesBattlePoints != (active.BPUse > 0) {
+		if !active.EntryRole.PaysEntryCost() && active.BPUse != 0 {
 			return errors.New("CN save active standalone battle cost is invalid")
 		}
 	}
@@ -1263,19 +1262,19 @@ func validateActiveTeamBattle(active *gamestate.TeamBattleActiveState) error {
 	}
 	seenFameTypes := make(map[int]struct{}, len(active.FameSources))
 	for _, source := range active.FameSources {
-		if source.ArthurType < 1 || source.ArthurType > 4 || source.LeaderFame < 1 || source.LeaderFame > 100 {
+		if source.MemberType < 1 || source.MemberType > 4 || source.LeaderFame < 1 || source.LeaderFame > 100 {
 			return errors.New("CN save active team battle fame row is invalid")
 		}
-		if _, duplicate := seenFameTypes[source.ArthurType]; duplicate {
+		if _, duplicate := seenFameTypes[source.MemberType]; duplicate {
 			return errors.New("CN save active team battle fame type is duplicated")
 		}
-		seenFameTypes[source.ArthurType] = struct{}{}
+		seenFameTypes[source.MemberType] = struct{}{}
 	}
-	if active.HostBonusArthurType < 0 || active.HostBonusArthurType > 4 {
+	if active.HostBonusMemberType < 0 || active.HostBonusMemberType > 4 {
 		return errors.New("CN save active team battle host bonus is invalid")
 	}
-	if active.HostBonusArthurType != 0 {
-		if _, exists := seenFameTypes[active.HostBonusArthurType]; !exists || !active.ConsumesBattlePoints {
+	if active.HostBonusMemberType != 0 {
+		if _, exists := seenFameTypes[active.HostBonusMemberType]; !exists || active.EntryRole != gamestate.BattleEntryMultiplayerHost {
 			return errors.New("CN save active team battle host bonus source is unavailable")
 		}
 	}
@@ -1301,11 +1300,10 @@ func validateActiveTeamBattle(active *gamestate.TeamBattleActiveState) error {
 			rentalPartners++
 		}
 	}
-	if len(active.SelectedPartners) != 0 && (len(active.SelectedPartners) != 3 || rentalPartners != active.FriendPointPartners) {
+	if len(active.SelectedPartners) != 0 && (len(active.SelectedPartners) > 3 || rentalPartners != active.FriendPointPartners) {
 		return errors.New("CN save active team battle partner count is invalid")
 	}
 	seenPartnerUsers := make(map[int]struct{}, len(active.SelectedPartners))
-	seenPartnerTypes := make(map[int8]struct{}, len(active.SelectedPartners))
 	for _, partner := range active.SelectedPartners {
 		if partner.UserID <= 0 || partner.ArthurType < 1 || partner.ArthurType > 4 || partner.Level <= 0 ||
 			partner.LeaderCardID <= 0 || partner.LeaderLevel <= 0 || partner.LeaderFame <= 0 ||
@@ -1316,11 +1314,7 @@ func validateActiveTeamBattle(active *gamestate.TeamBattleActiveState) error {
 		if _, duplicate := seenPartnerUsers[partner.UserID]; duplicate && !partner.IsSelf {
 			return errors.New("CN save active team battle partner user is duplicated")
 		}
-		if _, duplicate := seenPartnerTypes[partner.ArthurType]; duplicate {
-			return errors.New("CN save active team battle partner Arthur type is duplicated")
-		}
 		seenPartnerUsers[partner.UserID] = struct{}{}
-		seenPartnerTypes[partner.ArthurType] = struct{}{}
 		for _, honorID := range partner.HonorIDs {
 			// The client serializes unused honor slots as zero. Preserve those
 			// sentinels so an otherwise valid selected partner can survive a
@@ -1345,6 +1339,8 @@ func cloneTowerQuestProgressState(source []gamestate.TowerQuestProgress) []games
 	result := make([]gamestate.TowerQuestProgress, len(source))
 	for index, progress := range source {
 		progress.ClearedFloors = append([]int(nil), progress.ClearedFloors...)
+		progress.ClearRatings = maps.Clone(progress.ClearRatings)
+		progress.BestClearTurns = maps.Clone(progress.BestClearTurns)
 		result[index] = progress
 	}
 	return result

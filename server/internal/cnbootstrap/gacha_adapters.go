@@ -6,11 +6,11 @@ import (
 	"errors"
 	"net/http"
 
-	adminapi "kairisei.local/server/internal/admin"
 	"kairisei.local/server/internal/httpapi"
+	operationservice "kairisei.local/server/internal/operations"
 )
 
-func cnGachaPublicationBusiness(business http.Handler, operations *adminapi.Operations) http.Handler {
+func cnGachaPublicationBusiness(business http.Handler, operations *operationservice.Runtime) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		active, err := operations.GachaPublication()
 		if err != nil {
@@ -47,7 +47,7 @@ var cnUserInfoFieldMap = map[string]string{
 	"17": "bp_max", "18": "bp_next_sec", "19": "bp_heal_sec", "20": "card_max_extend",
 	"21": "card_num", "22": "card_max", "23": "card_extend_limit", "24": "card_container_num",
 	"25": "card_container_max_extend", "26": "card_container_max", "27": "card_container_extend_limit",
-	"28": "sphr_num", "29": "sphr_max", "30": "friend_max", "31": "friend_max_extend",
+	"28": "sphr_num", "29": "sphr_max", "30": "follow_max", "31": "friend_max_extend",
 	"32": "friend_extend_limit", "33": "gold", "34": "fp", "35": "coin", "36": "coin_free",
 	"37": "enter_state", "38": "navi_type", "39": "inviteid", "40": "jobs",
 	"41": "deck_max_per_arthur", "42": "tag_name", "43": "total_cost",
@@ -70,7 +70,7 @@ var cnItemInfoFieldMap = map[string]string{
 	"0": "itemid", "1": "num", "2": "limit_time", "3": "exchange",
 }
 
-func cnBootstrapGachaShow(businessHandler http.Handler, operations *adminapi.Operations) http.HandlerFunc {
+func cnBootstrapGachaShow(businessHandler http.Handler, operations *operationservice.Runtime) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		payload, err := readCNSessionPayload(request, "GachaShow")
 		if err != nil {
@@ -103,7 +103,7 @@ func cnBootstrapGachaShow(businessHandler http.Handler, operations *adminapi.Ope
 	}
 }
 
-func cnBootstrapGachaPlay(businessHandler http.Handler, operations *adminapi.Operations) http.HandlerFunc {
+func cnBootstrapGachaPlay(businessHandler http.Handler, operations *operationservice.Runtime) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		payload, err := readCNSessionPayload(request, "GachaPlay2")
 		if err != nil {
@@ -187,7 +187,7 @@ func decodeCNGachaSelectLineup(raw json.RawMessage) ([]map[string]json.RawMessag
 	return result, nil
 }
 
-func cnBootstrapGachaLineupShow(businessHandler http.Handler, operations *adminapi.Operations) http.HandlerFunc {
+func cnBootstrapGachaLineupShow(businessHandler http.Handler, operations *operationservice.Runtime) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		payload, err := readCNSessionPayload(request, "GachaLineupShow2")
 		if err != nil {
@@ -219,7 +219,7 @@ func cnBootstrapGachaLineupShow(businessHandler http.Handler, operations *admina
 	}
 }
 
-func cnBootstrapGachaOddsShow(businessHandler http.Handler, operations *adminapi.Operations) http.HandlerFunc {
+func cnBootstrapGachaOddsShow(businessHandler http.Handler, operations *operationservice.Runtime) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		payload, err := readCNSessionPayload(request, "GachaOddsShow")
 		if err != nil {
@@ -474,7 +474,16 @@ func remapCNUserInfo(raw json.RawMessage) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return remapJSONObject(updated, cnUserInfoFieldMap)
+	mapped, err := remapJSONObject(updated, cnUserInfoFieldMap)
+	if err != nil {
+		return nil, err
+	}
+	// Modern client fields use their names in both wire forms. Keep the CN
+	// slots stable: slot 42 is still tag_name, not the JP alchemist limit.
+	if value, ok := user["deck_max_alchemist"]; ok {
+		mapped["deck_max_alchemist"] = value
+	}
+	return mapped, nil
 }
 
 func remapCNItemInfo(raw json.RawMessage) (any, error) {

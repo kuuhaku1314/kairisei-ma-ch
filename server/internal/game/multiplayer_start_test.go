@@ -7,12 +7,11 @@ import (
 	"time"
 
 	"kairisei.local/server/internal/gamestate"
-	"kairisei.local/server/internal/multiplayer"
 )
 
 func TestMultiplayerStartDebitIsDurableAndAtomic(t *testing.T) {
 	s := &Account{bp: 20, bpMax: 20, bpRecoveryInterval: 3 * time.Minute}
-	start := multiplayer.BattleStart{RoomID: 6020000001, BossID: 30010102, OwnerUserID: 1000001, BPUse: 15}
+	start := MultiplayerAdmission{RoomID: 6020000001, BossID: 30010102, BPUse: 15}
 	var saved gamestate.State
 	writes := 0
 	persist := func(state gamestate.State) error { saved = state; writes++; return nil }
@@ -43,7 +42,7 @@ func TestMultiplayerStartDebitIsDurableAndAtomic(t *testing.T) {
 
 func TestMultiplayerContinueDebitIsDurableAndAtomic(t *testing.T) {
 	s := &Account{coin: 102, coinFree: 20}
-	request := multiplayer.BattleContinue{RoomID: 6020000001, BossID: 30010102, UserID: 1000001, Sequence: 1}
+	request := MultiplayerContinuation{RoomID: 6020000001, BossID: 30010102, Sequence: 1}
 	var saved gamestate.State
 	writes := 0
 	persist := func(state gamestate.State) error { saved = state; writes++; return nil }
@@ -79,26 +78,40 @@ func TestPrepaidHostAndFreeGuestCanSettleAtZeroBP(t *testing.T) {
 	const boss = 30010102
 	for _, host := range []bool{true, false} {
 		s := &Account{bpMax: 20, bpRecoveryInterval: 3 * time.Minute,
-			teamBattleSolo: json.RawMessage(`{"9":[],"10":[{"0":300101,"9":0,"10":[{"0":30010102,"5":15,"10":0}]}],"11":[],"12":[]}`),
+			teamBattleSolo: battleCatalogFixture(t, json.RawMessage(`{"9":[],"10":[{"0":300101,"9":0,"10":[{"0":30010102,"5":15,"10":0}]}],"11":[],"12":[]}`)),
 		}
 		helper := &s.playerProgression.Friends.HelperReward
 		helper.OtherPerPartner, helper.FriendPerPartner, helper.MaximumPartners = 5, 10, 3
 		roomID := int64(0)
 		hostType := 0
+		mode := gamestate.BattleEntryMultiplayerGuest
 		if host {
+			mode = gamestate.BattleEntryMultiplayerHost
 			roomID = 602000001
 			hostType = 1
 			s.teamBattleStartReceipts = []gamestate.TeamBattleStartReceipt{{RoomID: roomID, BossID: boss, BPUse: 8}}
 		}
 		profiles := []gamestate.TeamBattleRewardProfile{{BossID: boss, ResultRewards: []gamestate.Reward{{Type: 4, Num: 10}}}}
-		context, _, started, err := s.BeginTeamBattle(boss, []int8{0}, 15, host, profiles, "multi:room=602000001", []TeamBattleFameSource{{ArthurType: 1, LeaderFame: 1}}, hostType, 0, 0, nil, "", nil, roomID)
-		if err != nil || !started || s.bp != 0 || context.ConsumesBattlePoints != host || context.HostBonusArthurType != hostType {
+		s.missions = map[int]gamestate.MissionProgress{}
+		s.missionCatalog = missionCatalogFixture(t, map[int]gamestate.MissionDefinition{
+			1: {MissionID: 1, Published: true, Title: "通关", Rule: &gamestate.MissionRule{Event: gamestate.MissionQuestClear, Target: 1}},
+			2: {MissionID: 2, Published: true, Title: "联机通关", Rule: &gamestate.MissionRule{Event: gamestate.MissionQuestClear, Target: 1, QuestScope: gamestate.MissionQuestMultiplayer}},
+			3: {MissionID: 3, Published: true, Title: "房主通关", Rule: &gamestate.MissionRule{Event: gamestate.MissionQuestClear, Target: 1, QuestScope: gamestate.MissionQuestHost}},
+		})
+		entry := TeamBattleEntry{BossID: boss, StageType: gamestate.BattleStageEvent, EntryRole: mode, EnemyTypes: []int8{0}, Profiles: profiles, FameSeed: "opaque-start-identity", FameSources: []TeamBattleFameSource{{MemberType: 1, LeaderFame: 1}}, HostBonusMemberType: hostType, PrepaidRoomID: roomID}
+		context, _, started, err := s.BeginTeamBattle(entry)
+		if err != nil || !started || s.bp != 0 || context.EntryRole != mode || context.HostBonusMemberType != hostType {
 			t.Fatalf("host=%v: prepaid/free result context=%+v started=%v err=%v BP=%d", host, context, started, err, s.bp)
 		}
 		if (host && context.BPUse != 8) || (!host && context.BPUse != 0) {
 			t.Fatalf("host=%v settlement did not preserve the paid cost: %d", host, context.BPUse)
 		}
-		if _, _, ok, err := s.BeginTeamBattle(boss, []int8{0}, 15, host, profiles, "multi:room=602000001", nil, hostType, 0, 0, nil, "", nil, roomID); err != nil || !ok {
+		frozen := teamBattleContextFromRelease(snapshotTeamBattleContext(&context))
+		if frozen.StageType != gamestate.BattleStageEvent || frozen.EntryRole != mode || s.HasUnsettledSoloBattle() {
+			t.Fatal("role/type were lost in persistence or a zero-prepaid guest became a solo battle")
+		}
+		entry.FameSources = nil
+		if _, _, ok, err := s.BeginTeamBattle(entry); err != nil || !ok {
 			t.Fatalf("same-room result retry cannot resume: %v", err)
 		}
 		if _, err := s.CompleteTeamBattle(boss, true, profiles, TeamBattleDropReport{EnemyDeadBits: []int{1}}); err != nil {
@@ -106,6 +119,13 @@ func TestPrepaidHostAndFreeGuestCanSettleAtZeroBP(t *testing.T) {
 		}
 		if s.bp != 0 || s.gold != 10 {
 			t.Fatalf("host=%v settlement BP=%d gold=%d", host, s.bp, s.gold)
+		}
+		want := 2
+		if host {
+			want = 3
+		}
+		if len(s.TakeMissionUpdates()) != want || s.missions[1].ProgressNow != 1 || s.missions[2].ProgressNow != 1 || (s.missions[3].ProgressNow != 0) != host {
+			t.Fatal("quest participation was inferred from price or a seed string instead of the frozen role")
 		}
 	}
 }

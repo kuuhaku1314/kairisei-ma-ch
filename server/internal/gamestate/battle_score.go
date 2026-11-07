@@ -1,6 +1,28 @@
 package gamestate
 
-import "errors"
+import (
+	"errors"
+	"math"
+)
+
+type BattleScoreMode int
+
+const (
+	BattleScoreSolo BattleScoreMode = iota
+	BattleScoreMultiplayer
+)
+
+func (mode BattleScoreMode) Valid() bool {
+	return mode == BattleScoreSolo || mode == BattleScoreMultiplayer
+}
+
+// BossScoreResult is an accepted run's score, not the player's previous best.
+type BossScoreResult struct {
+	BossID     int
+	Score      int64
+	Grade      int
+	AchievedAt int64
+}
 
 // Display and claim slots follow the native nine-grade UI. Economic thresholds
 // and the multiplier are explicit local policy, not recovered official prices.
@@ -10,9 +32,9 @@ type TeamBattleScorePolicy struct {
 	BestTurn        int                    `json:"best_turn"`
 	Grades          []TeamBattleScoreGrade `json:"grades"`
 	EndTurn         int                    `json:"end_turn"`                  // 0: no forced turn limit; retain boss AI ending.
-	MemberDeadEnd   bool                   `json:"member_dead_end,omitempty"` // Encounter evidence, not implied by SCORE UI.
+	MemberDeadEnd   bool                   `json:"member_dead_end,omitempty"` // Operator rule frozen at entry; independent of the displayed score grade.
 	Rate            int                    `json:"rate,omitempty"`
-	TeamCostInitial int                    `json:"team_cost_initial,omitempty"` // 0: legacy default (3); only used when creating multiplayer rooms.
+	TeamCostInitial int                    `json:"team_cost_initial,omitempty"` // Initial COST for solo and multiplayer; 0 keeps the replay default.
 }
 
 type TeamBattleScoreGrade struct {
@@ -26,13 +48,26 @@ type TeamBattleScoreProgress struct {
 	Claimed   uint16 `json:"claimed"`
 }
 
+// Body and part HP may exceed one trillion together. Bound accepted damage by
+// the actual score multiplication, shared by settlement and durable completion.
+func ValidateTeamBattleScoreDamage(p *TeamBattleScorePolicy, damage int64) error {
+	rate := 1
+	if p != nil && p.SourceState == "LOCAL_POLICY_DAMAGE_SCORE" {
+		rate = p.Rate
+	}
+	if damage < 0 || rate < 1 || damage > math.MaxInt64/int64(rate) {
+		return errors.New("score damage is out of range")
+	}
+	return nil
+}
+
 func ValidateTeamBattleScorePolicy(p *TeamBattleScorePolicy) error {
 	if p == nil {
 		return nil
 	}
 	if p.SourceState == "LOCAL_POLICY_DAMAGE_SCORE" {
 		if p.TeamCostInitial != 0 && (p.TeamCostInitial < 3 || p.TeamCostInitial > 10) {
-			return errors.New("组队起始COST须为3至10")
+			return errors.New("起始COST须为3至10")
 		}
 		if p.EndTurn < 0 || p.EndTurn > 30 || p.Rate < 1 || p.Rate > 1000 || p.BaseScore != 0 || p.BestTurn != 0 || len(p.Grades) != 9 {
 			return errors.New("invalid damage score policy")
@@ -69,7 +104,7 @@ func CloneTeamBattleScorePolicy(p *TeamBattleScorePolicy) *TeamBattleScorePolicy
 	r := *p
 	r.Grades = append([]TeamBattleScoreGrade(nil), p.Grades...)
 	for i := range r.Grades {
-		r.Grades[i].Rewards = cloneGachaRewards(p.Grades[i].Rewards)
+		r.Grades[i].Rewards = cloneRewards(p.Grades[i].Rewards)
 	}
 	return &r
 }

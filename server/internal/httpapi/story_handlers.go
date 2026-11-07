@@ -44,18 +44,7 @@ func (a *API) storyMainStart(
 	if !a.persistOrError(writer) {
 		return
 	}
-	_, _, hp, _, _, _, _ := a.activeDeckProfile()
-	if hp < 1 {
-		hp = 1
-	}
-	a.writeProtocol(writer, map[string]any{
-		"seed":                0,
-		"hp":                  hp,
-		"hp_max":              hp,
-		"cost_initial":        3,
-		"burst_gauge_initial": 0,
-		"hold_max":            5,
-	})
+	a.writeProtocol(writer, a.storyStartPayload())
 }
 
 func (a *API) storyMainEnd(
@@ -99,30 +88,32 @@ func (a *API) storySubStart(
 ) {
 	var payload struct {
 		StorySubID int `json:"story_subid"`
+		TowerID    int `json:"towerid"`
+		Floor      int `json:"floor"`
 	}
-	if err := decodeExact(request, []string{"story_subid"}, &payload); err != nil {
+	if err := decodeExact(request, []string{"story_subid"}, &payload, "towerid", "floor"); err != nil {
 		a.writeStoreError(writer, err)
 		return
 	}
-	if !a.account.BeginSubStory(payload.StorySubID) {
+	var started bool
+	if payload.TowerID == 0 && payload.Floor == 0 {
+		started = a.account.BeginSubStory(payload.StorySubID)
+	} else {
+		var err error
+		started, err = a.account.BeginTowerStory(payload.StorySubID, payload.TowerID, payload.Floor)
+		if err != nil {
+			a.writeStoreError(writer, err)
+			return
+		}
+	}
+	if !started {
 		writeError(writer, http.StatusBadRequest, "unknown or locked sub story ID")
 		return
 	}
 	if !a.persistOrError(writer) {
 		return
 	}
-	_, _, hp, _, _, _, _ := a.activeDeckProfile()
-	if hp < 1 {
-		hp = 1
-	}
-	a.writeProtocol(writer, map[string]any{
-		"seed":                0,
-		"hp":                  hp,
-		"hp_max":              hp,
-		"cost_initial":        3,
-		"burst_gauge_initial": 0,
-		"hold_max":            5,
-	})
+	a.writeProtocol(writer, a.storyStartPayload())
 }
 
 func (a *API) storySubEnd(
@@ -151,11 +142,22 @@ func (a *API) storySubEnd(
 	a.writeProtocol(writer, a.storyEndPayload(result))
 }
 
+func (a *API) storyStartPayload() map[string]any {
+	_, _, hp, _, _, _, _ := a.activeDeckProfile()
+	if hp < 1 {
+		hp = 1
+	}
+	return map[string]any{
+		"seed": 0, "hp": hp, "hp_max": hp,
+		"cost_initial": 3, "burst_gauge_initial": 0, "hold_max": 6,
+	}
+}
+
 func (a *API) storyEndPayload(result game.PresentReceiveResult) map[string]any {
 	return map[string]any{
 		"user":                           a.userPayload(),
 		"clear_rewards":                  battleResultRewardsWire(result.Rewards),
-		"new_cards":                      toWireCards(result.Cards),
+		"new_cards":                      a.toWireCards(result.Cards),
 		"new_stack_cards":                toWireStackCards(result.StackCards),
 		"new_items":                      a.itemInfosWire(result.Items),
 		"new_sphrs":                      toWireSpheres(result.Spheres),

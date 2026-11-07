@@ -1,8 +1,28 @@
 package multiplayer
 
-import "errors"
+import (
+	"errors"
+	"strconv"
+)
 
 const localRoomRequestRejected = "-1"
+
+// Keep the established CN room prefix. Its original parser ignores trailing
+// columns; the modern adapter consumes the added room-owned presentation flag.
+// JP's equivalent field is before its comeback token, so wire position and
+// the shared RoomInfo meaning are deliberately separate here.
+func roomInfoCSV(room RoomSnapshot, comebackToken string, creating bool) string {
+	fields := []string{"0", "", strconv.FormatInt(room.RoomID, 10), strconv.Itoa(room.BossID),
+		strconv.Itoa(room.OwnerMemberType), strconv.Itoa(room.GameSpeed), comebackToken}
+	if creating {
+		fields = append(fields, strconv.Itoa(room.GameStartMemberNum))
+	}
+	skip := "0"
+	if room.SkipBattleMessages {
+		skip = "1"
+	}
+	return joinCSV(append(fields, skip, strconv.Itoa(recoveryProtocolVersion))...)
+}
 
 func (c *clientConn) writeRoomRequestRejected(method string, cause error) error {
 	if method == "" {

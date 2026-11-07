@@ -73,6 +73,10 @@ func (accounts *Accounts) NextRoomID(minimum int64) (int64, error) {
 }
 
 func (accounts *Accounts) SaveCompleted(completed multiplayer.CompletedBattle, expiresAt time.Time) error {
+	return accounts.commitAccountStates(nil, func(transaction *sql.Tx) error { return accounts.writeCompleted(transaction, completed, expiresAt) })
+}
+
+func (accounts *Accounts) writeCompleted(transaction *sql.Tx, completed multiplayer.CompletedBattle, expiresAt time.Time) error {
 	if err := validateCompletedBattle(completed, expiresAt); err != nil {
 		return err
 	}
@@ -86,18 +90,6 @@ func (accounts *Accounts) SaveCompleted(completed multiplayer.CompletedBattle, e
 	digest := sha256.Sum256(content)
 	digestText := hex.EncodeToString(digest[:])
 
-	// Completion storage owns no account state. Serialize through the SQLite
-	// writer, without taking the account/login mutex from a room operation.
-	transaction, err := accounts.beginMultiplayerTransaction()
-	if err != nil {
-		return err
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = transaction.Rollback()
-		}
-	}()
 	if err := accounts.pruneMultiplayerCompletions(transaction, time.Now()); err != nil {
 		return err
 	}
@@ -129,6 +121,9 @@ func (accounts *Accounts) SaveCompleted(completed multiplayer.CompletedBattle, e
 		if err := writeMultiplayerClear(transaction, completed); err != nil {
 			return err
 		}
+		if err := writeBossScoreRanking(transaction, completed); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("read multiplayer completion identity: %w", err)
 	}
@@ -146,10 +141,6 @@ func (accounts *Accounts) SaveCompleted(completed multiplayer.CompletedBattle, e
 	); err != nil {
 		return fmt.Errorf("advance multiplayer room sequence: %w", err)
 	}
-	if err := transaction.Commit(); err != nil {
-		return fmt.Errorf("commit multiplayer completion: %w", err)
-	}
-	committed = true
 	return nil
 }
 
@@ -233,7 +224,10 @@ func validateCompletedBattle(completed multiplayer.CompletedBattle, expiresAt ti
 	if err := gamestate.ValidateTeamBattleScorePolicy(completed.ScorePolicy); err != nil {
 		return fmt.Errorf("multiplayer completion score policy: %w", err)
 	}
-	if completed.ScoreDamage < 0 || completed.ScoreDamage > 1000000000000 || completed.EndType < 0 || completed.EndType > 2 || (completed.EndType == 2 && completed.ScorePolicy == nil) {
+	if err := gamestate.ValidateTeamBattleScoreDamage(completed.ScorePolicy, completed.ScoreDamage); err != nil {
+		return err
+	}
+	if completed.EndType < 0 || (completed.EndType > 2 && completed.EndType != 4) || (completed.EndType == 2 && completed.ScorePolicy == nil) {
 		return errors.New("multiplayer completion score or end type is invalid")
 	}
 	if completed.BattleIndex < 0 || completed.BattleIndex >= multiplayer.MaxBattleWaves || completed.Progress < 0 || completed.Progress > completed.BattleIndex {

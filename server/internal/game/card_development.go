@@ -61,6 +61,8 @@ func (s *Account) refreshCardFameTrainingLocked(now time.Time) bool {
 			return false
 		}
 		s.cards[index] = normalized
+		s.markMissionMetricLocked(gamestate.MissionCardFame)
+		s.markMissionMetricLocked(gamestate.MissionCardOwned)
 	}
 	s.cardFameTraining = nil
 	return true
@@ -152,6 +154,9 @@ func (s *Account) DecomposeCard(uniqueID int64, decomposeType int) (int, []DeckI
 	if s.cards[index].IsLock != 0 {
 		return 0, nil, ErrCardLocked
 	}
+	if decomposeType == cardDecomposeCard && s.uniqueIDInDeck(uniqueID) {
+		return 0, nil, ErrCardInDeck
+	}
 	card := s.cards[index]
 	rule, exists := s.cardDevelopmentRules[card.CardID]
 	if !exists || rule.DevelopmentType != cardDevelopmentDecompose || rule.DecomposeRadix < 0 {
@@ -183,11 +188,15 @@ func (s *Account) DecomposeCard(uniqueID int64, decomposeType int) (int, []DeckI
 		}
 		s.stive += int(gain)
 		s.cards[index] = normalized
+		s.markMissionMetricLocked(gamestate.MissionCardFame)
+		s.markMissionMetricLocked(gamestate.MissionCardOwned)
 		return s.stive, []DeckInfo{}, nil
 	}
 	s.stive += int(gain)
 	decks := s.clearCardFromDecksLocked(uniqueID)
 	s.cards = append(s.cards[:index], s.cards[index+1:]...)
+	s.markMissionMetricLocked(gamestate.MissionCardOwned)
+	s.markMissionMetricLocked(gamestate.MissionCardFame)
 	return s.stive, decks, nil
 }
 
@@ -197,6 +206,7 @@ func (s *Account) StartCardFameTraining(uniqueID int64, fame int, now time.Time)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.refreshCardFameTrainingLocked(now)
 	if s.cardFameTraining != nil {
 		return cardFameTrainState{}, errors.New("another card fame training is active")
 	}
@@ -259,6 +269,8 @@ func (s *Account) CancelCardFameTraining(uniqueID int64, now time.Time) (cardFam
 	}
 	s.stive += int(refund)
 	s.cards[index] = normalized
+	s.markMissionMetricLocked(gamestate.MissionCardFame)
+	s.markMissionMetricLocked(gamestate.MissionCardOwned)
 	s.cardFameTraining = nil
 	return cardFameTrainState{
 		UniqueID: uniqueID, Fame: s.cards[index].Fame, Stive: s.stive,
@@ -280,7 +292,7 @@ func (s *Account) FinishCardFameTraining(uniqueID int64, now time.Time) (cardFam
 	remain := s.cardFameRemainLocked(now)
 	hours := (remain + 3599) / 3600
 	cost := hours * s.cardDevelopmentPolicy.CoinEveryHour
-	if cost <= 0 {
+	if remain > 0 && cost <= 0 {
 		return cardFameTrainState{}, errors.New("card fame completion cost is invalid")
 	}
 	if s.coin+s.coinFree < cost {
@@ -298,6 +310,8 @@ func (s *Account) FinishCardFameTraining(uniqueID int64, now time.Time) (cardFam
 	s.coinFree -= freeSpend
 	s.coin -= cost - freeSpend
 	s.cards[index] = normalized
+	s.markMissionMetricLocked(gamestate.MissionCardFame)
+	s.markMissionMetricLocked(gamestate.MissionCardOwned)
 	s.cardFameTraining = nil
 	return cardFameTrainState{
 		UniqueID: uniqueID, Fame: s.cards[index].Fame, IsLock: 0,
@@ -306,13 +320,22 @@ func (s *Account) FinishCardFameTraining(uniqueID int64, now time.Time) (cardFam
 }
 
 func (s *Account) HowToGetCards(cardIDs []int, profiles []gamestate.TeamBattleRewardProfile, allowedGroups map[int]struct{}) ([]howToGetCardList, error) {
+	return s.howToGetCards(cardIDs, profiles, allowedGroups, false)
+}
+
+// HowToGetMissingCards supplies the native clear-deck missing-card list. The
+// ordinary detail query still returns acquisition sources for owned cards too.
+func (s *Account) HowToGetMissingCards(cardIDs []int, profiles []gamestate.TeamBattleRewardProfile, allowedGroups map[int]struct{}) ([]howToGetCardList, error) {
+	return s.howToGetCards(cardIDs, profiles, allowedGroups, true)
+}
+
+func (s *Account) howToGetCards(cardIDs []int, profiles []gamestate.TeamBattleRewardProfile, allowedGroups map[int]struct{}, missingOnly bool) ([]howToGetCardList, error) {
 	if len(cardIDs) == 0 || len(cardIDs) > 64 {
 		return nil, errors.New("card acquisition query is empty or too large")
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	seen := make(map[int]struct{}, len(cardIDs))
-	result := make([]howToGetCardList, len(cardIDs))
 	sources := make(cardSourceIndex, len(cardIDs))
 	for _, cardID := range cardIDs {
 		_, cardExists := s.cardDefinitions[cardID]
@@ -329,6 +352,24 @@ func (s *Account) HowToGetCards(cardIDs []int, profiles []gamestate.TeamBattleRe
 		seen[cardID] = struct{}{}
 		sources[cardID] = make(map[howToGetCardEntry]struct{})
 	}
+	requested := cardIDs
+	if missingOnly {
+		// CardMgr resolves copied cards from the current inventory. Warehouse
+		// cards are separate and cannot be equipped until retrieved.
+		for _, card := range s.cards {
+			delete(sources, card.CardID)
+		}
+		requested = make([]int, 0, len(sources))
+		for _, id := range cardIDs {
+			if _, missing := sources[id]; missing {
+				requested = append(requested, id)
+			}
+		}
+	}
+	result := make([]howToGetCardList, len(requested))
+	if len(requested) == 0 {
+		return result, nil
+	}
 	if err := s.battleCardSourcesLocked(profiles, allowedGroups, sources); err != nil {
 		return nil, err
 	}
@@ -341,13 +382,24 @@ func (s *Account) HowToGetCards(cardIDs []int, profiles []gamestate.TeamBattleRe
 				continue
 			}
 		}
-		typeID := 4 + transition.Type
-		if transition.Type == 3 {
-			typeID = 12
+		var typeID int
+		switch transition.Type {
+		case 0:
+			typeID = 4 // NORMAL_EVOLUTION
+		case 1:
+			typeID = 5 // GOD_EVOLUTION
+		case 2:
+			typeID = 6 // KNIGHT_EVOLUTION
+		case 3:
+			typeID = 12 // LIMIT_EVOLUTION
+		case 4:
+			typeID = 15 // ALCHEMIST_EVOLUTION
+		default:
+			return nil, fmt.Errorf("unknown card evolution type %d", transition.Type)
 		}
 		sources.add(transition.ToCardID, howToGetCardEntry{Type: typeID, ContentID: transition.FromCardID})
 	}
-	for index, cardID := range cardIDs {
+	for index, cardID := range requested {
 		entries := make([]howToGetCardEntry, 0, len(sources[cardID]))
 		for entry := range sources[cardID] {
 			entries = append(entries, entry)

@@ -17,7 +17,7 @@ func (r completionReadRepository) LoadCompleted(int64, time.Time) (CompletedBatt
 	return r.load()
 }
 
-func TestCompletionReadDoesNotBlockRoomsOrResetConcurrentClaim(t *testing.T) {
+func TestCompletionReadDoesNotBlockRoomsOrReplaceTerminalState(t *testing.T) {
 	hub := NewHub()
 	started, release := make(chan struct{}), make(chan struct{})
 	var once sync.Once
@@ -45,7 +45,10 @@ func TestCompletionReadDoesNotBlockRoomsOrResetConcurrentClaim(t *testing.T) {
 			later <- err
 			return
 		}
-		later <- hub.MarkSettlementClaimed(123, 1001)
+		session := hub.lockRoomSession(123)
+		session.completed.terminalBattleEndType = 1
+		session.Unlock()
+		later <- nil
 	}()
 	select {
 	case err := <-later:
@@ -56,8 +59,13 @@ func TestCompletionReadDoesNotBlockRoomsOrResetConcurrentClaim(t *testing.T) {
 		t.Fatal("completion I/O blocked unrelated room access")
 	}
 	unblock()
-	if err := <-first; !errors.Is(err, ErrCompletedBattleIneligible) {
-		t.Fatalf("late database result overwrote an existing claim: %v", err)
+	if err := <-first; err != nil {
+		t.Fatal(err)
+	}
+	session := hub.lockRoomSession(123)
+	defer session.Unlock()
+	if session.completed.terminalBattleEndType != 1 {
+		t.Fatal("late read replaced terminal interaction state")
 	}
 }
 

@@ -46,7 +46,7 @@ type roomContinuation struct {
 const continueDecisionTimeout = 20 * time.Second // Original dialog: 10 seconds, plus transport grace.
 
 func roomContinuePending(current *room) bool {
-	return current.continuation != nil || current.engine != nil && current.engine.continuePending
+	return current.continuation != nil || current.engine.ContinuePending()
 }
 
 // continueAtBarrierLocked consumes the room lease like completeGoBattleLocked.
@@ -78,7 +78,7 @@ func (c *clientConn) handleContinue(payload string) error {
 	session := hub.lockRoomSession(c.roomID)
 	defer session.Unlock()
 	current, ok := session.room, session.room != nil
-	if payload != "" || !ok || current.State != RoomStateBattle || current.connections[c.memberType] != c || c.retired {
+	if payload != "" || !ok || current.closing || current.State != RoomStateBattle || current.connections[c.memberType] != c || c.retired {
 		session.Unlock()
 		return c.writeFrame("ContinueFailed", joinCSV("-1", "当前无法续关"))
 	}
@@ -87,14 +87,14 @@ func (c *clientConn) handleContinue(payload string) error {
 		session.Unlock()
 		return nil // A delayed/duplicate request must not charge again.
 	}
-	if !current.continueAllowed || !current.engine.continuePending || hub.continueAuthorizer == nil || time.Now().After(state.deadline) {
+	if !current.continueAllowed || !current.engine.ContinuePending() || hub.continueAuthorizer == nil || time.Now().After(state.deadline) {
 		session.Unlock()
 		if err := c.writeFrame("ContinueFailed", joinCSV("-1", "本次无法续关")); err != nil {
 			return err
 		}
 		return c.server.advanceContinue(c.roomID)
 	}
-	plan, err := current.engine.prepareContinue(c.memberType)
+	plan, err := current.engine.PrepareContinue(c.memberType)
 	if err != nil {
 		session.Unlock()
 		return c.writeFrame("ContinueFailed", joinCSV("-1", "当前角色无法续关"))
@@ -102,14 +102,12 @@ func (c *clientConn) handleContinue(payload string) error {
 	// Validate the post-revival snapshot before touching currency. It must be
 	// sent through RoomComeback AFTER the animation: RESUME_BUFF adds entries
 	// and requires notifyRoomComeback's prior state reset, unlike delta rows.
-	view := *current.engine
-	view.commitContinue(plan)
-	_, err = view.ResumeResults(priorWaveResumeDrops(current.releasedDrops, current.battleIndex)...)
+	_, err = plan.ResumeResults(priorWaveResumeDrops(current.releasedDrops, current.battleIndex)...)
 	if err != nil {
 		session.Unlock()
 		return err
 	}
-	result, err := encodeBattleResults(plan.results)
+	result, err := encodeBattleResults(plan.Results())
 	if err != nil {
 		session.Unlock()
 		return err
@@ -145,7 +143,11 @@ func (c *clientConn) handleContinue(payload string) error {
 	}
 	// Socket detachment waits for continueDone. The room/engine remain frozen
 	// while the account transaction runs, so a successful debit always revives.
-	current.engine.commitContinue(plan)
+	if err := plan.Commit(); err != nil {
+		close(current.continueDone)
+		current.continueDone = nil
+		return err
+	}
 	current.engineBattleEnd = 0
 	frame := battleFrame{"ApiContinue", result}
 	state.presentation = &frame
@@ -248,6 +250,10 @@ func (s *Server) advanceContinue(roomID int64) error {
 			session.Unlock()
 			return err
 		}
+		// Just like reconnect, the reset snapshot must restore reservations
+		// already broadcast during the paused direction. The engine consumes
+		// them only after this continuation barrier, not during payment.
+		rows = current.chaliceResumeResults(rows)
 		payload, err := encodeBattleResults(rows)
 		if err != nil {
 			session.Unlock()
@@ -271,7 +277,7 @@ func (s *Server) advanceContinue(roomID int64) error {
 	}
 	// Wait until nobody intends to pay before retiring KO members. CPU slots
 	// never purchase a continuation and do not add votes to the live quorum.
-	rows := current.engine.cancelContinue()
+	rows := current.engine.CancelContinue()
 	result, err := encodeBattleResults(rows)
 	if err != nil {
 		session.Unlock()

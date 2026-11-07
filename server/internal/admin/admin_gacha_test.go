@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -15,6 +17,7 @@ import (
 	"kairisei.local/server/internal/accountstore"
 	"kairisei.local/server/internal/gamestate"
 	"kairisei.local/server/internal/masterdata"
+	"kairisei.local/server/internal/multiplayer"
 	"kairisei.local/server/internal/testfixture"
 )
 
@@ -45,7 +48,7 @@ func TestLegacyGachaDocumentDefaultsRemainCompatible(t *testing.T) {
 	if err := json.Unmarshal(encoded, &legacy); err != nil {
 		t.Fatal(err)
 	}
-	for _, key := range []string{"pay_type", "pay_typeid", "cover_path", "card_fames", "closed"} {
+	for _, key := range []string{"pay_type", "pay_typeid", "cover_path", "card_fames", "closed", "odds_msg", "category_num"} {
 		delete(legacy, key)
 	}
 	legacy["disabled"] = true // Retired field must not unexpectedly close an old pool.
@@ -63,18 +66,22 @@ func TestLegacyGachaDocumentDefaultsRemainCompatible(t *testing.T) {
 		t.Fatal("legacy publication lost")
 	}
 	c := restarted.gachaConfigurations[0]
-	if c.Disabled || c.Profile.Price != 23 || c.Profile.PayType != base.PayType || c.Profile.PayTypeID != base.PayTypeID || c.Profile.CardFame(c.Profile.CardIDs[0]) != 1 || c.Profile.CoverPath != "" {
+	if c.Disabled || c.Profile.Price != 23 || c.Profile.PayType != base.PayType || c.Profile.PayTypeID != base.PayTypeID || c.Profile.CardFame(c.Profile.CardIDs[0]) != 1 || c.Profile.CoverPath != "" || c.Profile.OddsMessage != "" {
 		t.Fatalf("legacy defaults changed: %+v", c)
 	}
 	if restarted.runtimeSettings.GachaCoverSource != "" || restarted.runtimeSettings.GachaCoverBaseURL != "" {
 		t.Fatal("old settings gained a remote cover source")
+	}
+	// A document without a category reads as the pool's own entry.
+	if base.CategoryNum == 0 || c.Profile.CategoryNum != base.CategoryNum || c.Profile.CategoryPictID != base.CategoryPictID {
+		t.Fatalf("pool category changed: %d/%d", c.Profile.CategoryNum, c.Profile.CategoryPictID)
 	}
 	db, err := accounts.Database().OpenRead()
 	if err != nil {
 		t.Fatal(err)
 	}
 	var version int
-	if err := db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 3 {
+	if err := db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != accountstore.SaveDatabaseSchemaVersion {
 		t.Fatal("legacy schema changed", version, err)
 	}
 }
@@ -102,8 +109,20 @@ func TestAdminGachaDraftPublicationAndRestart(t *testing.T) {
 	config := AdminGachaConfigFromProfile(base)
 	config.Price = 25
 	config.Weights = []int{1, 9}
+	config.OddsMessage = "整池概率说明\n<文字> & 不影响权重"
 	config.PayType, config.PayTypeID = 4, 4000
 	admin.catalogByKey["8:4000"] = AdminCatalogEntry{Kind: "item", Name: "大硬币", ResourceState: "ready"}
+	tooLong := config
+	tooLong.OddsMessage = strings.Repeat("界", 1001)
+	if _, err := admin.validateGachaConfig(tooLong); err == nil {
+		t.Fatal("oversized odds message accepted")
+	}
+	boundary := config
+	boundary.OddsMessage = strings.Repeat("界", 1000)
+	// The payment item is registered immediately above; exactly 1000 runes is valid.
+	if _, err := admin.validateGachaConfig(boundary); err != nil {
+		t.Fatal("valid odds message rejected", err)
+	}
 	invalidPayment := config
 	invalidPayment.PayTypeID = 9999
 	if _, err := admin.validateGachaConfig(invalidPayment); err == nil {
@@ -128,7 +147,7 @@ func TestAdminGachaDraftPublicationAndRestart(t *testing.T) {
 	if len(saved.Preview.Stages) != 2 || saved.Preview.Stages[0].Odds[0] != 10000000 || saved.Preview.Stages[1].Odds[0] != 10000000 {
 		t.Fatalf("guaranteed draws preview wrong distribution: %s", result.Body.String())
 	}
-	if saved.Preview.Base.PayType != 4 || saved.Preview.Base.PayTypeID != 4000 || saved.Preview.Base.Price != 25 {
+	if saved.Preview.Base.OddsMessage != config.OddsMessage || saved.Preview.Base.PayType != 4 || saved.Preview.Base.PayTypeID != 4000 || saved.Preview.Base.Price != 25 {
 		t.Fatal("preview does not describe the configured payment")
 	}
 	if operations.gachaRevision != 0 {
@@ -152,7 +171,7 @@ func TestAdminGachaDraftPublicationAndRestart(t *testing.T) {
 	if len(restarted.gachaBases) != 1 || len(restarted.gachaConfigurations) != 1 || restarted.gachaConfigurations[0].Profile.Price != 25 {
 		t.Fatal("publication did not survive restart or exposed onboarding pool")
 	}
-	if p := restarted.gachaConfigurations[0].Profile; p.PayType != 4 || p.PayTypeID != 4000 {
+	if p := restarted.gachaConfigurations[0].Profile; p.OddsMessage != config.OddsMessage || p.PayType != 4 || p.PayTypeID != 4000 {
 		t.Fatal("payment item was lost on restart")
 	}
 	config.CardIDs = []int{3, 2}
@@ -236,14 +255,29 @@ func TestCardSourceTabsKeepMultiSourceCardsAndExcludeEvolvedGachaCandidates(t *t
 		CardTemplates: []gamestate.Card{
 			{CardID: 1, Name: "初始", RarityRank: 3, AcquisitionText: "普通副本，扭蛋"},
 			{CardID: 2, Name: "进化", RarityRank: 4, AcquisitionText: "普通副本，进化，扭蛋"},
-			{CardID: 3, Name: "奖章", RarityRank: 5, AcquisitionText: "BOSS币扭蛋"}},
-		EvolutionTransitions: []gamestate.EvolutionTransition{{FromCardID: 1, ToCardID: 2}},
+			{CardID: 3, Name: "奖章", RarityRank: 5, AcquisitionText: "BOSS币扭蛋"},
+			{CardID: 4, Name: "点星", RarityRank: 6, AcquisitionText: "因子覚醒-1"},
+			{CardID: 5, Name: "未核配方", RarityRank: 6, AcquisitionText: "进化，觉醒"},
+			{CardID: 6, Name: "骑士", RarityRank: 7},
+			{CardID: 7, Name: "因子突破", RarityRank: 7},
+			{CardID: 8, Name: "多进化路线", RarityRank: 6}},
+		EvolutionTransitions: []gamestate.EvolutionTransition{
+			{FromCardID: 1, ToCardID: 2}, {FromCardID: 2, ToCardID: 4, Type: 3},
+			{FromCardID: 4, ToCardID: 6, Type: 2}, {FromCardID: 6, ToCardID: 7, Type: 3},
+			{FromCardID: 2, ToCardID: 8}, {FromCardID: 4, ToCardID: 8, Type: 1}},
 		DeckRankPolicy: gamestate.DeckRankPolicy{Cards: map[int]gamestate.CardRankRule{
 			1: {ArthurType: 1}, 2: {ArthurType: 4}, 3: {ArthurType: 4},
 		}},
 	}, masterdata.ItemRuntimeMaster{})
 	if err != nil {
 		t.Fatal(err)
+	}
+	for id, tags := range map[int][]string{4: {"other"}, 5: {"other"}, 6: {"other"}, 7: {"other"}, 8: {"evolution"}} {
+		for _, card := range catalog {
+			if card.Kind == "card" && card.RewardTypeID == id && !slices.Equal(card.SourceTags, tags) {
+				t.Fatalf("card %d source tags %v, want actual recipe tags %v", id, card.SourceTags, tags)
+			}
+		}
 	}
 	admin := &API{catalog: catalog}
 	for _, source := range []string{"gacha", "dungeon"} {
@@ -296,6 +330,12 @@ func TestImportedCardCatalogFiltersIntersectBeforePagination(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	limits := map[int]int{10214045: 0, 10214046: 1, 10214048: 2, 10214050: 1, 10214053: 2, 10214098: 0}
+	for i := range catalog {
+		if limit, ok := limits[catalog[i].RewardTypeID]; ok {
+			catalog[i].Combat = &multiplayer.OperationsCardInfo{LimitCount: limit}
+		}
+	}
 	admin := &API{catalog: catalog}
 	for _, tc := range []struct {
 		query string
@@ -316,6 +356,12 @@ func TestImportedCardCatalogFiltersIntersectBeforePagination(t *testing.T) {
 		{"arthur_type=-1&rarity=6", 0, 0},
 		{"source=jp_import&rarity=6&offset=4", 5, 10214053},
 		{"source=jp_import&rarity=5", 0, 0},
+		{"source=jp_import&rarity=6&limit_count=0", 1, 10214045},
+		{"source=jp_import&rarity=6&limit_count=1&offset=1", 2, 10214050},
+		{"source=jp_import&arthur_type=2&limit_count=2&offset=1", 2, 10214053},
+		{"source=jp_import&rarity=5&limit_count=2", 0, 0},
+		{"limit_count=0", 2, 10214045},
+		{"q=10214099&limit_count=0", 0, 0}, // Missing details are unknown, not unstarred.
 	} {
 		t.Run(tc.query, func(t *testing.T) {
 			response := httptest.NewRecorder()
@@ -333,5 +379,12 @@ func TestImportedCardCatalogFiltersIntersectBeforePagination(t *testing.T) {
 				t.Fatalf("incorrect imported card page: %s", response.Body.String())
 			}
 		})
+	}
+	for _, value := range []string{"-1", "3", "1.5", "invalid"} {
+		response := httptest.NewRecorder()
+		admin.catalogEntries(response, httptest.NewRequest("GET", "/api/catalog?kind=card&limit_count="+value, nil))
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("invalid point-star filter %q accepted: %s", value, response.Body.String())
+		}
 	}
 }

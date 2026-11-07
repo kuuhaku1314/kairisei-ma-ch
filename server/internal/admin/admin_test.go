@@ -35,7 +35,7 @@ func TestAdminMissingBossImageUsesTextFallback(t *testing.T) {
 
 func TestAdminAccountListDoesNotDecodeSnapshots(t *testing.T) {
 	accounts := testfixture.NewFriendCapacityTestAccounts(t)
-	identity, err := accounts.ResolveLogin("00000000-0000-4000-8000-00000000a001")
+	identity, err := accounts.ResolveInternalLogin("00000000-0000-4000-8000-00000000a001")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,11 +75,11 @@ func TestAdminAccountListDoesNotDecodeSnapshots(t *testing.T) {
 	if count != len(items) {
 		t.Fatalf("account count = %d, list length = %d", count, len(items))
 	}
-	guest, err := accounts.ResolveLogin("00000000-0000-4000-8000-00000000a002")
+	guest, err := accounts.ResolveInternalLogin("00000000-0000-4000-8000-00000000a002")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := accounts.BindAccount(identity.LoginUUID, "operations_test", "temporary-test-password"); err != nil {
+	if _, err := accounts.BindInternalAccount(identity.LoginUUID, "operations_test", "temporary-test-password"); err != nil {
 		t.Fatal(err)
 	}
 	for _, filter := range []accountstore.AccountFilter{
@@ -135,7 +135,7 @@ func TestApplyAdminCatalogAssetCoverage(t *testing.T) {
 		{Kind: "sphere", RewardType: 15, RewardTypeID: 5, Name: "sphere", ImageURL: "/assets/sphere/5.webp"},
 		{Kind: "buddy", RewardType: 19, RewardTypeID: 6, Name: "buddy", ImageURL: "/assets/buddy/6.webp"},
 	}
-	for _, relative := range []string{"card/1.webp", "item/3.webp", "card/4.webp", "sphere/5.webp", "buddy/6.webp"} {
+	for _, relative := range []string{"currency/4.webp", "card/1.webp", "item/3.webp", "card/4.webp", "sphere/5.webp", "buddy/6.webp"} {
 		path := filepath.Join(root, filepath.FromSlash(relative))
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			t.Fatal(err)
@@ -170,6 +170,9 @@ func TestApplyAdminCatalogAssetCoverage(t *testing.T) {
 		t.Fatalf("publishable catalog count = %d, want %d", len(publishable), len(catalog)-1)
 	}
 	for _, entry := range publishable {
+		if entry.Kind == "currency" && entry.ImageURL != "/assets/currency/4.webp" {
+			t.Fatal("currency image was not projected from the resource set")
+		}
 		if entry.RewardTypeID == 2 {
 			t.Fatal("source-gap card remains grantable")
 		}

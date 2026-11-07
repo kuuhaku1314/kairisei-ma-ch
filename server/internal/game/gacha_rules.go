@@ -28,14 +28,20 @@ func (s *Account) currentGachaLocked(profile gamestate.GachaProfile) gamestate.G
 	return profile
 }
 
-func drawWeightedReward(pool []gamestate.WeightedReward) (gamestate.Reward, error) {
+func drawWeightedReward(pool []gamestate.WeightedReward, emptyWeight int) (gamestate.Reward, error) {
 	indices, weights := make([]int, len(pool)), make([]int, len(pool))
 	for i, entry := range pool {
 		indices[i], weights[i] = i, entry.Weight
 	}
+	if emptyWeight > 0 {
+		indices, weights = append(indices, len(pool)), append(weights, emptyWeight)
+	}
 	index, err := weightedGachaCard(indices, weights)
 	if err != nil {
 		return gamestate.Reward{}, err
+	}
+	if index == len(pool) {
+		return gamestate.Reward{}, nil
 	}
 	return cloneReward(pool[index].Reward), nil
 }
@@ -103,6 +109,9 @@ func (s *Account) validateGachaRulesLocked(profile gamestate.GachaProfile) error
 	pools := [][]gamestate.WeightedReward{profile.RewardPool}
 	for _, step := range profile.Steps {
 		pools = append(pools, step.RewardPool)
+	}
+	for _, gift := range profile.RandomGifts {
+		pools = append(pools, gift.Pool)
 	}
 	for _, pool := range pools {
 		for _, entry := range pool {

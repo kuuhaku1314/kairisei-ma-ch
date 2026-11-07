@@ -192,9 +192,9 @@ func (a *API) userPayload() map[string]any {
 		"card_container_max_extend":    max(0, containerCapacity-cardCapacityBase),
 		"card_container_max":           containerCapacity,
 		"card_container_extend_limit":  game.CardCapacityLimit - cardCapacityBase,
-		"sphr_num":                     len(a.account.SphereState()),
+		"sphr_num":                     a.account.SphereCount(),
 		"sphr_max":                     user.SphereMax,
-		"friend_max":                   progression.FriendMax,
+		"follow_max":                   progression.FollowMax,
 		"friend_max_extend":            0,
 		"friend_extend_limit":          0,
 		"gold":                         a.account.GoldState(),
@@ -218,7 +218,7 @@ func (a *API) userPayload() map[string]any {
 		"punished_free_point_next_sec": 0,
 		"punished_free_point_heal_sec": 0,
 		"bridgeid":                     "",
-		"buddy_num":                    len(a.account.BuddyState()),
+		"buddy_num":                    a.account.BuddyCount(),
 		"buddy_max":                    user.BuddyMax,
 	}
 }

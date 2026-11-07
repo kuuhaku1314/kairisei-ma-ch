@@ -134,5 +134,6 @@ func (a *API) saveEvolutionPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 	o.evolutionClosed, o.evolutionRevision = body.Closed, doc.Revision
 	o.evolutionPolicy = game.NewEvolutionRestrictions(body.Closed)
+	o.publishRuntimeLocked()
 	WriteAdminJSON(w, 200, map[string]any{"state": "PASS", "closed_paths": body.Closed, "revision": doc.Revision})
 }

@@ -66,7 +66,11 @@ func TestExchangeConfigurationPreservesCountsAndChargesDisplayedPrice(t *testing
 func TestContentCatalogKeepsProgressWhenMovingGroups(t *testing.T) {
 	account := json.RawMessage(`{"9":[],"10":[{"10":[{"0":7,"10":2,"12":[]}]}],"11":[],"12":[]}`)
 	catalog := json.RawMessage(`{"9":[{"10":[{"0":7,"10":0,"12":[{"0":99}]}]}],"10":[],"11":[],"12":[]}`)
-	state := ApplyContentState(gamestate.State{TeamBattleSolo: account}, ContentConfiguration{Revision: 1, State: gamestate.State{TeamBattleSolo: catalog}})
+	configuration, err := NewContentConfiguration(1, gamestate.State{TeamBattleSolo: catalog})
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := ApplyContentState(gamestate.State{TeamBattleSolo: account}, configuration)
 	var top map[string][]struct {
 		Bosses []struct {
 			ID    int              `json:"0"`
@@ -80,26 +84,29 @@ func TestContentCatalogKeepsProgressWhenMovingGroups(t *testing.T) {
 	if top["9"][0].Bosses[0].State != 2 || top["9"][0].Bosses[0].Cards[0]["0"] != 99 {
 		t.Fatal("catalog update did not preserve progress and replace definitions")
 	}
-	s := &Account{teamBattleSolo: state.TeamBattleSolo}
-	s.ApplyBattleCatalogConfiguration(gamestate.State{TeamBattleSolo: catalog, DisabledTeamBattleBossIDs: map[int]bool{7: true}})
-	if err := json.Unmarshal(filterBattleCatalog(s.teamBattleSolo, s.disabledTeamBattleBossIDs), &top); err != nil || len(top["9"][0].Bosses) != 0 {
+	s := &Account{teamBattleSolo: battleCatalogFixture(t, state.TeamBattleSolo)}
+	s.ApplyBattleCatalogConfiguration(battleDefinitionsFixture(t, catalog), map[int]bool{7: true})
+	if err := json.Unmarshal(filterBattleCatalog(s.teamBattleSolo.saved(), s.disabledTeamBattleBossIDs), &top); err != nil || len(top["9"][0].Bosses) != 0 {
 		t.Fatal("closed entry is still published", err)
 	}
-	s.ApplyBattleCatalogConfiguration(gamestate.State{TeamBattleSolo: catalog})
-	if err := json.Unmarshal(s.teamBattleSolo, &top); err != nil || top["9"][0].Bosses[0].State != 2 {
+	s.ApplyBattleCatalogConfiguration(battleDefinitionsFixture(t, catalog), nil)
+	if err := json.Unmarshal(s.teamBattleSolo.saved(), &top); err != nil || top["9"][0].Bosses[0].State != 2 {
 		t.Fatal("reopening difficulty lost clear progress", err)
 	}
 }
 
 func TestBattleCatalogRequestOwnsPublicationAndPreservesClosedClears(t *testing.T) {
 	raw := json.RawMessage(`{"future":9007199254740993,"9":[{"0":760000001,"9":0,"10":[{"0":30010101,"10":1,"14":1,"16":1},{"0":30010102,"10":2,"14":1,"16":0}]}],"10":[],"11":[],"12":[]}`)
-	s := &Account{teamBattleSolo: raw, disabledTeamBattleBossIDs: map[int]bool{30010102: true}}
+	s := &Account{teamBattleSolo: battleCatalogFixture(t, raw), disabledTeamBattleBossIDs: map[int]bool{30010102: true}}
 	view, err := s.TeamBattleCatalog()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !view.HasBoss(30010101) || view.HasBoss(30010102) {
 		t.Fatal("published boss membership differs from disabled rules")
+	}
+	if !view.BossAccessible(30010101, time.Now().Unix()) || view.BossAccessible(30010102, time.Now().Unix()) {
+		t.Fatal("entry lookup differs from refreshed publication and disabled rules")
 	}
 	group := view.Groups("10")[0].(map[string]any)
 	boss := group["10"].([]any)[0].(map[string]any)
@@ -108,14 +115,14 @@ func TestBattleCatalogRequestOwnsPublicationAndPreservesClosedClears(t *testing.
 	}
 	// Mutating the response cannot leak into a later request or saved progress.
 	boss["10"] = json.Number("2")
-	saved, err := decodeTeamBattleCatalog(s.teamBattleSolo)
+	saved, err := decodeTeamBattleCatalog(s.teamBattleSolo.saved())
 	if err != nil || saved.fields["future"] != json.Number("9007199254740993") || len(saved.groups["9"][0].bosses) != 2 {
 		t.Fatal("expiry changed unmodeled fields or removed closed progress", err)
 	}
 	if saved.groups["9"][0].bosses[0].fields["10"] != json.Number("0") {
 		t.Fatal("response mutation reached account state")
 	}
-	s.ApplyBattleCatalogConfiguration(gamestate.State{TeamBattleSolo: raw})
+	s.ApplyBattleCatalogConfiguration(battleDefinitionsFixture(t, raw), nil)
 	reopened, err := s.TeamBattleCatalog()
 	if err != nil || !reopened.HasBoss(30010102) {
 		t.Fatal("reopened boss was not published", err)

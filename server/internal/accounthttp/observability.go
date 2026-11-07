@@ -32,7 +32,7 @@ type ActivitySnapshot struct {
 	MeanMS        float64          `json:"mean_ms"`
 }
 
-func (router *Router) recordActivity(id int, started time.Time, failed, solo bool) {
+func (router *Router) recordActivity(id int, started time.Time, httpFailed, active, solo bool) {
 	now := time.Now()
 	router.mu.Lock()
 	defer router.mu.Unlock()
@@ -44,7 +44,7 @@ func (router *Router) recordActivity(id int, started time.Time, failed, solo boo
 			delete(router.activity, id)
 		}
 	}
-	if !failed && id >= accountstore.PrimaryUserID && id < accountstore.SystemPartnerUserIDBase {
+	if active && id >= accountstore.PrimaryUserID && id < accountstore.SystemPartnerUserIDBase {
 		router.activity[id] = PlayerActivity{UserID: id, LastRequest: now, UnsettledSolo: solo}
 	}
 	epoch := now.Unix() / 30
@@ -53,7 +53,7 @@ func (router *Router) recordActivity(id int, started time.Time, failed, solo boo
 		*bucket = requestBucket{Epoch: epoch}
 	}
 	bucket.Requests++
-	if failed {
+	if httpFailed {
 		bucket.Errors++
 	}
 	duration := now.Sub(started)

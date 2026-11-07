@@ -8,14 +8,19 @@ import (
 	"fmt"
 	"slices"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
+	"kairisei.local/server/battlecore"
 	"kairisei.local/server/internal/gamestate"
 )
 
 type TeamBattleContext struct {
+	ScoreBossID               int
+	MissionPlayers            int
+	MissionArthur             int8
+	StageType                 gamestate.BattleStageType
+	EntryRole                 gamestate.BattleEntryRole
 	ClearDecks                []gamestate.BattleClearDeck
 	ScorePolicy               *gamestate.TeamBattleScorePolicy
 	Seed                      int
@@ -30,13 +35,14 @@ type TeamBattleContext struct {
 	ItemID                    int
 	ItemUse                   int
 	BPUse                     int
-	ConsumesBattlePoints      bool
 	PrepaidRoomID             int64
 	FameSeed                  string
+	StartTime                 int
+	SoloRequestKey            string
 	FameRewardsSet            bool
 	FameRewards               []gamestate.Reward
 	FameSources               []TeamBattleFameSource
-	HostBonusArthurType       int
+	HostBonusMemberType       int
 	FriendPointPartners       int
 	FriendPointReward         int
 	FriendPointRentalCredits  []FriendPointRentalCredit
@@ -51,7 +57,7 @@ type TeamBattleContext struct {
 func (s *Account) HasUnsettledSoloBattle() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return (s.activeBattle != nil && s.activeBattle.PrepaidRoomID == 0) ||
+	return (s.activeBattle != nil && s.activeBattle.EntryRole == gamestate.BattleEntrySolo) ||
 		(s.pvp.ActiveMatch != nil && !s.pvp.ActiveMatch.Retired && s.pvp.ActiveMatch.CompletedAtUnix == 0)
 }
 
@@ -77,6 +83,9 @@ func teamBattleContextFromRelease(source *gamestate.TeamBattleActiveState) *Team
 		return nil
 	}
 	result := &TeamBattleContext{
+		ScoreBossID:               source.ScoreBossID,
+		StageType:                 source.StageType,
+		EntryRole:                 source.EntryRole,
 		ClearDecks:                gamestate.CloneBattleClearDecks(source.ClearDecks),
 		ScorePolicy:               gamestate.CloneTeamBattleScorePolicy(source.ScorePolicy),
 		Seed:                      source.Seed,
@@ -91,12 +100,13 @@ func teamBattleContextFromRelease(source *gamestate.TeamBattleActiveState) *Team
 		ItemID:                    source.ItemID,
 		ItemUse:                   source.ItemUse,
 		BPUse:                     source.BPUse,
-		ConsumesBattlePoints:      source.ConsumesBattlePoints,
 		PrepaidRoomID:             source.PrepaidRoomID,
 		FameSeed:                  source.FameSeed,
+		StartTime:                 source.StartTime,
+		SoloRequestKey:            source.SoloRequestKey,
 		FameRewardsSet:            source.FameRewardsSet,
 		FameRewards:               cloneRewards(source.FameRewards),
-		HostBonusArthurType:       source.HostBonusArthurType,
+		HostBonusMemberType:       source.HostBonusMemberType,
 		FriendPointPartners:       source.FriendPointPartners,
 		FriendPointReward:         source.FriendPointReward,
 		FriendPointRentalEventKey: source.FriendPointRentalEventKey,
@@ -106,7 +116,7 @@ func teamBattleContextFromRelease(source *gamestate.TeamBattleActiveState) *Team
 	result.FameSources = make([]TeamBattleFameSource, len(source.FameSources))
 	for index, fame := range source.FameSources {
 		result.FameSources[index] = TeamBattleFameSource{
-			ArthurType: fame.ArthurType, LeaderFame: fame.LeaderFame,
+			MemberType: fame.MemberType, LeaderFame: fame.LeaderFame,
 		}
 	}
 	result.FriendPointRentalCredits = make([]FriendPointRentalCredit, len(source.FriendPointRentalCredits))
@@ -135,6 +145,9 @@ func snapshotTeamBattleContext(source *TeamBattleContext) *gamestate.TeamBattleA
 		return nil
 	}
 	result := &gamestate.TeamBattleActiveState{
+		ScoreBossID:               source.ScoreBossID,
+		StageType:                 source.StageType,
+		EntryRole:                 source.EntryRole,
 		ClearDecks:                gamestate.CloneBattleClearDecks(source.ClearDecks),
 		ScorePolicy:               gamestate.CloneTeamBattleScorePolicy(source.ScorePolicy),
 		Seed:                      source.Seed,
@@ -149,12 +162,13 @@ func snapshotTeamBattleContext(source *TeamBattleContext) *gamestate.TeamBattleA
 		ItemID:                    source.ItemID,
 		ItemUse:                   source.ItemUse,
 		BPUse:                     source.BPUse,
-		ConsumesBattlePoints:      source.ConsumesBattlePoints,
 		PrepaidRoomID:             source.PrepaidRoomID,
 		FameSeed:                  source.FameSeed,
+		StartTime:                 source.StartTime,
+		SoloRequestKey:            source.SoloRequestKey,
 		FameRewardsSet:            source.FameRewardsSet,
 		FameRewards:               cloneRewards(source.FameRewards),
-		HostBonusArthurType:       source.HostBonusArthurType,
+		HostBonusMemberType:       source.HostBonusMemberType,
 		FriendPointPartners:       source.FriendPointPartners,
 		FriendPointReward:         source.FriendPointReward,
 		FriendPointRentalEventKey: source.FriendPointRentalEventKey,
@@ -164,7 +178,7 @@ func snapshotTeamBattleContext(source *TeamBattleContext) *gamestate.TeamBattleA
 	result.FameSources = make([]gamestate.TeamBattleFameSourceState, len(source.FameSources))
 	for index, fame := range source.FameSources {
 		result.FameSources[index] = gamestate.TeamBattleFameSourceState{
-			ArthurType: fame.ArthurType, LeaderFame: fame.LeaderFame,
+			MemberType: fame.MemberType, LeaderFame: fame.LeaderFame,
 		}
 	}
 	result.FriendPointRentalCredits = make(
@@ -191,23 +205,26 @@ func snapshotTeamBattleContext(source *TeamBattleContext) *gamestate.TeamBattleA
 }
 
 type TeamBattleFameSource struct {
-	ArthurType int
+	MemberType int
 	LeaderFame int
 }
 
 type TeamBattleFameAward struct {
-	ArthurType int
+	MemberType int
 	RewardKind int
 	Result     PresentReceiveResult
 }
 
 type teamBattleFameAwardPlan struct {
-	ArthurType int
+	MemberType int
 	RewardKind int
 	Reward     gamestate.Reward
 }
 
 type teamBattleSettlement struct {
+	Return        *TeamBattleReturn
+	RankingScore  *gamestate.BossScoreResult
+	ClearRating   *TeamBattleClearRating
 	Score         PresentReceiveResult
 	ScoreInfo     []any
 	Context       TeamBattleContext
@@ -216,50 +233,6 @@ type teamBattleSettlement struct {
 	Fame          []TeamBattleFameAward
 	Host          []TeamBattleFameAward
 	WasFirstClear bool
-}
-
-func (s *Account) StageQuestPayload(
-	areaID int,
-	selectArea bool,
-) (json.RawMessage, bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	selectedAreaID := s.defaultStageQuestAreaID
-	if selectArea {
-		if _, exists := s.stageQuests[areaID]; !exists {
-			return nil, false, errors.New("unknown local stage quest area")
-		}
-		unlocked, hasNormalQuest, err := unlockedCNNormalQuestAreas(s.stageQuests)
-		if err != nil {
-			return nil, false, err
-		}
-		if hasNormalQuest && areaID >= cnNormalQuestAreaMin && areaID <= cnNormalQuestAreaMax {
-			if _, available := unlocked[areaID]; !available {
-				return nil, false, errors.New("local stage quest area is not unlocked")
-			}
-		}
-		selectedAreaID = areaID
-		s.pendingStageAreaID = areaID
-	}
-	configuration, exists := s.stageQuests[selectedAreaID]
-	if !exists {
-		return nil, false, errors.New("local stage quest default area is unavailable")
-	}
-	response, err := projectCNStageQuestPublication(configuration)
-	if err != nil {
-		return nil, false, err
-	}
-	updated, consumed, err := consumeStageQuestNewClear(configuration)
-	if err != nil {
-		return nil, false, err
-	}
-	if consumed {
-		s.stageQuests[selectedAreaID] = updated
-		if selectedAreaID == s.defaultStageQuestAreaID {
-			s.mainQuest = append(json.RawMessage(nil), updated...)
-		}
-	}
-	return response, consumed, nil
 }
 
 func stageQuestConfigurations(
@@ -303,7 +276,7 @@ func (s *Account) validateActiveTeamBattleContextLocked(
 	profiles []gamestate.TeamBattleRewardProfile,
 ) error {
 	if context.BossID <= 0 || len(context.BattleEnemyTypes) == 0 ||
-		len(context.BattleEnemyTypes) > MaxTeamBattleSegments {
+		len(context.BattleEnemyTypes) > MaxTeamBattleSegments || context.EntryRole < gamestate.BattleEntrySolo || context.EntryRole > gamestate.BattleEntryMultiplayerGuest {
 		return errors.New("local team battle segment contract is unavailable")
 	}
 	for _, enemyType := range context.BattleEnemyTypes {
@@ -315,25 +288,25 @@ func (s *Account) validateActiveTeamBattleContextLocked(
 		len(context.FameSources) > 4 {
 		return errors.New("local team battle fame source is unavailable")
 	}
-	seenFameArthurTypes := make(map[int]struct{}, len(context.FameSources))
+	seenFameMemberTypes := make(map[int]struct{}, len(context.FameSources))
 	for _, source := range context.FameSources {
-		if source.ArthurType < 1 || source.ArthurType > 4 || source.LeaderFame <= 0 ||
+		if source.MemberType < 1 || source.MemberType > 4 || source.LeaderFame <= 0 ||
 			source.LeaderFame > 100 {
 			return errors.New("local team battle fame source is invalid")
 		}
-		if _, duplicate := seenFameArthurTypes[source.ArthurType]; duplicate {
+		if _, duplicate := seenFameMemberTypes[source.MemberType]; duplicate {
 			return errors.New("local team battle fame source is duplicated")
 		}
-		seenFameArthurTypes[source.ArthurType] = struct{}{}
+		seenFameMemberTypes[source.MemberType] = struct{}{}
 	}
-	if context.HostBonusArthurType < 0 || context.HostBonusArthurType > 4 {
+	if context.HostBonusMemberType < 0 || context.HostBonusMemberType > 4 {
 		return errors.New("local team battle host-bonus Arthur type is invalid")
 	}
-	if context.HostBonusArthurType != 0 {
-		if _, exists := seenFameArthurTypes[context.HostBonusArthurType]; !exists {
+	if context.HostBonusMemberType != 0 {
+		if _, exists := seenFameMemberTypes[context.HostBonusMemberType]; !exists {
 			return errors.New("local team battle host-bonus Arthur is unavailable")
 		}
-		if !context.ConsumesBattlePoints {
+		if context.EntryRole != gamestate.BattleEntryMultiplayerHost {
 			return errors.New("local team battle host must consume battle points")
 		}
 	}
@@ -369,11 +342,10 @@ func (s *Account) validateActiveTeamBattleContextLocked(
 		return errors.New("local friend-point rental event key is invalid")
 	}
 	if len(context.SelectedPartners) != 0 &&
-		(len(context.SelectedPartners) != 3 || RentalPartnerCount(context.SelectedPartners) != context.FriendPointPartners) {
+		(len(context.SelectedPartners) > 3 || RentalPartnerCount(context.SelectedPartners) != context.FriendPointPartners) {
 		return errors.New("local team battle selected-partner projection is invalid")
 	}
 	seenPartnerUsers := make(map[int]struct{}, len(context.SelectedPartners))
-	seenPartnerTypes := make(map[int8]struct{}, len(context.SelectedPartners))
 	for _, partner := range context.SelectedPartners {
 		if partner.UserID <= 0 || partner.ArthurType < 1 || partner.ArthurType > 4 ||
 			partner.Level <= 0 || partner.LeaderCardID <= 0 || partner.LeaderLevel <= 0 ||
@@ -383,11 +355,7 @@ func (s *Account) validateActiveTeamBattleContextLocked(
 		if _, duplicate := seenPartnerUsers[partner.UserID]; duplicate && !partner.IsSelf {
 			return errors.New("local team battle selected partner user is duplicated")
 		}
-		if _, duplicate := seenPartnerTypes[partner.ArthurType]; duplicate {
-			return errors.New("local team battle selected partner Arthur type is duplicated")
-		}
 		seenPartnerUsers[partner.UserID] = struct{}{}
-		seenPartnerTypes[partner.ArthurType] = struct{}{}
 	}
 	stageBattle := context.StageQuestAreaID != 0 || context.StageQuestStageID != 0
 	towerBattle := context.TowerID != 0 || context.TowerFloor != 0 ||
@@ -398,7 +366,7 @@ func (s *Account) validateActiveTeamBattleContextLocked(
 	}
 	if context.PrepaidRoomID != 0 {
 		bpUse, found := s.prepaidTeamBattleCostLocked(context.PrepaidRoomID, context.BossID)
-		if !found || !context.ConsumesBattlePoints || bpUse != context.BPUse || towerBattle {
+		if !found || context.EntryRole != gamestate.BattleEntryMultiplayerHost || bpUse != context.BPUse || towerBattle {
 			return errors.New("multiplayer prepaid start receipt is unavailable")
 		}
 	}
@@ -408,28 +376,23 @@ func (s *Account) validateActiveTeamBattleContextLocked(
 		if !exists {
 			return errors.New("local StageQuest battle context is unavailable")
 		}
-		stageID, bpUse, found, err := stageQuestBattleForBoss(
+		stageID, _, found, err := stageQuestBattleForBoss(
 			stageQuest, context.StageQuestAreaID, context.BossID,
 		)
 		if err != nil {
 			return err
 		}
-		if !found || stageID != context.StageQuestStageID || (context.ConsumesBattlePoints && context.PrepaidRoomID == 0 && bpUse != context.BPUse) || (!context.ConsumesBattlePoints && context.BPUse != 0) {
+		if !found || stageID != context.StageQuestStageID || (!context.EntryRole.PaysEntryCost() && context.BPUse != 0) {
 			return errors.New("local StageQuest battle context differs from the published stage")
 		}
 	case towerBattle:
 		tower, floor, found := s.towerQuestBattleForBossLocked(context.BossID)
 		if !found || tower.TowerID != context.TowerID || floor.Floor != context.TowerFloor ||
-			tower.ItemID != context.ItemID || tower.ItemUse != context.ItemUse || context.BPUse != 0 {
+			context.ItemID < 0 || context.ItemUse < 0 {
 			return errors.New("local tower battle context differs from the published floor")
 		}
 	default:
-		if context.ConsumesBattlePoints && context.PrepaidRoomID == 0 {
-			bpUse, found := TeamBattleSoloBossBPUse(s.teamBattleSolo, context.BossID)
-			if !found || bpUse != context.BPUse {
-				return errors.New("local team battle BP cost is invalid")
-			}
-		} else if !context.ConsumesBattlePoints && context.BPUse != 0 {
+		if !context.EntryRole.PaysEntryCost() && context.BPUse != 0 {
 			return errors.New("local non-host team battle must not consume battle points")
 		}
 	}
@@ -439,277 +402,10 @@ func (s *Account) validateActiveTeamBattleContextLocked(
 	return nil
 }
 
-func (s *Account) BeginTeamBattle(
-	bossID int,
-	battleEnemyTypes []int8,
-	standaloneBPUse int,
-	consumeBattlePoints bool,
-	profiles []gamestate.TeamBattleRewardProfile,
-	fameSeed string,
-	fameSources []TeamBattleFameSource,
-	hostBonusArthurType int,
-	friendPointPartners int,
-	friendPointReward int,
-	friendPointRentalCredits []FriendPointRentalCredit,
-	friendPointRentalEventKey string,
-	selectedPartners []TeamBattleResultPartner,
-	prepaidRoomID ...int64,
-) (TeamBattleContext, BattlePointStatus, bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	now := time.Now()
-	s.refreshBattlePointsLocked(now)
-	if s.activeBattle != nil {
-		// Retrying the same start or completed room must not debit again.
-		if s.activeBattle.FameSeed == fameSeed && s.activeBattle.BossID == bossID {
-			return *teamBattleContextFromRelease(snapshotTeamBattleContext(s.activeBattle)), s.battlePointStatusLocked(now), true, nil
-		}
-		// An explicit new solo start replaces an abandoned solo run only after
-		// all validation/payment below succeeds. Keep multiplayer settlement
-		// retries separate from this single-client lifecycle.
-		if !strings.HasPrefix(fameSeed, "solo:") || !strings.HasPrefix(s.activeBattle.FameSeed, "solo:") {
-			return TeamBattleContext{}, BattlePointStatus{}, false,
-				errors.New("a local team battle is already active")
-		}
-	}
-	if len(battleEnemyTypes) == 0 || len(battleEnemyTypes) > MaxTeamBattleSegments {
-		return TeamBattleContext{}, BattlePointStatus{}, false,
-			errors.New("local team battle segment contract is unavailable")
-	}
-	for _, enemyType := range battleEnemyTypes {
-		if enemyType < 0 || enemyType > 4 {
-			return TeamBattleContext{}, BattlePointStatus{}, false,
-				errors.New("local team battle segment enemy type is invalid")
-		}
-	}
-	if strings.TrimSpace(fameSeed) == "" || len(fameSources) == 0 {
-		return TeamBattleContext{}, BattlePointStatus{}, false,
-			errors.New("local team battle fame source is unavailable")
-	}
-	seenFameArthurTypes := make(map[int]struct{}, len(fameSources))
-	for _, source := range fameSources {
-		if source.ArthurType < 1 || source.ArthurType > 4 || source.LeaderFame <= 0 ||
-			source.LeaderFame > 100 {
-			return TeamBattleContext{}, BattlePointStatus{}, false,
-				errors.New("local team battle fame source is invalid")
-		}
-		if _, duplicate := seenFameArthurTypes[source.ArthurType]; duplicate {
-			return TeamBattleContext{}, BattlePointStatus{}, false,
-				errors.New("local team battle fame source is duplicated")
-		}
-		seenFameArthurTypes[source.ArthurType] = struct{}{}
-	}
-	if hostBonusArthurType < 0 || hostBonusArthurType > 4 {
-		return TeamBattleContext{}, BattlePointStatus{}, false,
-			errors.New("local team battle host-bonus Arthur type is invalid")
-	}
-	if hostBonusArthurType != 0 {
-		if _, exists := seenFameArthurTypes[hostBonusArthurType]; !exists {
-			return TeamBattleContext{}, BattlePointStatus{}, false,
-				errors.New("local team battle host-bonus Arthur is unavailable")
-		}
-		if !consumeBattlePoints {
-			return TeamBattleContext{}, BattlePointStatus{}, false,
-				errors.New("local team battle host must consume battle points")
-		}
-	}
-	friendPointPolicy := s.playerProgression.Friends.HelperReward
-	if friendPointPolicy.OtherPerPartner <= 0 ||
-		friendPointPolicy.FriendPerPartner <= friendPointPolicy.OtherPerPartner ||
-		friendPointPolicy.MaximumPartners != 3 ||
-		friendPointPartners < 0 || friendPointPartners > friendPointPolicy.MaximumPartners {
-		return TeamBattleContext{}, BattlePointStatus{}, false,
-			errors.New("local friend-point helper policy is invalid")
-	}
-	minimumReward := friendPointPolicy.OtherPerPartner * friendPointPartners
-	maximumReward := friendPointPolicy.FriendPerPartner * friendPointPartners
-	if friendPointReward < minimumReward || friendPointReward > maximumReward {
-		return TeamBattleContext{}, BattlePointStatus{}, false,
-			errors.New("local friend-point helper reward is invalid")
-	}
-	seenRentalOwners := make(map[int]struct{}, len(friendPointRentalCredits))
-	rentalReward := 0
-	for _, credit := range friendPointRentalCredits {
-		if credit.OwnerUserID <= 0 || len(friendPointRentalCredits) > friendPointPartners ||
-			(credit.FriendPoint != friendPointPolicy.OtherPerPartner &&
-				credit.FriendPoint != friendPointPolicy.FriendPerPartner) {
-			return TeamBattleContext{}, BattlePointStatus{}, false,
-				errors.New("local friend-point rental owner is invalid")
-		}
-		if _, duplicate := seenRentalOwners[credit.OwnerUserID]; duplicate {
-			return TeamBattleContext{}, BattlePointStatus{}, false,
-				errors.New("local friend-point rental owner is duplicated")
-		}
-		seenRentalOwners[credit.OwnerUserID] = struct{}{}
-		rentalReward += credit.FriendPoint
-	}
-	if rentalReward > friendPointReward ||
-		(len(friendPointRentalCredits) == 0) != (strings.TrimSpace(friendPointRentalEventKey) == "") {
-		return TeamBattleContext{}, BattlePointStatus{}, false,
-			errors.New("local friend-point rental event key is invalid")
-	}
-	if len(selectedPartners) != 0 && (len(selectedPartners) != 3 || RentalPartnerCount(selectedPartners) != friendPointPartners) {
-		return TeamBattleContext{}, BattlePointStatus{}, false,
-			errors.New("local team battle selected-partner projection is invalid")
-	}
-	selectedPartnerCopies := make([]TeamBattleResultPartner, len(selectedPartners))
-	for index, partner := range selectedPartners {
-		if partner.UserID <= 0 || partner.ArthurType < 1 || partner.ArthurType > 4 ||
-			partner.Level <= 0 || partner.LeaderCardID <= 0 || partner.LeaderLevel <= 0 || partner.LeaderFame <= 0 {
-			return TeamBattleContext{}, BattlePointStatus{}, false,
-				errors.New("local team battle selected partner is invalid")
-		}
-		partner.HonorIDs = append([]int(nil), partner.HonorIDs...)
-		selectedPartnerCopies[index] = partner
-	}
-	context := TeamBattleContext{
-		Seed:   NewBattleSeed(),
-		BossID: bossID, BattleEnemyTypes: append([]int8(nil), battleEnemyTypes...),
-		BPUse: standaloneBPUse, ConsumesBattlePoints: consumeBattlePoints,
-		FameSeed: fameSeed, FameSources: append([]TeamBattleFameSource(nil), fameSources...),
-		HostBonusArthurType: hostBonusArthurType, FriendPointPartners: friendPointPartners,
-		FriendPointReward:         friendPointReward,
-		FriendPointRentalCredits:  append([]FriendPointRentalCredit(nil), friendPointRentalCredits...),
-		FriendPointRentalEventKey: friendPointRentalEventKey,
-		SelectedPartners:          selectedPartnerCopies,
-	}
-	if len(prepaidRoomID) > 0 {
-		context.PrepaidRoomID = prepaidRoomID[0]
-	}
-	if strings.HasPrefix(fameSeed, "solo:") {
-		rules, found := s.teamBattleEntryRulesForBossLocked(bossID)
-		if !found || !rules.AllowsSolo() {
-			return TeamBattleContext{}, BattlePointStatus{}, false,
-				errors.New("solo battle entry is unavailable")
-		}
-		if rules.OnlyMyDeck != 0 && (len(selectedPartners) != 3 || RentalPartnerCount(selectedPartners) != 0) {
-			return TeamBattleContext{}, BattlePointStatus{}, false,
-				errors.New("this battle requires the player's own decks")
-		}
-		// Keep the accepted rule with the entry debit and in-memory battle state.
-		// Publishing a new schedule or rule must not change an ongoing battle.
-		context.ContinueAllowed = rules.Continue != 0
-	}
-	if s.pendingStageAreaID != 0 {
-		stageQuest, exists := s.stageQuests[s.pendingStageAreaID]
-		if !exists {
-			return TeamBattleContext{}, BattlePointStatus{}, false,
-				errors.New("selected StageQuest area is unavailable")
-		}
-		published, err := projectCNStageQuestPublication(stageQuest)
-		if err != nil {
-			return TeamBattleContext{}, BattlePointStatus{}, false, err
-		}
-		stageID, bpUse, found, err := releasedStageQuestBattleForBoss(
-			published,
-			s.pendingStageAreaID,
-			bossID,
-		)
-		if err != nil {
-			return TeamBattleContext{}, BattlePointStatus{}, false, err
-		}
-		if !found {
-			return TeamBattleContext{}, BattlePointStatus{}, false,
-				errors.New("selected StageQuest boss is unavailable")
-		}
-		context.StageQuestAreaID = s.pendingStageAreaID
-		context.StageQuestStageID = stageID
-		context.BPUse = bpUse
-	} else if areaID := bossID / 100; areaID >= cnNormalQuestAreaMin && areaID <= cnNormalQuestAreaMax {
-		stageQuest, exists := s.stageQuests[areaID]
-		if !exists {
-			return TeamBattleContext{}, BattlePointStatus{}, false,
-				errors.New("selected normal quest area is unavailable")
-		}
-		published, err := projectCNStageQuestPublication(stageQuest)
-		if err != nil {
-			return TeamBattleContext{}, BattlePointStatus{}, false, err
-		}
-		stageID, bpUse, found, err := releasedStageQuestBattleForBoss(
-			published, areaID, bossID,
-		)
-		if err != nil {
-			return TeamBattleContext{}, BattlePointStatus{}, false, err
-		}
-		if !found {
-			return TeamBattleContext{}, BattlePointStatus{}, false,
-				errors.New("selected normal quest boss is locked or unavailable")
-		}
-		context.StageQuestAreaID = areaID
-		context.StageQuestStageID = stageID
-		context.BPUse = bpUse
-	} else if tower, floor, found := s.towerQuestBattleForBossLocked(bossID); found {
-		context.TowerID = tower.TowerID
-		context.TowerFloor = floor.Floor
-		context.ItemID = tower.ItemID
-		context.ItemUse = tower.ItemUse
-		context.BPUse = 0
-	}
-	if !context.ConsumesBattlePoints {
-		context.BPUse = 0
-	}
-	if context.PrepaidRoomID != 0 {
-		bpUse, found := s.prepaidTeamBattleCostLocked(context.PrepaidRoomID, context.BossID)
-		if !found || !context.ConsumesBattlePoints {
-			return TeamBattleContext{}, BattlePointStatus{}, false, errors.New("multiplayer prepaid start receipt is unavailable")
-		}
-		context.BPUse = bpUse
-	}
-	if err := s.validateActiveTeamBattleContextLocked(context, profiles); err != nil {
-		return TeamBattleContext{}, BattlePointStatus{}, false, err
-	}
-	profile, _ := TeamBattleRewardProfileForContext(profiles, context)
-	context.ScorePolicy = gamestate.CloneTeamBattleScorePolicy(profile.ScorePolicy)
-	plan, err := PlanTeamBattleDrops(profile, context.BattleEnemyTypes, context.FameSeed)
-	if err != nil {
-		return TeamBattleContext{}, BattlePointStatus{}, false, err
-	}
-	context.DropPlanSet, context.DropPlan = true, plan
-	context.FameRewardsSet, context.FameRewards = true, TeamBattleFamePool(profile, s.teamBattleFameBonus)
-	for _, reward := range context.FameRewards {
-		if err := s.validateRewardLocked(reward); err != nil {
-			return TeamBattleContext{}, BattlePointStatus{}, false, err
-		}
-	}
-	for _, drop := range plan {
-		if err := s.validateRewardLocked(drop.Reward); err != nil {
-			return TeamBattleContext{}, BattlePointStatus{}, false, err
-		}
-	}
-	if context.TowerID != 0 {
-		item, exists := s.items[context.ItemID]
-		if !exists || item.Num < context.ItemUse {
-			return context, s.battlePointStatusLocked(now), false,
-				errors.New("tower entry item is insufficient")
-		}
-		item.Num -= context.ItemUse
-		s.items[item.ItemID] = item
-	} else if context.ConsumesBattlePoints && context.PrepaidRoomID == 0 {
-		if s.bp < context.BPUse {
-			return context, s.battlePointStatusLocked(now), false, nil
-		}
-		s.bp -= context.BPUse
-		if s.bp < s.bpMax && s.bpNextRecovery.IsZero() {
-			s.bpNextRecovery = now.Add(s.bpRecoveryInterval)
-		}
-	} else if !context.ConsumesBattlePoints {
-		context.BPUse = 0
-	}
-	s.pendingStageAreaID = 0
-	if strings.HasPrefix(fameSeed, "solo:") {
-		// The original result request has no start ID. Receipts belong to the
-		// most recent run; two immediate retreats produce identical reports.
-		clear(s.teamBattleSoloReceipts)
-	}
-	active := context
-	s.activeBattle = &active
-	return context, s.battlePointStatusLocked(now), true, nil
-}
-
 func (s *Account) AbandonSoloBattle() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.activeBattle != nil && strings.HasPrefix(s.activeBattle.FameSeed, "solo:") {
+	if s.activeBattle != nil && s.activeBattle.EntryRole == gamestate.BattleEntrySolo {
 		s.activeBattle = nil
 	}
 }
@@ -727,9 +423,6 @@ func (s *Account) towerQuestBattleForBossLocked(
 	bossID int,
 ) (gamestate.TowerQuestProfile, gamestate.TowerQuestFloorProfile, bool) {
 	for _, profile := range s.towerQuestProfiles {
-		if !profile.ClientEntryPublished {
-			continue
-		}
 		for _, floor := range profile.Floors {
 			var identity struct {
 				BossID int `json:"0"`
@@ -763,7 +456,7 @@ func (s *Account) ContinueTeamBattle(report TeamBattleContinueReport, base games
 	if report.PayType != 3 {
 		return s.coin, s.coinFree, errors.New("unsupported team battle continue payment type")
 	}
-	if !strings.HasPrefix(s.activeBattle.FameSeed, "solo:") || s.activeBattle.PrepaidRoomID != 0 {
+	if s.activeBattle.EntryRole != gamestate.BattleEntrySolo {
 		return s.coin, s.coinFree, errors.New("team battle continue requires an active solo battle")
 	}
 	if !s.activeBattle.ContinueAllowed {
@@ -773,7 +466,7 @@ func (s *Account) ContinueTeamBattle(report TeamBattleContinueReport, base games
 		return s.coin, s.coinFree, err
 	}
 	// A retry carries the same accumulated native report. Commit its receipt
-	// in this battle's durable context together with the currency debit.
+	// in this battle's in-memory session together with the currency debit.
 	encoded, err := json.Marshal(report)
 	if err != nil {
 		return s.coin, s.coinFree, err
@@ -807,7 +500,10 @@ func (s *Account) planTeamBattleFameAwardsLocked(
 	profile gamestate.TeamBattleRewardProfile,
 	context TeamBattleContext,
 ) ([]teamBattleFameAwardPlan, error) {
-	policy := s.teamBattleFameBonus
+	return planTeamBattleFameAwards(profile, context, s.teamBattleFameBonus)
+}
+
+func planTeamBattleFameAwards(profile gamestate.TeamBattleRewardProfile, context TeamBattleContext, policy gamestate.TeamBattleFameBonusPolicy) ([]teamBattleFameAwardPlan, error) {
 	if policy.ConfigVersion == 0 {
 		return nil, nil
 	}
@@ -829,7 +525,7 @@ func (s *Account) planTeamBattleFameAwardsLocked(
 	}
 	sources := append([]TeamBattleFameSource(nil), context.FameSources...)
 	sort.Slice(sources, func(left, right int) bool {
-		return sources[left].ArthurType < sources[right].ArthurType
+		return sources[left].MemberType < sources[right].MemberType
 	})
 	plans := make([]teamBattleFameAwardPlan, 0, len(sources)+1)
 	for _, source := range sources {
@@ -837,19 +533,19 @@ func (s *Account) planTeamBattleFameAwardsLocked(
 		if effectiveFame <= 0 {
 			continue
 		}
-		if teamBattleFameRoll(context.FameSeed, source.ArthurType, policy.ChanceMaximum) <= effectiveFame {
+		if teamBattleFameRoll(context.FameSeed, source.MemberType, policy.ChanceMaximum) <= effectiveFame {
 			plans = append(plans, teamBattleFameAwardPlan{
-				ArthurType: source.ArthurType,
+				MemberType: source.MemberType,
 				RewardKind: 0,
-				Reward:     teamBattleFameReward(pool, context.FameSeed, source.ArthurType, 0),
+				Reward:     teamBattleFameReward(pool, context.FameSeed, source.MemberType, 0),
 			})
 		}
 		if effectiveFame >= policy.FullFameThreshold {
 			for rewardIndex := 1; rewardIndex < policy.FullFameRewardCount; rewardIndex++ {
 				plans = append(plans, teamBattleFameAwardPlan{
-					ArthurType: source.ArthurType,
+					MemberType: source.MemberType,
 					RewardKind: 1,
-					Reward:     teamBattleFameReward(pool, context.FameSeed, source.ArthurType, rewardIndex),
+					Reward:     teamBattleFameReward(pool, context.FameSeed, source.MemberType, rewardIndex),
 				})
 			}
 		}
@@ -857,16 +553,12 @@ func (s *Account) planTeamBattleFameAwardsLocked(
 	return plans, nil
 }
 
-func teamBattleFameRoll(seed string, arthurType int, chanceMaximum int) int {
-	sum := sha256.Sum256([]byte(fmt.Sprintf("%s|arthur=%d|fame-normal", seed, arthurType)))
+func teamBattleFameRoll(seed string, memberType int, chanceMaximum int) int {
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s|member=%d|fame-normal", seed, memberType)))
 	return int(binary.BigEndian.Uint64(sum[:8])%uint64(chanceMaximum)) + 1
 }
 
-func (s *Account) planTeamBattleHostAwardsLocked(
-	profile gamestate.TeamBattleRewardProfile,
-	context TeamBattleContext,
-) ([]teamBattleFameAwardPlan, error) {
-	policy := s.teamBattleHostBonus
+func planTeamBattleHostAwards(profile gamestate.TeamBattleRewardProfile, context TeamBattleContext, policy gamestate.TeamBattleHostBonusPolicy) ([]teamBattleFameAwardPlan, error) {
 	if policy.ConfigVersion == 0 {
 		return nil, nil
 	}
@@ -876,10 +568,10 @@ func (s *Account) planTeamBattleHostAwardsLocked(
 		policy.BattlePointPayerPolicy != "multiplayer_room_owner_only" {
 		return nil, errors.New("local team battle host-bonus policy is invalid")
 	}
-	if context.HostBonusArthurType == 0 {
+	if context.HostBonusMemberType == 0 {
 		return nil, nil
 	}
-	if !context.ConsumesBattlePoints || context.HostBonusArthurType < 1 || context.HostBonusArthurType > 4 {
+	if context.EntryRole != gamestate.BattleEntryMultiplayerHost || context.HostBonusMemberType < 1 || context.HostBonusMemberType > 4 {
 		return nil, errors.New("local team battle host-bonus context is invalid")
 	}
 	eligibleTypes := make(map[int]struct{}, len(policy.EligibleRewardTypes))
@@ -892,7 +584,7 @@ func (s *Account) planTeamBattleHostAwardsLocked(
 	for _, reward := range profile.ResultRewards {
 		if _, eligible := eligibleTypes[reward.Type]; eligible {
 			return []teamBattleFameAwardPlan{{
-				ArthurType: context.HostBonusArthurType,
+				MemberType: context.HostBonusMemberType,
 				RewardKind: policy.RewardKind,
 				Reward:     reward,
 			}}, nil
@@ -918,11 +610,52 @@ func (s *Account) CompleteTeamBattle(
 	if !found {
 		return teamBattleSettlement{}, errors.New("local team battle reward profile is unavailable")
 	}
-	settlement := teamBattleSettlement{Context: context}
 	report := TeamBattleDropReport{}
 	if len(dropReports) > 0 {
 		report = dropReports[0]
 	}
+	completedAt := s.missionTimeLocked(time.Now())
+	settlement, err := s.completeTeamBattleLocked(context, profile, isClear, report, s.teamBattleFameBonus, s.teamBattleHostBonus, completedAt)
+	if err == nil {
+		if context.TowerID != 0 {
+			floor := s.towerQuestProgress[context.TowerID].Floor
+			if floor == 0 {
+				// Completed towers retain a positive locator for the tower page.
+				floor = context.TowerFloor
+			}
+			settlement.Return = &TeamBattleReturn{BossID: context.BossID, TowerID: context.TowerID,
+				TowerFloor: floor, StageType: context.StageType}
+		}
+		s.activeBattle = nil
+	}
+	return settlement, err
+}
+
+// CompleteMultiplayerBattle settles an accepted room without entering or
+// replacing the account's independent solo run or navigation state.
+func (s *Account) CompleteMultiplayerBattle(context TeamBattleContext, plan gamestate.TeamBattleSettlementPlan, isClear bool, report TeamBattleDropReport, completedAt time.Time) (teamBattleSettlement, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if context.EntryRole != gamestate.BattleEntryMultiplayerHost && context.EntryRole != gamestate.BattleEntryMultiplayerGuest {
+		return teamBattleSettlement{}, errors.New("multiplayer settlement role is invalid")
+	}
+	if plan.Profile.BossID != context.BossID || len(plan.EnemyTypes) == 0 {
+		return teamBattleSettlement{}, errors.New("multiplayer settlement plan is unavailable")
+	}
+	context.BattleEnemyTypes = plan.EnemyTypes
+	if context.EntryRole == gamestate.BattleEntryMultiplayerHost {
+		cost, paid := s.prepaidTeamBattleCostLocked(context.PrepaidRoomID, context.BossID)
+		if !paid {
+			return teamBattleSettlement{}, errors.New("multiplayer prepaid start receipt is unavailable")
+		}
+		context.BPUse = cost
+	}
+	return s.completeTeamBattleLocked(context, plan.Profile, isClear, report, plan.FameBonus, plan.HostBonus, completedAt)
+}
+
+func (s *Account) completeTeamBattleLocked(context TeamBattleContext, profile gamestate.TeamBattleRewardProfile, isClear bool, report TeamBattleDropReport, famePolicy gamestate.TeamBattleFameBonusPolicy, hostPolicy gamestate.TeamBattleHostBonusPolicy, completedAt time.Time) (teamBattleSettlement, error) {
+	bossID := context.BossID
+	settlement := teamBattleSettlement{Context: context}
 	// Freeze operator policy at entry; multiplayer carries the room's snapshot.
 	if context.ScorePolicy != nil {
 		profile.ScorePolicy = context.ScorePolicy
@@ -935,21 +668,26 @@ func (s *Account) CompleteTeamBattle(
 		profile.ScorePolicy = nil
 	}
 	if profile.ScorePolicy != nil && profile.ScorePolicy.SourceState == "LOCAL_POLICY_DAMAGE_SCORE" {
-		if report.ScoreDamage < 0 || report.ScoreDamage > 1000000000000 {
-			return teamBattleSettlement{}, errors.New("score damage is out of range")
+		if err := gamestate.ValidateTeamBattleScoreDamage(profile.ScorePolicy, report.ScoreDamage); err != nil {
+			return teamBattleSettlement{}, err
 		}
-		if isClear && !report.ScoreVerified && !report.SoloChallenge {
+		if !report.ScoreVerified {
 			return teamBattleSettlement{}, errors.New("score battle requires verified damage")
 		}
 	}
+	scoreBossID := context.ScoreBossID
+	if scoreBossID == 0 {
+		scoreBossID = bossID
+	}
+	scores := s.battleScoresLocked(report.SoloChallenge)
 	if !isClear {
 		if context.TowerID != 0 {
 			if err := s.settleTowerQuestLocked(context, false); err != nil {
 				return teamBattleSettlement{}, err
 			}
 		}
-		if !report.SoloChallenge && report.ScoreVerified && profile.ScorePolicy != nil && profile.ScorePolicy.SourceState == "LOCAL_POLICY_DAMAGE_SCORE" {
-			progress, rewards, info := planTeamBattleScore(profile.ScorePolicy, s.teamBattleScores[bossID], report)
+		if report.ScoreVerified && profile.ScorePolicy != nil && profile.ScorePolicy.SourceState == "LOCAL_POLICY_DAMAGE_SCORE" {
+			progress, rewards, info := planTeamBattleScore(profile.ScorePolicy, scores[scoreBossID], report)
 			if err := s.validateSettlementRewardsLocked(rewards); err != nil {
 				return teamBattleSettlement{}, err
 			}
@@ -958,25 +696,29 @@ func (s *Account) CompleteTeamBattle(
 					return teamBattleSettlement{}, err
 				}
 			}
-			s.teamBattleScores[bossID], settlement.ScoreInfo = progress, info
+			scores[scoreBossID], settlement.ScoreInfo = progress, info
+			settlement.setSoloRankingScore(profile.ScorePolicy, report, scoreBossID)
 		}
-		s.activeBattle = nil
 		return settlement, nil
 	}
 	if context.DropPlanSet && !report.Authoritative && len(report.EnemyDeadBits) != len(context.BattleEnemyTypes) {
 		return teamBattleSettlement{}, errors.New("team battle drop report does not match its started plan")
 	}
+	clearRating, err := s.planTowerQuestRatingLocked(context, report.Turns)
+	if err != nil {
+		return teamBattleSettlement{}, err
+	}
+	settlement.ClearRating = clearRating
 	profile.ResultRewards = SettledTeamBattleRewards(profile, context, report)
 	if report.FameRewardsSet {
 		context.FameRewardsSet, context.FameRewards = true, report.FameRewards
 	}
-	scoreProgress, scoreRewards, scoreInfo := planTeamBattleScore(profile.ScorePolicy, s.teamBattleScores[bossID], report)
+	scoreProgress, scoreRewards, scoreInfo := planTeamBattleScore(profile.ScorePolicy, scores[scoreBossID], report)
 	settlement.ScoreInfo = scoreInfo
 
 	updatedMainQuest := append(json.RawMessage(nil), s.mainQuest...)
 	updatedStageQuestAreaID := 0
 	completedStageQuestArea := false
-	updatedTeamBattleSolo := append(json.RawMessage(nil), s.teamBattleSolo...)
 	if context.StageQuestAreaID != 0 {
 		stageQuest, exists := s.stageQuests[context.StageQuestAreaID]
 		if !exists {
@@ -991,11 +733,7 @@ func (s *Account) CompleteTeamBattle(
 		if err != nil {
 			return teamBattleSettlement{}, err
 		}
-		updatedTeamBattleSolo, _, err = markTeamBattleClearForArea(
-			s.teamBattleSolo,
-			context.BossID,
-			context.StageQuestAreaID,
-		)
+		_, err = s.teamBattleSolo.firstClear(context.BossID, context.StageQuestAreaID)
 		if err != nil {
 			return teamBattleSettlement{}, err
 		}
@@ -1012,10 +750,7 @@ func (s *Account) CompleteTeamBattle(
 		settlement.WasFirstClear = !slices.Contains(progress.ClearedFloors, context.TowerFloor)
 	} else {
 		var err error
-		updatedTeamBattleSolo, settlement.WasFirstClear, err = markStandaloneTeamBattleClear(
-			s.teamBattleSolo,
-			context.BossID,
-		)
+		settlement.WasFirstClear, err = s.teamBattleSolo.firstClear(context.BossID, 0)
 		if err != nil {
 			return teamBattleSettlement{}, err
 		}
@@ -1025,11 +760,11 @@ func (s *Account) CompleteTeamBattle(
 	if settlement.WasFirstClear {
 		rewards = append(rewards, profile.FirstClearRewards...)
 	}
-	famePlans, err := s.planTeamBattleFameAwardsLocked(profile, context)
+	famePlans, err := planTeamBattleFameAwards(profile, context, famePolicy)
 	if err != nil {
 		return teamBattleSettlement{}, err
 	}
-	hostPlans, err := s.planTeamBattleHostAwardsLocked(profile, context)
+	hostPlans, err := planTeamBattleHostAwards(profile, context, hostPolicy)
 	if err != nil {
 		return teamBattleSettlement{}, err
 	}
@@ -1074,7 +809,7 @@ func (s *Account) CompleteTeamBattle(
 	}
 	for _, plan := range famePlans {
 		award := TeamBattleFameAward{
-			ArthurType: plan.ArthurType,
+			MemberType: plan.MemberType,
 			RewardKind: plan.RewardKind,
 		}
 		if err := s.applySettlementRewardLocked(plan.Reward, &award.Result); err != nil {
@@ -1084,7 +819,7 @@ func (s *Account) CompleteTeamBattle(
 	}
 	for _, plan := range hostPlans {
 		award := TeamBattleFameAward{
-			ArthurType: plan.ArthurType,
+			MemberType: plan.MemberType,
 			RewardKind: plan.RewardKind,
 		}
 		if err := s.applySettlementRewardLocked(plan.Reward, &award.Result); err != nil {
@@ -1099,13 +834,17 @@ func (s *Account) CompleteTeamBattle(
 		}
 	}
 	if profile.ScorePolicy != nil {
-		s.teamBattleScores[bossID] = scoreProgress
+		scores[scoreBossID] = scoreProgress
+		settlement.setSoloRankingScore(profile.ScorePolicy, report, scoreBossID)
 	}
-	s.teamBattleSolo = updatedTeamBattleSolo
+	if context.TowerID == 0 {
+		s.teamBattleSolo.markClear(context.BossID, context.StageQuestAreaID)
+	}
 	if context.TowerID != 0 {
 		if err := s.settleTowerQuestLocked(context, true); err != nil {
 			return teamBattleSettlement{}, err
 		}
+		s.recordTowerQuestRatingLocked(context, clearRating, report.Turns)
 	}
 	onboardingEventKind := "activity"
 	if context.StageQuestAreaID != 0 {
@@ -1121,7 +860,29 @@ func (s *Account) CompleteTeamBattle(
 	}); err != nil {
 		return teamBattleSettlement{}, err
 	}
-	s.activeBattle = nil
+	// Ordinary scripted victories remain clears. Score challenges additionally
+	// require body defeat, as stated by the native quest mission descriptions.
+	scoreChallenge := profile.ScorePolicy != nil || context.StageType == gamestate.BattleStageScore || context.StageType == gamestate.BattleStageMainScore
+	if !scoreChallenge || battlecore.DefeatedEnemyParties(context.BattleEnemyTypes, report.EnemyDeadBits) {
+		event := missionEvent{kind: gamestate.MissionQuestClear, stageType: context.StageType, entryRole: context.EntryRole, bossID: context.BossID, players: context.MissionPlayers, arthurType: context.MissionArthur}
+		if context.EntryRole == gamestate.BattleEntrySolo {
+			event.players = 1
+			if len(context.ClearDecks) > 0 {
+				event.arthurType = int8(context.ClearDecks[0].ArthurType)
+				event.ownDecks = len(context.ClearDecks) == 4
+				for _, deck := range context.ClearDecks {
+					if deck.UserID != context.ClearDecks[0].UserID {
+						event.ownDecks = false
+					}
+				}
+			}
+		}
+		if len(scoreInfo) > 0 {
+			event.scoreGrade = scoreInfo[0].(map[string]any)["grade"].(int)
+		}
+		s.markMissionMetricLocked(gamestate.MissionQuestCleared)
+		s.recordMissionEventAtLocked(event, completedAt)
+	}
 	return settlement, nil
 }
 
@@ -1136,26 +897,36 @@ func (s *Account) settleTowerQuestLocked(context TeamBattleContext, isClear bool
 		return errors.New("local tower progress is unavailable")
 	}
 	progress.LastBattleFloor = context.TowerFloor
+	progress.LastRankUp = false
+	if context.TowerFloor != progress.Floor {
+		// Replays still settle drops and best ratings through the caller. They
+		// do not advance the current challenge or produce its failure effects.
+		progress.LastResult = ""
+		progress.LastResultLoseCount = 0
+		s.towerQuestProgress[context.TowerID] = progress
+		return nil
+	}
 	if isClear {
 		previousLoseCount := progress.LoseCount
 		previousRank := profile.Floors[context.TowerFloor-1].Rank
 		progress.LastResult = "win"
 		progress.LastResultLoseCount = previousLoseCount
-		progress.LoseCount = 0
 		if !slices.Contains(progress.ClearedFloors, context.TowerFloor) {
 			progress.ClearedFloors = append(progress.ClearedFloors, context.TowerFloor)
 			sort.Ints(progress.ClearedFloors)
 		}
 		if context.TowerFloor == len(profile.Floors) {
 			progress.Floor = 0
-			progress.LastRankUp = false
+			progress.LoseCount = 0
 		} else {
 			progress.Floor = context.TowerFloor + 1
 			progress.LastRankUp = profile.Floors[progress.Floor-1].Rank > previousRank
+			if progress.LastRankUp {
+				progress.LoseCount = 0
+			}
 		}
 	} else {
 		progress.LastResult = "lose"
-		progress.LastRankUp = false
 		progress.LoseCount++
 		progress.LastResultLoseCount = progress.LoseCount
 		if progress.LoseCount >= profile.LoseCountMax {
@@ -1183,7 +954,7 @@ func (s *Account) TeamBattleSoloState() json.RawMessage {
 			return projected
 		}
 	}
-	return filterBattleCatalog(append(json.RawMessage(nil), s.teamBattleSolo...), s.disabledTeamBattleBossIDs)
+	return filterBattleCatalog(append(json.RawMessage(nil), s.teamBattleSolo.saved()...), s.disabledTeamBattleBossIDs)
 }
 
 // TeamBattleCatalog gives protocol adapters a request-owned view without an
@@ -1195,14 +966,10 @@ func (s *Account) TeamBattleCatalog() (*TeamBattleCatalog, error) {
 }
 
 func (s *Account) teamBattleCatalogLocked() (*TeamBattleCatalog, error) {
-	catalog, err := decodeTeamBattleCatalog(s.teamBattleSolo)
+	s.teamBattleSolo.expire(time.Now().Unix())
+	catalog, err := s.teamBattleSolo.view()
 	if err != nil {
 		return nil, err
-	}
-	if changed, err := catalog.expireUserBuffs(time.Now().Unix()); err == nil && changed {
-		if refreshed, err := catalog.MarshalJSON(); err == nil {
-			s.teamBattleSolo = refreshed
-		}
 	}
 	tutorialNormalQuest := s.onboarding.ConfigVersion == cnOnboardingConfigVersion && s.onboarding.Step == 0
 	tutorialActivity := s.onboarding.ConfigVersion == cnOnboardingConfigVersion && s.onboarding.Step == cnOnboardingStepCount-1
@@ -1237,114 +1004,49 @@ func (s *Account) ExecUserBuff(userBuffID int, now time.Time) (userBuffExecResul
 		return userBuffExecResult{}, errors.New("invalid user-buff expiration")
 	}
 
-	var top map[string]json.RawMessage
-	if err := json.Unmarshal(s.teamBattleSolo, &top); err != nil {
-		return userBuffExecResult{}, fmt.Errorf("decode user-buff TeamBattle state: %w", err)
+	if s.teamBattleSolo == nil || s.teamBattleSolo.definitions == nil {
+		return userBuffExecResult{}, errors.New("user-buff catalog is unavailable")
 	}
-	changedBosses := make([]json.RawMessage, 0)
-	seenBossIDs := make(map[int]struct{})
-	referenced := false
-	alreadyActive := false
-	for _, groupKey := range []string{"9", "10", "11", "12"} {
-		var groups []map[string]json.RawMessage
-		if raw, present := top[groupKey]; !present || json.Unmarshal(raw, &groups) != nil {
-			return userBuffExecResult{}, fmt.Errorf("decode user-buff TeamBattle group %s", groupKey)
-		}
-		groupChanged := false
-		for groupIndex := range groups {
-			var bosses []map[string]json.RawMessage
-			if err := json.Unmarshal(groups[groupIndex]["10"], &bosses); err != nil {
-				return userBuffExecResult{}, fmt.Errorf("decode user-buff boss list: %w", err)
-			}
-			bossListChanged := false
-			for bossIndex := range bosses {
-				var userBuffIDs []int
-				if err := json.Unmarshal(bosses[bossIndex]["15"], &userBuffIDs); err != nil {
-					return userBuffExecResult{}, fmt.Errorf("decode boss user-buff IDs: %w", err)
-				}
-				usesProfile := false
-				for _, candidate := range userBuffIDs {
-					if candidate == userBuffID {
-						usesProfile = true
-						break
-					}
-				}
-				if !usesProfile {
-					continue
-				}
-				referenced = true
-				var state int
-				var currentExpiration int64
-				if err := json.Unmarshal(bosses[bossIndex]["10"], &state); err != nil ||
-					json.Unmarshal(bosses[bossIndex]["16"], &currentExpiration) != nil {
-					return userBuffExecResult{}, errors.New("decode user-buff boss state")
-				}
-				if state != 0 && (currentExpiration == 0 || currentExpiration > nowUnix) {
-					alreadyActive = true
-					continue
-				}
-				bosses[bossIndex]["10"] = json.RawMessage("1")
-				bosses[bossIndex]["16"] = json.RawMessage(strconv.FormatInt(expiresUnix, 10))
-				bossListChanged = true
-				var bossID int
-				if err := json.Unmarshal(bosses[bossIndex]["0"], &bossID); err != nil || bossID <= 0 {
-					return userBuffExecResult{}, errors.New("decode user-buff boss ID")
-				}
-				if _, duplicate := seenBossIDs[bossID]; !duplicate {
-					encoded, err := json.Marshal(bosses[bossIndex])
-					if err != nil {
-						return userBuffExecResult{}, fmt.Errorf("encode unlocked boss: %w", err)
-					}
-					changedBosses = append(changedBosses, encoded)
-					seenBossIDs[bossID] = struct{}{}
-				}
-			}
-			if bossListChanged {
-				encoded, err := json.Marshal(bosses)
-				if err != nil {
-					return userBuffExecResult{}, fmt.Errorf("encode user-buff boss list: %w", err)
-				}
-				groups[groupIndex]["10"] = encoded
-				groupChanged = true
-			}
-		}
-		if groupChanged {
-			encoded, err := json.Marshal(groups)
-			if err != nil {
-				return userBuffExecResult{}, fmt.Errorf("encode user-buff TeamBattle group: %w", err)
-			}
-			top[groupKey] = encoded
-		}
-	}
-	if !referenced {
+	targets := s.teamBattleSolo.definitions.buffs[userBuffID]
+	if len(targets) == 0 {
 		return userBuffExecResult{}, errors.New("user-buff ID is not referenced by a published boss")
 	}
-	if alreadyActive {
-		return userBuffExecResult{}, errors.New("user-buff boss is already unlocked")
-	}
-	if len(changedBosses) == 0 {
-		return userBuffExecResult{}, errors.New("user-buff unlock has no target boss")
+	for _, id := range targets {
+		progress := s.teamBattleSolo.progress[id]
+		if progress.State != 0 && (progress.Until == 0 || progress.Until > nowUnix) {
+			return userBuffExecResult{}, errors.New("user-buff boss is already unlocked")
+		}
 	}
 	item, exists := s.items[profile.ItemID]
 	if !exists || item.Num < profile.RequiredNum ||
 		item.LimitTime > 0 && nowUnix >= int64(item.LimitTime) {
 		return userBuffExecResult{}, ErrInsufficientMaterials
 	}
-	encoded, err := json.Marshal(top)
-	if err != nil {
-		return userBuffExecResult{}, fmt.Errorf("encode user-buff TeamBattle state: %w", err)
+	changedBosses := make([]json.RawMessage, 0, len(targets))
+	ids := append([]battleBossKey(nil), targets...)
+	sort.Slice(ids, func(i, j int) bool { return ids[i].BossID < ids[j].BossID })
+	seen := map[int]bool{}
+	progress := battleBossProgress{State: 1, Until: expiresUnix}
+	for _, key := range ids {
+		id := key.BossID
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		fields := cloneCatalogFields(s.teamBattleSolo.definitions.bosses[id].fields)
+		applyBossProgress(fields, progress)
+		encoded, err := json.Marshal(fields)
+		if err != nil {
+			return userBuffExecResult{}, err
+		}
+		changedBosses = append(changedBosses, encoded)
 	}
 	item.Num -= profile.RequiredNum
 	s.items[item.ItemID] = item
-	s.teamBattleSolo = encoded
-	sort.Slice(changedBosses, func(left, right int) bool {
-		var leftID, rightID struct {
-			BossID int `json:"0"`
-		}
-		_ = json.Unmarshal(changedBosses[left], &leftID)
-		_ = json.Unmarshal(changedBosses[right], &rightID)
-		return leftID.BossID < rightID.BossID
-	})
+	for _, id := range ids {
+		s.teamBattleSolo.progress[id] = progress
+	}
+	s.teamBattleSolo.encoded = nil
 	return userBuffExecResult{Bosses: changedBosses, Item: item}, nil
 }
 
@@ -1385,17 +1087,17 @@ func (s *Account) TeamBattleResultReceipt(roomID int64) (json.RawMessage, bool) 
 	if !exists {
 		return nil, false
 	}
-	return append(json.RawMessage(nil), receipt.Response...), true
+	return append(json.RawMessage(nil), receipt.Snapshot...), true
 }
 
-func (s *Account) RecordTeamBattleResultReceipt(roomID int64, response json.RawMessage, claimedAt time.Time) error {
-	if roomID <= 0 || claimedAt.IsZero() || len(response) == 0 || len(response) > MaxRequestBytes || !json.Valid(response) {
+func (s *Account) RecordTeamBattleResultReceipt(roomID int64, snapshot json.RawMessage, claimedAt time.Time) error {
+	if roomID <= 0 || claimedAt.IsZero() || len(snapshot) == 0 || len(snapshot) > MaxRequestBytes || !json.Valid(snapshot) {
 		return errors.New("team battle result receipt is invalid")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if existing, exists := s.teamBattleReceipts[roomID]; exists {
-		if string(existing.Response) != string(response) {
+		if string(existing.Snapshot) != string(snapshot) {
 			return errors.New("team battle result receipt conflicts with the completed room")
 		}
 		return nil
@@ -1415,7 +1117,7 @@ func (s *Account) RecordTeamBattleResultReceipt(roomID int64, response json.RawM
 	s.teamBattleReceipts[roomID] = gamestate.TeamBattleResultReceipt{
 		RoomID:        roomID,
 		ClaimedAtUnix: claimedAt.Unix(),
-		Response:      append(json.RawMessage(nil), response...),
+		Snapshot:      append(json.RawMessage(nil), snapshot...),
 	}
 	return nil
 }
@@ -1430,23 +1132,23 @@ func (s *Account) TeamBattleSoloResultReceipt(requestSHA256 string, bossID int) 
 	if !exists || receipt.BossID != bossID {
 		return nil, false
 	}
-	return append(json.RawMessage(nil), receipt.Response...), true
+	return append(json.RawMessage(nil), receipt.Snapshot...), true
 }
 
 func (s *Account) RecordTeamBattleSoloResultReceipt(
 	requestSHA256 string,
 	bossID int,
-	response json.RawMessage,
+	snapshot json.RawMessage,
 	claimedAt time.Time,
 ) error {
 	if !isLowerSHA256Digest(requestSHA256) || bossID <= 0 || claimedAt.IsZero() ||
-		len(response) == 0 || len(response) > MaxRequestBytes || !json.Valid(response) {
+		len(snapshot) == 0 || len(snapshot) > MaxRequestBytes || !json.Valid(snapshot) {
 		return errors.New("solo team battle result receipt is invalid")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if existing, exists := s.teamBattleSoloReceipts[requestSHA256]; exists {
-		if existing.BossID != bossID || string(existing.Response) != string(response) {
+		if existing.BossID != bossID || string(existing.Snapshot) != string(snapshot) {
 			return errors.New("solo team battle result receipt conflicts with the completed report")
 		}
 		return nil
@@ -1467,7 +1169,7 @@ func (s *Account) RecordTeamBattleSoloResultReceipt(
 		RequestSHA256: requestSHA256,
 		BossID:        bossID,
 		ClaimedAtUnix: claimedAt.Unix(),
-		Response:      append(json.RawMessage(nil), response...),
+		Snapshot:      append(json.RawMessage(nil), snapshot...),
 	}
 	return nil
 }

@@ -2,8 +2,9 @@ package multiplayer
 
 import (
 	"errors"
+	"kairisei.local/server/battlecodec"
+	"kairisei.local/server/battlecore"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -71,59 +72,31 @@ func (c *clientConn) writeInitialRoomFramesAndUnlock(session *lockedRoomSession,
 // Original Start emits recovery HP rows before 3af95's CARD identities.
 // Keep the same assembly for first start, next wave and API comparisons.
 func roomStartResult(current *room, results []BattleResult) (string, error) {
-	deck, err := roomDeckRows(current)
+	if current == nil {
+		return "", errors.New("battle room party is incomplete")
+	}
+	identities, err := battlecore.DeckIdentityResults(roomBattleParticipants(current.Members))
 	if err != nil {
 		return "", err
 	}
-	var rows []string
-	for len(results) > 0 && (results[0].Command == resultHP || results[0].Command == resultLimitTurn) {
-		row, err := results[0].CSV()
-		if err != nil {
-			return "", err
-		}
-		rows = append(rows, row)
-		results = results[1:]
-	}
-	rows = append(rows, deck...)
-	tail, err := encodeOptionalBattleResults(results)
-	if err != nil {
-		return "", err
-	}
-	if tail != "" {
-		rows = append(rows, tail)
-	}
-	return strings.Join(rows, "\n"), nil
+	return battlecodec.EncodeStart(results, identities)
 }
 
 func roomDeckRows(current *room) ([]string, error) {
-	if current == nil || len(current.Members) != maxRoomMembers {
+	if current == nil {
 		return nil, errors.New("battle room party is incomplete")
 	}
-	rows := make([]string, 0, maxRoomMembers*10)
-	for _, member := range current.Members {
-		if len(member.DeckCards) != 10 {
-			return nil, errors.New("battle game start member deck is incomplete")
-		}
-		for index, card := range member.DeckCards {
-			if card.CardType != index+1 || card.CardID <= 0 || card.Level <= 0 {
-				return nil, errors.New("battle game start member card is invalid")
-			}
-			row, err := cardIdentityResult(member.MemberType, card).CSV()
-			if err != nil {
-				return nil, err
-			}
-			rows = append(rows, row)
-		}
-		if err := validateSupportCards(member.SupportCards); err != nil {
+	identities, err := battlecore.DeckIdentityResults(roomBattleParticipants(current.Members))
+	if err != nil {
+		return nil, err
+	}
+	rows := make([]string, 0, len(identities))
+	for _, result := range identities {
+		row, err := battlecodec.EncodeRow(result)
+		if err != nil {
 			return nil, err
 		}
-		for _, card := range member.SupportCards {
-			row, err := cardIdentityResult(member.MemberType, card).CSV()
-			if err != nil {
-				return nil, err
-			}
-			rows = append(rows, row)
-		}
+		rows = append(rows, row)
 	}
 	return rows, nil
 }
@@ -159,6 +132,10 @@ func (s *Server) completeGoBattleLocked(session *lockedRoomSession, current *roo
 		session.Unlock()
 		return nil
 	}
+	if current.completionDone != nil {
+		session.Unlock()
+		return nil
+	}
 	endType := current.engineBattleEnd
 	connections := append([]*clientConn(nil), roomConnections(current)...)
 	roomID := current.RoomID
@@ -173,10 +150,19 @@ func (s *Server) completeGoBattleLocked(session *lockedRoomSession, current *roo
 		broadcastRoomFrames(s, roomID, deliveries)
 		return nil
 	}
-	if err := completeBattleLocked(session.hub, current, time.Now()); err != nil {
-		session.Unlock()
+	if err := completeBattle(session, current, time.Now()); err != nil {
+		var pending *completionPendingError
+		if errors.As(err, &pending) {
+			s.scheduleCompletionRetry(roomID)
+		}
 		return err
 	}
+	session = s.hub.lockRoomSession(roomID)
+	defer session.Unlock()
+	if session.completed == nil {
+		return nil
+	}
+	s.scheduleCompletedExpiry(session.completed)
 	deliveries := reserveRoomFramesLocked(connections,
 		battleFrame{"ApiGameEnd", joinCSV("2", strconv.Itoa(endType))}, battleFrame{"GameClose", ""})
 	session.Unlock()

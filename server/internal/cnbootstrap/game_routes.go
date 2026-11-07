@@ -4,12 +4,26 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"kairisei.local/server/internal/httpapi"
 )
 
 func (app *application) registerGameRoutes(router chi.Router) {
 	router.Post("/Ping", cnBootstrapPing)
 	router.Post("/Connect", cnBootstrapConnect(app.business))
-	router.Post("/HomeShow", cnBootstrapSessionOnlyBusiness(app.business, "HomeShow", http.MethodPost, "/HomeShow"))
+	home := cnBootstrapSessionOnlyBusiness(app.business, "HomeShow", http.MethodPost, "/HomeShow")
+	router.Post("/HomeShow", func(writer http.ResponseWriter, request *http.Request) {
+		// Resolve publication only if Home needs to check a banner destination.
+		var published map[int]struct{}
+		var ready bool
+		home(writer, httpapi.WithGachaPublication(request, func(id int) bool {
+			if !ready {
+				published, _ = app.operations.GachaPublication()
+				ready = true
+			}
+			return app.operations.GachaIDPublished(id, published)
+		}))
+	})
+	router.Post("/BattleRecoveryShow", cnBootstrapExactBusiness(app.business, "BattleRecoveryShow", "/BattleRecoveryShow", "abandoned_roomids"))
 	router.Post("/PopupExec", cnBootstrapExactBusiness(app.business, "PopupExec", "/PopupExec", "popupid", "is_system"))
 	router.Post("/TutorialProgress", cnBootstrapTutorialProgress)
 	router.Post("/TutorialFlag", cnBootstrapTutorialFlag(app.business))
@@ -35,8 +49,6 @@ func (app *application) registerGameRoutes(router chi.Router) {
 	router.Post("/GachaSelectLineupShow", cnBootstrapExactBusiness(gachaPublicationBusiness, "GachaSelectLineupShow", "/GachaSelectLineupShow", "gachaid"))
 	router.Post("/GachaSelectedListShow", cnBootstrapExactBusiness(gachaPublicationBusiness, "GachaSelectedListShow", "/GachaSelectedListShow", "gachaid"))
 	router.Post("/GachaOddsShow", cnBootstrapGachaOddsShow(app.business, app.operations))
-	router.Post("/GetRecommendCardInfo", cnBootstrapSessionOnlyBusiness(app.business, "GetRecommendCardInfo", http.MethodPost, "/GetRecommendCardInfo"))
-	router.Post("/GetURCardNoGetFromCurrentGaCha", cnBootstrapSessionOnlyBusiness(gachaPublicationBusiness, "GetURCardNoGetFromCurrentGaCha", http.MethodPost, "/GetURCardNoGetFromCurrentGaCha"))
 	router.Post("/CoinUse", cnBootstrapExactBusiness(app.business, "CoinUse", "/CoinUse", "type", "param"))
 	router.Post("/TradeShopShow2", cnBootstrapSessionOnlyBusiness(app.business, "TradeShopShow2", http.MethodPost, "/TradeShopShow2"))
 	router.Post("/TradeShopLineupShow", cnBootstrapExactBusiness(app.business, "TradeShopLineupShow", "/TradeShopLineupShow", "trade_shopid"))
@@ -54,7 +66,7 @@ func (app *application) registerGameRoutes(router chi.Router) {
 	router.Post("/CardMove", cnBootstrapCardMove(app.business))
 	router.Post("/CardContainerLock", cnBootstrapExactBusiness(app.business, "CardContainerLock", "/CardContainerLock", "uniqid"))
 	router.Post("/CardContainerUnlock", cnBootstrapExactBusiness(app.business, "CardContainerUnlock", "/CardContainerUnlock", "uniqid"))
-	router.Post("/CardContainerSell", cnBootstrapExactBusiness(app.business, "CardContainerSell", "/CardContainerSell", "uniqids"))
+	router.Post("/CardContainerSell", cnBootstrapCardContainerSell(app.business))
 	router.Post("/CardLock", cnBootstrapExactBusiness(app.business, "CardLock", "/CardLock", "uniqid"))
 	router.Post("/CardUnlock", cnBootstrapExactBusiness(app.business, "CardUnlock", "/CardUnlock", "uniqid"))
 	router.Post("/CardLoveUp", cnBootstrapCardLoveUp(app.business))
@@ -72,6 +84,7 @@ func (app *application) registerGameRoutes(router chi.Router) {
 	router.Post("/CardSell", cnBootstrapCardSell(app.business))
 	router.Post("/ExploreStart", cnBootstrapExploreStart(app.business))
 	router.Post("/ExploreEnd", cnBootstrapExploreEnd(app.business))
+	router.Post("/GiftCodeAd", cnBootstrapExactBusiness(app.business, "GiftCodeAd", "/GiftCodeAd", "channel", "codenumber"))
 	router.Post("/MissionShow", cnBootstrapMissionShow(app.business))
 	router.Post("/MissionReward", cnBootstrapMissionReward(app.business))
 	router.Post("/MissionURLOpen", cnBootstrapExactBusiness(app.business, "MissionURLOpen", "/MissionURLOpen", "open_url"))
@@ -101,23 +114,14 @@ func (app *application) registerGameRoutes(router chi.Router) {
 	router.Post("/TeamBattleRecommendDeckShow", cnBootstrapSessionOnlyBusiness(app.business, "TeamBattleRecommendDeckShow", http.MethodPost, "/TeamBattleRecommendDeckShow"))
 	router.Post("/TeamBattlePastBossShow", cnBootstrapPastBossShow(app.business, app.operations))
 	router.Post("/TeamBattleClearDeckShow", cnBootstrapExactBusiness(cnCardAcquisitionPublication(app.business, app.operations), "TeamBattleClearDeckShow", "/TeamBattleClearDeckShow", "bossid"))
-	router.Post("/TeamBattleScoreRewardLineup", cnBootstrapExactBusiness(app.business, "TeamBattleScoreRewardLineup", "/TeamBattleScoreRewardLineup", "bossid"))
+	router.Post("/TeamBattleScoreRewardLineup", cnBootstrapExactBusiness(app.business, "TeamBattleScoreRewardLineup", "/TeamBattleScoreRewardLineup", "bossid", "mode"))
+	router.Post("/BossScoreRankingShow", cnBootstrapExactBusiness(app.business, "BossScoreRankingShow", "/BossScoreRankingShow", "bossid", "mode", "offset", "limit"))
 	router.Post("/DailyClearRankShow", cnBootstrapExactBusiness(cnCardAcquisitionPublication(app.business, app.operations), "DailyClearRankShow", "/DailyClearRankShow", "bossid", "is_multi"))
 	router.Post("/ChallengeShow", cnBootstrapExactBusiness(app.business, "ChallengeShow", "/ChallengeShow", "bossid", "target_time"))
 	router.Post("/TeamBattleScheduleShow", cnBootstrapExactBusiness(app.business, "TeamBattleScheduleShow", "/TeamBattleScheduleShow", "is_solo", "active_arthur_type"))
 	router.Post("/TeamBattleScheduleUpdate", cnBootstrapExactBusiness(app.business, "TeamBattleScheduleUpdate", "/TeamBattleScheduleUpdate", "is_solo", "boss_groupid"))
 	router.Post("/UserBuffExec", cnBootstrapExactBusiness(app.business, "UserBuffExec", "/UserBuffExec", "user_buff_id"))
-	router.Post("/TeamBattleSoloStart", cnBootstrapExactBusiness(
-		app.business,
-		"TeamBattleSoloStart",
-		"/TeamBattleSoloStart",
-		"bossid",
-		"deck_arthur_type",
-		"deck_arthur_type_idx",
-		"partner_deck_selects",
-		"starttime",
-		"flag",
-	))
+	router.Post("/TeamBattleSoloStart", cnBootstrapSoloStart(app.business))
 	router.Post("/TeamBattleSoloContinue", cnBootstrapExactBusiness(
 		app.business,
 		"TeamBattleSoloContinue",
@@ -128,6 +132,7 @@ func (app *application) registerGameRoutes(router chi.Router) {
 		"enemy_dead_bit",
 	))
 	router.Post("/TeamBattleSoloEnd", cnBootstrapTeamBattleSoloEnd(app.business))
+	router.Post("/TeamBattleSkip", cnPayloadAdapter(app.business, "TeamBattleSkip", "/TeamBattleSkip", []string{"bossid", "num"}, adaptCNNamedRewardMethod))
 	router.Post("/TeamBattleMultiShow", cnBootstrapExactBusiness(
 		app.business,
 		"TeamBattleMultiShow",
@@ -163,9 +168,10 @@ func (app *application) registerGameRoutes(router chi.Router) {
 		"hp",
 		"fame",
 		"comment",
-		"flag",
 		"allow_to_leave",
 		"use_punished_free_piont",
+		"is_battle_msg_skip",
+		"battle_speed_rate",
 	))
 	router.Post("/TeamBattleAIRoomCreate", cnBootstrapExactBusiness(
 		app.business,
@@ -201,13 +207,7 @@ func (app *application) registerGameRoutes(router chi.Router) {
 		"use_punished_free_piont",
 	))
 	router.Post("/TeamBattleResult", cnBootstrapTeamBattleResult(app.business))
-	router.Post("/StageQuestShow", cnBootstrapExactBusiness(
-		app.business,
-		"StageQuestShow",
-		"/StageQuestShow",
-		"areaid",
-		"is_solo",
-	))
+	router.Post("/MainQuestShow", cnBootstrapSessionOnlyBusiness(app.business, "MainQuestShow", http.MethodPost, "/MainQuestShow"))
 	router.Post("/SphrShow", cnBootstrapSphereShow(app.business))
 	router.Post("/SphrFusion2", cnBootstrapSphereFusion2(app.business))
 	router.Post("/SphrEvolution", cnBootstrapSphereEvolution(app.business))
@@ -240,6 +240,6 @@ func (app *application) registerGameRoutes(router chi.Router) {
 	router.Post("/StoryTeamBattleEnd", cnBootstrapStoryTeamBattleEnd(app.business))
 	router.Post("/EventShow", cnBootstrapSessionOnlyBusiness(app.business, "EventShow", http.MethodPost, "/EventShow"))
 	router.Post("/PvpShow", cnBootstrapSessionOnlyBusiness(app.business, "PvpShow", http.MethodPost, "/PvpShow"))
-	router.Post("/PvpStart2", cnBootstrapExactBusiness(app.business, "PvpStart2", "/PvpStart2", "type", "select_arthur_type", "pvp_my_deck"))
-	router.Post("/PvpEnd", cnBootstrapExactBusiness(app.business, "PvpEnd", "/PvpEnd", "btluid", "is_win", "is_retire", "input_cmd"))
+	router.Post("/PvpStart2", app.admitPVPStart(cnBootstrapExactBusiness(app.business, "PvpStart2", "/PvpStart2", "type", "select_arthur_type", "pvp_my_deck")))
+	router.Post("/PvpEnd", cnBootstrapPvpEnd(app.business))
 }

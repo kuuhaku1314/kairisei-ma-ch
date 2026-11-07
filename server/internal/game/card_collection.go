@@ -1,5 +1,7 @@
 package game
 
+import "kairisei.local/server/internal/gamestate"
+
 type collectionCard struct {
 	CardID int `json:"cardid"`
 	State  int `json:"state_bit"`
@@ -25,7 +27,12 @@ func (s *Account) recordCollectedCardLocked(card CardInfo) {
 	if s.cardCollectionIDs == nil {
 		s.cardCollectionIDs = make(map[int]struct{})
 	}
+	if _, exists := s.cardCollectionIDs[card.CardID]; !exists {
+		s.markMissionMetricLocked(gamestate.MissionCollectionCount)
+	}
 	s.cardCollectionIDs[card.CardID] = struct{}{}
+	s.markMissionMetricLocked(gamestate.MissionCardOwned)
+	s.markMissionMetricLocked(gamestate.MissionCardFame)
 	if card.LoveMax > 0 && card.Love >= card.LoveMax {
 		if s.cardCollectionLoveMaxIDs == nil {
 			s.cardCollectionLoveMaxIDs = make(map[int]struct{})

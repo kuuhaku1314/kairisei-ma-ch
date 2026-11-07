@@ -5,343 +5,201 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"kairisei.local/server/internal/game"
-	"kairisei.local/server/internal/gamestate"
 )
 
-func (accounts *Accounts) ListFriendPointAccountRelations(
-	userID int,
-) ([]game.FriendPointAccountRelation, error) {
-	if userID < PrimaryUserID {
-		return nil, errors.New("invalid CN local-account relationship owner")
-	}
-	states, err := accounts.listFriendPointPartnerAccounts(userID)
-	if err != nil {
-		return nil, err
+func (accounts *Accounts) ListFollowedFriendPointAccounts(userID int) ([]game.FriendPointAccountRelation, error) {
+	const selection = `WITH selected(user_id) AS (
+  SELECT followed_user_id FROM cn_local_account_follow WHERE follower_user_id = ?1
+ ) `
+	return accounts.queryPartnerRelations(userID, selection+partnerRelationProjection+" ORDER BY a.user_id", userID)
+}
+
+// The client displays a recent window and the full count, without next-page
+// requests. Never decode projections outside that window or trim relationships.
+func (accounts *Accounts) ListFollowerFriendPointAccounts(userID int, limit int) ([]game.FriendPointAccountRelation, int, error) {
+	if userID < PrimaryUserID || limit <= 0 {
+		return nil, 0, errors.New("invalid CN follower display selection")
 	}
 	database, err := accounts.storage.OpenRead()
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	rows, err := database.QueryContext(
-		context.Background(),
-		`SELECT follower_user_id, followed_user_id
-		 FROM cn_local_account_follow
-		 WHERE follower_user_id = ? OR followed_user_id = ?`,
-		userID,
-		userID,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("list CN local-account relationships: %w", err)
+	var total int
+	if err := database.QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM cn_local_account_follow WHERE followed_user_id = ?`, userID).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count CN followers: %w", err)
 	}
-	defer rows.Close()
-	outbound := make(map[int]struct{})
-	inbound := make(map[int]struct{})
-	for rows.Next() {
-		var followerUserID int
-		var followedUserID int
-		if err := rows.Scan(&followerUserID, &followedUserID); err != nil {
-			return nil, fmt.Errorf("scan CN local-account relationship: %w", err)
-		}
-		if followerUserID == userID {
-			outbound[followedUserID] = struct{}{}
-		}
-		if followedUserID == userID {
-			inbound[followerUserID] = struct{}{}
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate CN local-account relationships: %w", err)
-	}
-	result := make([]game.FriendPointAccountRelation, 0, len(states))
-	for _, state := range states {
-		targetUserID := state.User.UserID
-		_, follows := outbound[targetUserID]
-		_, followedBy := inbound[targetUserID]
-		friendState := int8(0)
-		switch {
-		case follows && followedBy:
-			friendState = 3
-		case follows:
-			friendState = 5
-		case followedBy:
-			friendState = 6
-		}
-		result = append(result, game.FriendPointAccountRelation{
-			State:       state,
-			FriendState: friendState,
-			System:      isSystemPartnerUserID(targetUserID),
-		})
-	}
-	return result, nil
+	const selection = `WITH selected(user_id, followed_at) AS (
+  SELECT follower_user_id, julianday(created_utc) FROM cn_local_account_follow
+  WHERE followed_user_id = ?1
+  ORDER BY julianday(created_utc) DESC, follower_user_id DESC LIMIT ?2
+ ) `
+	relations, err := accounts.queryPartnerRelations(userID, selection+partnerRelationProjection+
+		" ORDER BY s.followed_at DESC, a.user_id DESC", userID, limit)
+	return relations, total, err
 }
 
-// FriendPointAccountStates reads only the compact relationship table. Room
-// search and battle settlement already own the relevant account identities;
-// decoding every multi-megabyte account snapshot here would make latency grow
-// with every unrelated local account.
-func (accounts *Accounts) FriendPointAccountStates(
-	userID int,
-	targetUserIDs []int,
-) (map[int]int8, error) {
+func (accounts *Accounts) FindFriendPointAccountByInviteID(userID int, inviteID string) ([]game.FriendPointAccountRelation, error) {
+	target, err := strconv.Atoi(inviteID)
+	if err != nil {
+		return nil, nil
+	}
+	if target > 900000000 && target <= 900000000+systemPartnerArthurCount {
+		target = SystemPartnerUserIDBase + target - 900000000
+	}
+	if InviteID(target) != inviteID {
+		return nil, nil
+	}
+	return accounts.LoadFriendPointAccountRelations(userID, []int{target})
+}
+
+// Battle/room callers already know their target accounts. Check only those
+// indexed relationship pairs, regardless of how many other followers exist.
+func (accounts *Accounts) FriendPointAccountStates(userID int, targetUserIDs []int) (map[int]int8, error) {
 	if userID < PrimaryUserID {
 		return nil, errors.New("invalid CN local-account relationship owner")
 	}
 	states := make(map[int]int8, len(targetUserIDs))
-	targets := make(map[int]struct{}, len(targetUserIDs))
-	for _, targetUserID := range targetUserIDs {
-		if targetUserID < PrimaryUserID {
+	arguments := []any{userID}
+	values := make([]string, 0, len(targetUserIDs))
+	for _, target := range targetUserIDs {
+		if target < PrimaryUserID {
 			return nil, errors.New("invalid CN local-account relationship target")
 		}
-		if targetUserID == userID {
+		if target == userID {
 			continue
 		}
-		targets[targetUserID] = struct{}{}
-		states[targetUserID] = 0
+		if _, duplicate := states[target]; duplicate {
+			continue
+		}
+		states[target] = game.FriendStateOther
+		arguments = append(arguments, target)
+		values = append(values, fmt.Sprintf("(?%d)", len(arguments)))
 	}
-	if len(targets) == 0 {
+	if len(values) == 0 {
 		return states, nil
 	}
-
 	database, err := accounts.storage.OpenRead()
 	if err != nil {
 		return nil, err
 	}
-	rows, err := database.QueryContext(
-		context.Background(),
-		`SELECT follower_user_id, followed_user_id
-		 FROM cn_local_account_follow
-		 WHERE follower_user_id = ? OR followed_user_id = ?`,
-		userID,
-		userID,
-	)
+	query := `WITH selected(user_id) AS (VALUES ` + strings.Join(values, ",") + `)
+  SELECT s.user_id,
+  EXISTS (SELECT 1 FROM cn_local_account_follow f WHERE f.follower_user_id = ?1 AND f.followed_user_id = s.user_id),
+  EXISTS (SELECT 1 FROM cn_local_account_follow f WHERE f.follower_user_id = s.user_id AND f.followed_user_id = ?1)
+  FROM selected s`
+	rows, err := database.QueryContext(context.Background(), query, arguments...)
 	if err != nil {
-		return nil, fmt.Errorf("list targeted CN local-account relationships: %w", err)
+		return nil, fmt.Errorf("query targeted CN relationships: %w", err)
 	}
 	defer rows.Close()
-	outbound := make(map[int]struct{}, len(targets))
-	inbound := make(map[int]struct{}, len(targets))
 	for rows.Next() {
-		var followerUserID int
-		var followedUserID int
-		if err := rows.Scan(&followerUserID, &followedUserID); err != nil {
-			return nil, fmt.Errorf("scan targeted CN local-account relationship: %w", err)
+		var target int
+		var follows, followedBy bool
+		if err := rows.Scan(&target, &follows, &followedBy); err != nil {
+			return nil, fmt.Errorf("scan targeted CN relationship: %w", err)
 		}
-		if followerUserID == userID {
-			if _, wanted := targets[followedUserID]; wanted {
-				outbound[followedUserID] = struct{}{}
-			}
-		}
-		if followedUserID == userID {
-			if _, wanted := targets[followerUserID]; wanted {
-				inbound[followerUserID] = struct{}{}
-			}
+		switch {
+		case follows && followedBy:
+			states[target] = game.FriendStateFriend
+		case follows:
+			states[target] = game.FriendStateFollow
+		case followedBy:
+			states[target] = game.FriendStateFollower
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate targeted CN local-account relationships: %w", err)
-	}
-	for targetUserID := range targets {
-		_, follows := outbound[targetUserID]
-		_, followedBy := inbound[targetUserID]
-		switch {
-		case follows && followedBy:
-			states[targetUserID] = 3
-		case follows:
-			states[targetUserID] = 5
-		case followedBy:
-			states[targetUserID] = 6
-		}
+		return nil, fmt.Errorf("iterate targeted CN relationships: %w", err)
 	}
 	return states, nil
 }
 
-func (accounts *Accounts) FollowFriendPointAccounts(
-	userID int,
-	targetUserIDs []int,
-	followMaximum int,
-	friendMaximum int,
-) (game.FollowAddResult, error) {
-	if userID < PrimaryUserID || followMaximum <= 0 || friendMaximum <= 0 {
+func (accounts *Accounts) FollowFriendPointAccounts(userID int, targetUserIDs []int, followMaximum int) (game.FollowAddResult, error) {
+	if userID < PrimaryUserID || followMaximum <= 0 {
 		return game.FollowAddResult{}, errors.New("invalid CN local-account follow selection")
 	}
-	// The result/search UI can submit an empty selection. It is a no-op.
 	if len(targetUserIDs) == 0 {
 		return game.FollowAddResult{RequestUserIDs: []int{}}, nil
 	}
-	available, err := accounts.listFriendPointPartnerAccounts(userID)
+	available, err := accounts.LoadFriendPointAccountRelations(userID, targetUserIDs)
 	if err != nil {
 		return game.FollowAddResult{}, err
 	}
-	validTargets := make(map[int]gamestate.State, len(available))
-	for _, state := range available {
-		if strings.TrimSpace(state.User.Name) != "" {
-			validTargets[state.User.UserID] = state
+	validTargets := make(map[int]bool, len(available))
+	for _, relation := range available {
+		if strings.TrimSpace(relation.State.User.Name) != "" {
+			validTargets[relation.State.User.UserID] = true
 		}
 	}
-	seen := make(map[int]struct{}, len(targetUserIDs))
+	seen := make(map[int]bool, len(targetUserIDs))
 	selected := make([]int, 0, len(targetUserIDs))
-	for _, targetUserID := range targetUserIDs {
-		if targetUserID == userID {
+	for _, target := range targetUserIDs {
+		if target == userID {
 			return game.FollowAddResult{}, &game.FollowAddError{ResultCode: -600, ResultString: "不能关注自己。"}
 		}
-		if _, exists := validTargets[targetUserID]; !exists {
+		if !validTargets[target] {
 			return game.FollowAddResult{}, &game.FollowAddError{ResultCode: -601, ResultString: "该玩家暂不可关注，请刷新列表后重试。"}
 		}
-		if _, duplicate := seen[targetUserID]; duplicate {
-			continue
+		if !seen[target] {
+			seen[target] = true
+			selected = append(selected, target)
 		}
-		seen[targetUserID] = struct{}{}
-		selected = append(selected, targetUserID)
 	}
-	targetUserIDs = selected
 	accounts.mu.Lock()
 	defer accounts.mu.Unlock()
 	database, err := accounts.storage.Open()
 	if err != nil {
 		return game.FollowAddResult{}, err
 	}
-	transaction, err := database.BeginTx(context.Background(), &sql.TxOptions{})
+	transaction, err := database.BeginTx(context.Background(), nil)
 	if err != nil {
 		return game.FollowAddResult{}, fmt.Errorf("begin CN local-account follow: %w", err)
 	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = transaction.Rollback()
-		}
-	}()
-	var existingCount int
-	if err := transaction.QueryRowContext(
-		context.Background(),
-		`SELECT COUNT(*) FROM cn_local_account_follow WHERE follower_user_id = ?`,
-		userID,
-	).Scan(&existingCount); err != nil {
+	defer transaction.Rollback()
+	var count int
+	if err := transaction.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM cn_local_account_follow WHERE follower_user_id = ?`, userID).Scan(&count); err != nil {
 		return game.FollowAddResult{}, fmt.Errorf("count CN local-account follows: %w", err)
 	}
-	if existingCount+len(targetUserIDs) > followMaximum {
-		return game.FollowAddResult{}, &game.FollowAddError{
-			ResultCode:   -3410,
-			ResultString: "关注人数已达上限。",
-		}
+	if count+len(selected) > followMaximum {
+		return game.FollowAddResult{}, &game.FollowAddError{ResultCode: -3410, ResultString: "关注人数已达上限。"}
 	}
-	mutualCount, err := mutualFriendCount(transaction, userID)
-	if err != nil {
-		return game.FollowAddResult{}, err
-	}
-	newMutualCount := mutualCount
-	for _, targetUserID := range targetUserIDs {
-		var alreadyFollows int
-		if err := transaction.QueryRowContext(
-			context.Background(),
-			`SELECT COUNT(*) FROM cn_local_account_follow
-			 WHERE follower_user_id = ? AND followed_user_id = ?`,
-			userID,
-			targetUserID,
-		).Scan(&alreadyFollows); err != nil {
+	for _, target := range selected {
+		var exists bool
+		if err := transaction.QueryRowContext(context.Background(), `SELECT EXISTS (SELECT 1 FROM cn_local_account_follow WHERE follower_user_id = ? AND followed_user_id = ?)`, userID, target).Scan(&exists); err != nil {
 			return game.FollowAddResult{}, fmt.Errorf("check CN local-account follow: %w", err)
 		}
-		if alreadyFollows != 0 {
-			return game.FollowAddResult{}, &game.FollowAddError{
-				ResultCode:   -3411,
-				ResultString: "已经关注该玩家。",
-			}
+		if exists {
+			return game.FollowAddResult{}, &game.FollowAddError{ResultCode: -3411, ResultString: "已经关注该玩家。"}
 		}
-		var followerCount int
-		if err := transaction.QueryRowContext(
-			context.Background(),
-			`SELECT COUNT(*) FROM cn_local_account_follow WHERE followed_user_id = ?`,
-			targetUserID,
-		).Scan(&followerCount); err != nil {
-			return game.FollowAddResult{}, fmt.Errorf("count CN local-account followers: %w", err)
-		}
-		// The native client consumes follow_max from the server. Use the same
-		// global configured follow ceiling in both directions.
-		if followerCount >= followMaximum {
-			return game.FollowAddResult{}, &game.FollowAddError{
-				ResultCode:   -3412,
-				ResultString: "对方的粉丝人数已达上限。",
-			}
-		}
-		var reverseFollow int
-		if err := transaction.QueryRowContext(
-			context.Background(),
-			`SELECT COUNT(*) FROM cn_local_account_follow
-			 WHERE follower_user_id = ? AND followed_user_id = ?`,
-			targetUserID,
-			userID,
-		).Scan(&reverseFollow); err != nil {
-			return game.FollowAddResult{}, fmt.Errorf("check reverse CN local-account follow: %w", err)
-		}
-		if reverseFollow == 0 {
-			continue
-		}
-		if newMutualCount >= friendMaximum {
-			return game.FollowAddResult{}, &game.FollowAddError{
-				// FollowAdd's native dialog closes for -3410, whereas the
-				// old friend-request code -3400 sends the player to title.
-				ResultCode:   -3410,
-				ResultString: "好友人数已达上限。",
-			}
-		}
-		targetMutualCount, err := mutualFriendCount(transaction, targetUserID)
-		if err != nil {
-			return game.FollowAddResult{}, err
-		}
-		if targetMutualCount >= validTargets[targetUserID].User.FriendMax {
-			return game.FollowAddResult{}, &game.FollowAddError{
-				ResultCode:   -3412,
-				ResultString: "对方的好友人数已达上限。",
-			}
-		}
-		newMutualCount++
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	for _, targetUserID := range targetUserIDs {
-		result, err := transaction.ExecContext(
-			context.Background(),
-			`INSERT INTO cn_local_account_follow
-			 (follower_user_id, followed_user_id, created_utc) VALUES (?, ?, ?)
-			 ON CONFLICT(follower_user_id, followed_user_id) DO NOTHING`,
-			userID,
-			targetUserID,
-			now,
-		)
-		if err != nil {
+	for _, target := range selected {
+		if _, err := transaction.ExecContext(context.Background(), `INSERT INTO cn_local_account_follow (follower_user_id, followed_user_id, created_utc) VALUES (?, ?, ?)`, userID, target, now); err != nil {
 			return game.FollowAddResult{}, fmt.Errorf("record CN local-account follow: %w", err)
 		}
-		changed, err := result.RowsAffected()
-		if err != nil || changed != 1 {
-			return game.FollowAddResult{}, errors.New("CN local account follow insert did not affect exactly one row")
-		}
+	}
+	mutual, err := mutualFriendCount(transaction, userID)
+	if err != nil {
+		return game.FollowAddResult{}, err
 	}
 	if err := transaction.Commit(); err != nil {
 		return game.FollowAddResult{}, fmt.Errorf("commit CN local-account follow: %w", err)
 	}
-	committed = true
-	return game.FollowAddResult{
-		RequestUserIDs: append([]int(nil), targetUserIDs...),
-		IsFriendFull:   newMutualCount >= friendMaximum,
-	}, nil
+	return game.FollowAddResult{RequestUserIDs: selected, IsFriendFull: mutual >= followMaximum}, nil
 }
 
 func mutualFriendCount(transaction *sql.Tx, userID int) (int, error) {
 	var count int
-	err := transaction.QueryRowContext(
-		context.Background(),
-		`SELECT COUNT(*)
-		 FROM cn_local_account_follow AS outbound
-		 WHERE outbound.follower_user_id = ?
-		   AND EXISTS (
-		     SELECT 1 FROM cn_local_account_follow AS inbound
-		     WHERE inbound.follower_user_id = outbound.followed_user_id
-		       AND inbound.followed_user_id = outbound.follower_user_id
-		   )`,
-		userID,
-	).Scan(&count)
+	err := transaction.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM cn_local_account_follow AS outbound
+  WHERE outbound.follower_user_id = ? AND EXISTS (
+   SELECT 1 FROM cn_local_account_follow AS inbound
+   WHERE inbound.follower_user_id = outbound.followed_user_id AND inbound.followed_user_id = outbound.follower_user_id
+  )`, userID).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("count CN local-account mutual friends: %w", err)
 	}
@@ -417,7 +275,8 @@ func (accounts *Accounts) ListFriendPointRentalEvents(
 	return events, nil
 }
 
-func (accounts *Accounts) RecordFriendPointRentals(
+func writeFriendPointRentals(
+	transaction *sql.Tx,
 	eventKey string,
 	renterUserID int,
 	credits []game.FriendPointRentalCredit,
@@ -440,22 +299,6 @@ func (accounts *Accounts) RecordFriendPointRentals(
 		seen[credit.OwnerUserID] = struct{}{}
 	}
 
-	accounts.mu.Lock()
-	defer accounts.mu.Unlock()
-	database, err := accounts.storage.Open()
-	if err != nil {
-		return err
-	}
-	transaction, err := database.BeginTx(context.Background(), &sql.TxOptions{})
-	if err != nil {
-		return fmt.Errorf("begin CN friend-point rental event: %w", err)
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = transaction.Rollback()
-		}
-	}()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	for _, credit := range credits {
 		var exists int
@@ -485,9 +328,5 @@ func (accounts *Accounts) RecordFriendPointRentals(
 			return fmt.Errorf("record CN friend-point rental event: %w", err)
 		}
 	}
-	if err := transaction.Commit(); err != nil {
-		return fmt.Errorf("commit CN friend-point rental event: %w", err)
-	}
-	committed = true
 	return nil
 }

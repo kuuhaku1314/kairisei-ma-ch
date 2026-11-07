@@ -38,26 +38,30 @@ func probeCompleteRuntimeFusion(t *testing.T, handler http.Handler, savePath, se
 	})
 	testfixture.AttachProbeCardCatalog(t, storage, cards)
 	accounts := testfixture.TestAccountRepository(t, storage)
-	if _, err := accounts.ResolveLogin("00000000-0000-0000-0475-000000000000"); err != nil {
+	if _, err := accounts.ResolveInternalLogin("00000000-0000-0000-0475-000000000000"); err != nil {
 		t.Fatal(err)
 	}
 	for caseID, scenario := range []struct {
-		name        string
-		stock, used []int
-		gold        int
-		ids         []int
+		name            string
+		stock, used     []int
+		gold            int
+		ids             []int
+		grouped, reject bool
 	}{
-		{"last", []int{1}, []int{1}, 50000000, nil},
-		{"deplete", []int{3}, []int{3}, 50000000, nil},
-		{"mixed", []int{1, 2, 3}, []int{1, 2, 3}, 50000000, nil},
-		{"mixed remainder", []int{2, 4, 3}, []int{1, 2, 3}, 50000000, nil},
-		{"gold", []int{1, 2, 3}, []int{1, 2, 3}, 0, nil},
-		{"MR nine", []int{9}, []int{9}, 50000000, []int{20000004}},
-		{"MR hundred", []int{100}, []int{100}, 50000000, []int{20000004}},
-		{"MR mixed", []int{9, 9}, []int{9, 9}, 50000000, []int{20000004, 20000031}},
+		{"last", []int{1}, []int{1}, 50000000, nil, false, false},
+		{"deplete", []int{3}, []int{3}, 50000000, nil, false, false},
+		{"mixed", []int{1, 2, 3}, []int{1, 2, 3}, 50000000, nil, false, false},
+		{"mixed remainder", []int{2, 4, 3}, []int{1, 2, 3}, 50000000, nil, false, false},
+		{"gold", []int{1, 2, 3}, []int{1, 2, 3}, 0, nil, false, false},
+		{"MR nine", []int{9}, []int{9}, 50000000, []int{20000004}, false, false},
+		{"MR hundred", []int{100}, []int{100}, 50000000, []int{20000004}, false, false},
+		{"MR mixed", []int{9, 9}, []int{9, 9}, 50000000, []int{20000004, 20000031}, false, false},
+		{"JP grouped 101", []int{101}, []int{101}, 50000000, nil, true, false},
+		{"JP grouped 9999", []int{9999}, []int{9999}, 50000000, nil, true, false},
+		{"JP grouped over total", []int{10000}, []int{10000}, 50000000, nil, true, true},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
-			identity, err := accounts.ResolveLogin(fmt.Sprintf("00000000-0000-0000-0475-%012d", caseID+1))
+			identity, err := accounts.ResolveInternalLogin(fmt.Sprintf("00000000-0000-0000-0475-%012d", caseID+1))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -103,7 +107,17 @@ func probeCompleteRuntimeFusion(t *testing.T, handler http.Handler, savePath, se
 			if err := accounts.PersistState(identity.UserID, state); err != nil {
 				t.Fatal(err)
 			}
-			payload, _ := json.Marshal(map[string]any{"base_uniqid": base.UniqueID, "add_uniqids": []int{}, "add_container_uniqids": []int{}, "add_cardids": selected})
+			request := map[string]any{"base_uniqid": base.UniqueID, "add_uniqids": []int{}, "add_container_uniqids": []int{}}
+			if scenario.grouped {
+				uses := make([]map[string]int, 0, len(materialIDs))
+				for i, id := range materialIDs {
+					uses = append(uses, map[string]int{"cardid": id, "num": scenario.used[i]})
+				}
+				request["add_stackcards"] = uses
+			} else {
+				request["add_cardids"] = selected
+			}
+			payload, _ := json.Marshal(request)
 			call := func(route, payload, name string) (int, map[string]json.RawMessage) {
 				t.Helper()
 				response := httptest.NewRecorder()
@@ -112,6 +126,9 @@ func probeCompleteRuntimeFusion(t *testing.T, handler http.Handler, savePath, se
 					t.Fatal(err)
 				}
 				if response.Code != 200 {
+					if scenario.reject && response.Code == http.StatusBadRequest {
+						return -http.StatusBadRequest, nil
+					}
 					t.Fatalf("%s HTTP %d: %s", route, response.Code, response.Body.String())
 				}
 				lines := strings.Split(strings.TrimSpace(response.Body.String()), "\n")
@@ -134,8 +151,8 @@ func probeCompleteRuntimeFusion(t *testing.T, handler http.Handler, savePath, se
 			if err != nil {
 				t.Fatal(err)
 			}
-			if scenario.gold == 0 {
-				if code != -1030 || persisted.User.Gold != 0 {
+			if scenario.gold == 0 || scenario.reject {
+				if code >= 0 || scenario.gold == 0 && code != -1030 || persisted.User.Gold != scenario.gold {
 					t.Fatalf("balance failure code=%d gold=%d", code, persisted.User.Gold)
 				}
 				for i, stack := range persisted.StackCards {

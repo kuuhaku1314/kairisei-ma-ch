@@ -82,6 +82,11 @@ func TestSQLiteWriterWaitsBeforeSnapshot(t *testing.T) {
 	if _, err = tx.Exec("UPDATE counter SET n=1"); err != nil {
 		t.Fatal(err)
 	}
+	stats := storage.Statistics()
+	if stats.Writer.InUse != 1 || stats.Writer.MaxOpenConnections != 1 || !stats.Reader.Initialized ||
+		stats.Files.DatabaseBytes == nil || *stats.Files.DatabaseBytes <= 0 || stats.Files.WALBytes == nil || *stats.Files.WALBytes <= 0 {
+		t.Fatal("database metrics could not observe an active writer without querying it", stats)
+	}
 	ro, err := reader.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		t.Fatal(err)
@@ -131,6 +136,11 @@ func TestSQLitePoolLifecycleAndSessionInvalidation(t *testing.T) {
 	storage, err := OpenDatabase(filepath.Join(t.TempDir(), "存档 #1.json"), "unused-seed.json", nil)
 	if err != nil {
 		t.Fatal(err)
+	}
+	before := storage.Statistics()
+	if before.Reader.Initialized || before.Writer.Initialized || before.Reader.MaxOpenConnections != 2 ||
+		before.Files.DatabaseBytes == nil || *before.Files.DatabaseBytes != 0 {
+		t.Fatal("metrics opened a connection or created a missing database", before)
 	}
 	t.Cleanup(func() {
 		if err := storage.Close(); err != nil {

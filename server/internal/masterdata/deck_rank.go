@@ -28,7 +28,7 @@ func validateDeckRankPolicy(policy gamestate.DeckRankPolicy, cards []gamestate.C
 		if id <= 0 {
 			return errors.New("invalid CN rank card identity")
 		}
-		if rule.ArthurType < 0 || rule.ArthurType > 4 {
+		if rule.ArthurType < 0 || rule.ArthurType > 5 {
 			return fmt.Errorf("invalid CN card profession for card %d", id)
 		}
 		for _, value := range rule.MaximumParameters {

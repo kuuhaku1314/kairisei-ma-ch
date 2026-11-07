@@ -48,7 +48,7 @@ func (a *API) presentReceivePayload(
 	}
 	newCards := make([]wireCardInfo, 0, len(result.Cards))
 	for _, card := range result.Cards {
-		newCards = append(newCards, toWireCard(card))
+		newCards = append(newCards, a.toWireCard(card))
 	}
 	return map[string]any{
 		"user":               a.userPayload(),

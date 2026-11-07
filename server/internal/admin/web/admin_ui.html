@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="light dark">
   <title>Kairisei MA · 本地运营后台</title>
   <link rel="stylesheet" href="/admin.css">
+  <link rel="stylesheet" href="/editors.css">
   <script>try{const t=localStorage.getItem('kairisei-admin-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch{/* Theme follows the system when storage is unavailable. */}</script>
 </head>
 <body>
@@ -21,6 +22,7 @@
   <symbol id="i-capsule" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h5.5M15 12h5.5"/><circle cx="12" cy="12" r="3"/></symbol>
   <symbol id="i-megaphone" viewBox="0 0 24 24"><path d="M3 10v4a1 1 0 0 0 1 1h3l6 4V5L7 9H4a1 1 0 0 0-1 1z"/><path d="M17 8.5a5 5 0 0 1 0 7M19.5 6a8.5 8.5 0 0 1 0 12"/></symbol>
   <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+  <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></symbol>
   <symbol id="i-scroll" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></symbol>
   <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16M20 20v-4h-4"/></symbol>
   <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
@@ -31,7 +33,7 @@
   <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.6v.3"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></symbol>
   <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></symbol>
-  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol><symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol><symbol id="i-branch" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.2"/><circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="9" r="2.2"/><path d="M6 8.2v7.6M8 6.8c5 .4 8 .4 8 2.2M16.2 10.6C15 14 10 15.4 8.1 17"/></symbol><symbol id="i-wrench" viewBox="0 0 24 24"><path d="M14.5 5.5a4 4 0 0 0 5 5L13 17l-2 2a2.1 2.1 0 0 1-3-3l2-2 6.5-6.5a4 4 0 0 0-2-2z"/><path d="M4 20l3-3"/></symbol><symbol id="i-bag" viewBox="0 0 24 24"><path d="M5 8h14l-1 12.5H6z"/><path d="M9 10.5V7a3 3 0 0 1 6 0v3.5"/></symbol><symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4m-5 5 5-5 5 5M5 20h14"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol><symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol><symbol id="i-branch" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.2"/><circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="9" r="2.2"/><path d="M6 8.2v7.6M8 6.8c5 .4 8 .4 8 2.2M16.2 10.6C15 14 10 15.4 8.1 17"/></symbol><symbol id="i-wrench" viewBox="0 0 24 24"><path d="M14.5 5.5a4 4 0 0 0 5 5L13 17l-2 2a2.1 2.1 0 0 1-3-3l2-2 6.5-6.5a4 4 0 0 0-2-2z"/><path d="M4 20l3-3"/></symbol><symbol id="i-bag" viewBox="0 0 24 24"><path d="M5 8h14l-1 12.5H6z"/><path d="M9 10.5V7a3 3 0 0 1 6 0v3.5"/></symbol><symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4m-5 5 5-5 5 5M5 20h14"/></symbol><symbol id="i-tower" viewBox="0 0 24 24"><path d="M7.5 21V9.5L6 8V3.5h2.5V5.5h2V3.5h3v2h2v-2H18V8l-1.5 1.5V21M5 21h14M10.5 21v-4a1.5 1.5 0 0 1 3 0v4M10.5 11h3"/></symbol><symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></symbol><symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m4 17 5-4.5 3.5 3 3-2.5 4.5 4"/></symbol><symbol id="i-up" viewBox="0 0 24 24"><path d="m6 14 6-6 6 6"/></symbol><symbol id="i-down" viewBox="0 0 24 24"><path d="m6 10 6 6 6-6"/></symbol><symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V6a1.5 1.5 0 0 0-1.5-1.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5"/></symbol><symbol id="i-trash" viewBox="0 0 24 24"><path d="M5 7h14M10 7V4.5h4V7M7 7l1 13h8l1-13M10.5 11v5.5M13.5 11v5.5"/></symbol>
 </svg>
 <div class="shell">
   <aside class="sidebar" id="sidebar">
@@ -42,6 +44,8 @@
       <div class="nav-group">玩家</div>
       <button data-view="accounts"><svg class="icon"><use href="#i-users"/></svg><span>账号管理</span></button>
       <button data-view="mail"><svg class="icon"><use href="#i-gift"/></svg><span>礼物发放</span></button>
+      <button data-view="missions"><svg class="icon"><use href="#i-trophy"/></svg><span>任务与成就</span></button>
+      <button data-view="gift-codes"><svg class="icon"><use href="#i-gift"/></svg><span>兑换码</span></button>
       <div class="nav-group">战斗与活动</div>
       <button data-view="bosses"><svg class="icon"><use href="#i-flag"/></svg><span>Boss 发布</span></button>
       <button data-view="drops"><svg class="icon"><use href="#i-gem"/></svg><span>Boss 掉落</span></button>
@@ -55,7 +59,7 @@
       <div class="nav-group">系统</div>
       <button data-view="player-policy"><svg class="icon"><use href="#i-megaphone"/></svg><span>公告与奖励</span></button>
       <button data-view="settings"><svg class="icon"><use href="#i-sliders"/></svg><span>运营设置</span></button>
-      <button data-view="audit"><svg class="icon"><use href="#i-scroll"/></svg><span>操作审计</span></button>
+      <button data-view="audit"><svg class="icon"><use href="#i-scroll"/></svg><span>操作审计</span></button><button data-view="runtime-logs"><svg class="icon"><use href="#i-terminal"/></svg><span>运行日志</span></button>
       <button data-view="maintenance"><svg class="icon"><use href="#i-wrench"/></svg><span>维护工具</span><span class="nav-flag" id="nav-maintenance-flag" hidden>维护中</span></button>
     </nav>
     <div class="sidebar-foot">
@@ -76,67 +80,278 @@
     <!-- 运行概览 -->
     <section class="view active" id="dashboard">
       <div class="view-alert" role="alert" hidden></div>
-      <div class="cards">
-        <div class="metric"><span>服务状态</span><strong id="m-state">—</strong><em id="m-endpoint">正在连接</em></div>
-        <div class="metric"><span>玩家存档总数</span><strong id="m-accounts">—</strong><em id="m-account-types">不含系统伙伴</em></div>
-        <div class="metric"><span>BOSS 目录难度数</span><strong id="m-bosses">—</strong><em id="m-groups">—</em></div>
-        <div class="metric"><span>活动联机房间</span><strong id="m-rooms">—</strong><em>Go 内存状态</em></div>
+      <div class="ov-status">
+        <span class="ov-state" id="ov-state"><i aria-hidden="true"></i><b id="m-state">—</b></span>
+        <span class="ov-meta"><span>游戏 API</span><code id="m-endpoint">正在连接</code></span>
+        <span class="ov-meta"><span>数据时间</span><span id="ov-updated">—</span></span>
+        <label class="inline-check ov-auto"><input id="insights-auto" type="checkbox" checked> 每 15 秒自动刷新</label>
       </div>
-      <div class="grid2">
-        <div class="stack">
-          <div class="panel"><div class="panel-head"><h2>玩家活跃与对局</h2><label class="inline-check"><input id="insights-auto" type="checkbox" checked> 每15秒刷新</label></div><div class="panel-body">
-            <div class="cards compact" id="activity-metrics"></div>
-            <p class="hint">活跃估算：最近5分钟有成功业务请求，或当前持有组队连接的玩家，按玩家ID去重。组队只统计已连接真人，不把AI和掉线席位当玩家；单人未结算仅为近期活动估算。</p>
-            <p id="request-metrics" class="hint"></p>
-          </div></div>
-          <div class="panel"><div class="panel-head"><h2>组队房间</h2><span id="room-updated" class="hint"></span></div><div class="panel-body">
-            <div class="filterbar"><input id="room-search" class="search" type="search" placeholder="搜索房间 ID、BOSS ID 或玩家 ID"><select id="room-state" aria-label="房间阶段"><option value="">全部房间</option><option value="open">等待加入</option><option value="countdown">倒计时</option><option value="battle">战斗中</option></select><button id="room-export" class="secondary">导出当前筛选</button></div>
-            <div class="table-wrap"><table><thead><tr><th>房间 / BOSS</th><th>阶段</th><th>真人玩家</th><th class="num">AI / 掉线</th><th>波次 / 回合 / 倍速</th></tr></thead><tbody id="room-rows"></tbody></table></div>
-            <div class="pager"><button class="secondary" id="room-prev">上一页</button><span id="room-page" class="page-info"></span><button class="secondary" id="room-next">下一页</button></div>
-          </div></div>
+      <div class="panel"><div class="panel-head"><h2>待处理</h2><span class="pill" id="todo-count">—</span></div><div class="panel-body ov-todos" id="dashboard-todos"><p class="hint">正在读取发放批次…</p></div></div>
+
+      <h2 class="ov-heading">玩家与对局<span id="ov-window">活跃为最近 5 分钟估算</span></h2>
+      <div class="cards ov-players">
+        <div class="ov-live" id="activity-metrics"></div>
+        <div class="metric"><span>玩家存档</span><strong id="m-accounts">—</strong><em id="m-account-types">—</em></div>
+      </div>
+      <p class="hint ov-note">活跃玩家：最近 5 分钟有成功业务请求，或当前持有组队连接的玩家，按玩家 ID 去重。组队只统计已连接的真人，不把 AI 和掉线席位算作玩家；单人未结算仅为近期活动估算。玩家存档不含系统伙伴。</p>
+      <div class="panel"><div class="panel-head"><h2>组队房间</h2></div><div class="panel-body">
+        <div class="filterbar"><input id="room-search" class="search" type="search" placeholder="搜索房间 ID、BOSS ID 或玩家 ID"><select id="room-state" aria-label="房间阶段"><option value="">全部房间</option><option value="open">等待加入</option><option value="countdown">倒计时</option><option value="battle">战斗中</option></select><button id="room-export" class="secondary">导出当前筛选</button></div>
+        <div class="table-wrap"><table><thead><tr><th>房间 / BOSS</th><th>阶段</th><th>真人玩家</th><th class="num">AI / 掉线</th><th>波次 / 回合 / 倍速</th></tr></thead><tbody id="room-rows"></tbody></table></div>
+        <div class="pager"><button class="secondary" id="room-prev">上一页</button><span id="room-page" class="page-info"></span><button class="secondary" id="room-next">下一页</button></div>
+      </div></div>
+
+      <h2 class="ov-heading">服务运行<span>运行本后台的服务进程，重启后重新累计</span></h2>
+      <div class="ov-pair">
+        <div class="panel"><div class="panel-head"><h2>业务请求</h2><span class="hint" id="request-window">近 5 分钟</span></div><div class="panel-body">
+          <div class="ov-tiles cols-4" id="request-metrics"><p class="hint">正在读取…</p></div>
+          <p class="hint">仅统计账号业务处理（含账号排队）；不含资源下载、登录鉴权失败和 HTTP 200 中的业务拒绝。</p>
+        </div></div>
+        <div class="panel" id="creation-rejections" hidden><div class="panel-head"><h2>新账号创建拦截</h2><div class="ov-head-side"><button class="ghost" data-jump="settings">调整建号设置</button><span class="pill" id="creation-rejections-total">—</span></div></div><div class="panel-body">
+          <div class="ov-tiles cols-3" id="creation-rejection-metrics"></div>
+          <p class="hint">只计次数，不记录 IP 或设备；首次进入验证的计算不算拦截。</p>
+        </div></div>
+      </div>
+      <div class="ov-pair side">
+        <div class="panel" id="process-cpu" hidden><div class="panel-head"><h2>进程 CPU</h2><span class="hint" id="process-cpu-cores"></span></div><div class="panel-body">
+          <div class="ov-tiles" id="process-cpu-metrics"></div>
+          <p class="hint">100% 是占满一个逻辑核，多线程可超过 100%；全机占比不等于容器或云主机的 CPU 配额。</p>
+        </div></div>
+        <div class="panel" id="network-traffic" hidden><div class="panel-head"><h2>网络流量</h2><span class="hint" id="network-window"></span></div><div class="panel-body">
+          <div class="table-wrap"><table class="dense ov-traffic"><thead><tr><th>端口</th><th class="num">接收</th><th class="num">发送</th><th class="num">累计接收</th><th class="num">累计发送</th></tr></thead><tbody id="network-rows"></tbody></table></div>
+          <p class="hint">接收是发进服务端的字节，发送是服务端发出的字节，含 HTTP 头；不含 TCP/IP 报头和重传，也不含玩家从外部 CDN 下载、同步到存储容器的流量。1 MiB/s ≈ 8.4 Mbps。</p>
+        </div></div>
+      </div>
+      <div class="panel" id="database-stats" hidden><div class="panel-head"><h2>数据库</h2><span class="hint" id="database-size"></span></div><div class="panel-body">
+        <div class="ov-tiles cols-6" id="database-metrics"></div>
+        <p class="hint">连接数为当前占用 / 上限。排队是等空闲连接的次数和时间，不是 SQL 执行耗时；写入只有 1 个连接，同时保存时短暂排队属正常。WAL 是预写日志，大小不代表未保存的玩家数据。读数只来自连接统计和文件大小，不访问数据库。</p>
+      </div></div>
+      <div class="panel" id="go-runtime" hidden><div class="panel-head"><h2>Go 运行时</h2><span id="go-runtime-updated" class="hint"></span></div><div class="panel-body">
+        <div class="ov-tiles cols-6" id="go-runtime-metrics"></div>
+        <p class="hint" id="go-runtime-note"></p>
+      </div></div>
+
+      <h2 class="ov-heading">内容与部署</h2>
+      <div class="ov-pair even">
+        <div class="panel"><div class="panel-head"><h2>活动 BOSS 与炼金塔</h2><div class="ov-head-side"><button class="ghost" data-jump="bosses">管理 Boss 发布</button><span class="pill gold" id="policy-pill">—</span></div></div><div class="panel-body"><div class="facts policy-facts" id="policy-facts"></div><p id="policy-copy" class="hint">正在读取…</p></div></div>
+        <div class="panel"><div class="panel-head"><h2>部署状态</h2><span class="pill green">LOCAL ONLY</span></div><div class="panel-body facts" id="deployment-facts"></div></div>
+      </div>
+    </section>
+
+
+    <!-- 任务与成就 -->
+    <section class="view" id="missions">
+      <div class="view-alert" role="alert" hidden></div>
+      <div class="rule-strip">
+        <div>
+          <svg class="icon"><use href="#i-info"/></svg>
+          <b>进度起点</b>
+          <span>期间限定和活动只用动作计数，只累计开放并解锁后的新动作；普通页签的成就读取存档已有状态和指定目标，不补历史。</span>
         </div>
-        <div class="stack">
-          <div class="panel"><div class="panel-head"><h2>待处理</h2><span class="pill" id="todo-count">—</span></div><div class="panel-body" id="dashboard-todos"><p class="hint">正在读取发放批次…</p></div></div>
-          <div class="panel"><div class="panel-head"><h2>活动 BOSS 目录</h2><span class="pill gold" id="policy-pill">—</span></div><div class="panel-body"><p id="policy-copy" class="hint">正在读取…</p><button class="secondary sm" data-jump="bosses">管理 Boss 发布</button></div></div>
-          <div class="panel"><div class="panel-head"><h2>部署状态</h2><span class="pill green">LOCAL ONLY</span></div><div class="panel-body facts" id="deployment-facts"></div></div>
+        <div>
+          <svg class="icon"><use href="#i-info"/></svg>
+          <b>每日 UTC+8</b>
+          <span>每日任务 00:00（UTC+8）切日；登录奖励仍由 Home 自动发放，不需要配置成任务。</span>
+        </div>
+      </div>
+      <div class="ws">
+        <aside class="panel ws-list" aria-label="任务系列">
+          <div class="ws-list-head">
+            <div class="ws-list-title"><b>任务系列</b><span class="hint" id="ms-count"></span></div>
+            <details class="ws-new" id="ms-new-menu">
+              <summary class="primary sm"><svg class="icon"><use href="#i-plus"/></svg>新建</summary>
+              <div class="ws-new-pop">
+                <span class="eyebrow">选择模板</span>
+                <div id="ms-templates"></div>
+              </div>
+            </details>
+          </div>
+          <div class="ws-filter">
+            <input id="ms-search" class="search" type="search" placeholder="搜索名称或编号" aria-label="搜索任务系列">
+            <select id="ms-status" aria-label="按状态筛选">
+              <option value="">全部状态</option>
+              <option value="draft">草稿</option>
+              <option value="pending">有未发布的修改</option>
+              <option value="active">开放中</option>
+              <option value="scheduled">待开始</option>
+              <option value="ended">已结束</option>
+              <option value="disabled">已停用</option>
+              <option value="archived">已归档</option>
+            </select>
+          </div>
+          <div class="ws-items" id="ms-list"></div>
+        </aside>
+        <div class="ws-main">
+          <div class="panel ws-empty" id="ms-empty">
+            <b>还没有选择系列</b>
+            <span>从左侧选择一个系列，或点「新建」从模板开始：图鉴／等级／累计登录成就链、每日任务、活动任务链。</span>
+          </div>
+          <div class="panel ws-editor" id="ms-editor" hidden>
+            <div class="ws-head" id="ms-head"></div>
+            <div class="ws-lock" id="ms-lock" hidden></div>
+            <section class="ws-section">
+              <h3 class="section-title">系列设置</h3>
+              <div class="ws-form wide" id="ms-settings"></div>
+            </section>
+            <div class="tabs ws-tabs" id="ms-tabs" role="tablist">
+              <button type="button" role="tab" data-ms-tab="edit">任务编辑</button>
+              <button type="button" role="tab" data-ms-tab="preview">玩家预览<span class="tab-dot" id="ms-preview-flag" title="预览之后内容有修改" hidden></span></button>
+            </div>
+            <div class="ms-board" id="ms-board">
+              <div class="ms-outline">
+                <div class="ms-outline-head"><b id="ms-outline-title"></b></div>
+                <div id="ms-outline"></div>
+                <button type="button" class="add-chip block" id="ms-add-task" data-ms-task-op="add"><svg class="icon"><use href="#i-plus"/></svg>添加任务</button>
+              </div>
+              <div class="ms-inspector" id="ms-inspector"></div>
+            </div>
+            <div class="ms-preview" id="ms-preview" hidden></div>
+          </div>
+        </div>
+      </div>
+      <details class="panel tool-panel" id="ms-progress-panel">
+        <summary><b>查询玩家已保存进度</b><span class="hint">只读：显示最近持久化的进度和当前日度投影，不补进度，也没有强制领奖</span></summary>
+        <div class="panel-body">
+          <form class="filterbar" id="ms-progress-form">
+            <input id="ms-user" type="number" min="1000001" placeholder="玩家 ID（可从账号管理复制）" aria-label="玩家 ID">
+            <button class="secondary" type="submit">查询</button>
+            <span class="hint" id="ms-progress-note"></span>
+          </form>
+          <div class="table-wrap">
+            <table class="dense">
+              <thead><tr><th>任务</th><th>进度</th><th>状态</th><th>本期截止（UTC+8）</th></tr></thead>
+              <tbody id="ms-progress"><tr><td colspan="4" class="empty">输入玩家 ID 后查询</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+      <div class="savebar" id="ms-savebar">
+        <div class="savebar-status"><span class="pill" id="ms-version"></span><span id="ms-state" aria-live="polite"></span></div>
+        <div class="savebar-actions">
+          <button type="button" class="secondary" id="ms-discard" data-ms-action="discard" hidden>放弃修改</button>
+          <button type="button" class="secondary" id="ms-preview-btn" data-ms-action="preview">预览</button>
+          <button type="button" class="secondary" id="ms-save" data-ms-action="save" data-save-shortcut>保存草稿</button>
+          <button type="button" class="primary" id="ms-publish" data-ms-action="publish">发布</button>
         </div>
       </div>
     </section>
 
-    <!-- 圣剑杯与探索 -->
-    <section class="view content-editor" id="activity-rewards">
+    <!-- 兑换码 -->
+    <section class="view" id="gift-codes">
       <div class="view-alert" role="alert" hidden></div>
       <div class="rule-strip">
-        <div><svg class="icon"><use href="#i-info"/></svg><b>下次出发生效</b><span>已开始的战斗／探索沿用进入时的规则或抽取结果。</span></div>
-        <div><svg class="icon"><use href="#i-check"/></svg><b>领取记录保留</b><span>已领取的档位不会因保存而重置；普通与自卡组入口共用规则。</span></div>
+        <div>
+          <svg class="icon"><use href="#i-info"/></svg>
+          <b>兑换后发邮件</b>
+          <span>领取记录与邮件在同一事务提交；玩家领取邮件后才入库。</span>
+        </div>
+        <div>
+          <svg class="icon"><use href="#i-info"/></svg>
+          <b>生成与导出分开</b>
+          <span>导出只读取已生成的码，可反复导出；停用不会收回已领取的奖励。</span>
+        </div>
       </div>
-      <div class="panel"><div class="panel-head"><div><h2>圣剑杯</h2><span class="hint">单人为挑战本：通关即领取全部尚未领取的档位，失败、超时或退出无奖励。组队积分 = 敌方本体与部位损失的 HP × 倍率。</span></div></div><div class="panel-body">
-        <div class="cup-head">
-          <div class="field grow"><label for="cup-select">编辑副本</label><select id="cup-select"></select></div>
+      <div class="ws">
+        <aside class="panel ws-list" aria-label="兑换码批次">
+          <div class="ws-list-head">
+            <div class="ws-list-title"><b>礼包批次</b><span class="hint" id="gc-count"></span></div>
+            <button type="button" class="primary sm" data-gc-action="new"><svg class="icon"><use href="#i-plus"/></svg>新建</button>
+          </div>
+          <div class="ws-filter">
+            <input id="gc-search" class="search" type="search" placeholder="搜索名称或编号" aria-label="搜索批次">
+            <select id="gc-status" aria-label="按状态筛选">
+              <option value="">全部状态</option>
+              <option value="draft">草稿</option>
+              <option value="active">可兑换</option>
+              <option value="scheduled">待开始</option>
+              <option value="expired">已过期</option>
+              <option value="exhausted">额度已用完</option>
+              <option value="disabled">已停用</option>
+            </select>
+          </div>
+          <div class="ws-items" id="gc-list"></div>
+        </aside>
+        <div class="ws-main">
+          <div class="panel ws-empty" id="gc-empty">
+            <b>还没有选择批次</b>
+            <span>从左侧选择一个批次，或点「新建」配置礼包：先定码类型、限领方式和邮件奖励，发布后再生成兑换码。</span>
+          </div>
+          <div class="panel ws-editor" id="gc-editor" hidden>
+            <div class="ws-head" id="gc-head"></div>
+            <div class="ws-lock" id="gc-lock" hidden></div>
+            <div class="tabs ws-tabs" id="gc-tabs" role="tablist">
+              <button type="button" role="tab" data-gc-tab="config">礼包配置</button>
+              <button type="button" role="tab" data-gc-tab="codes">兑换码<span class="tab-count" id="gc-tab-codes"></span></button>
+              <button type="button" role="tab" data-gc-tab="redemptions">领取记录<span class="tab-count" id="gc-tab-redemptions"></span></button>
+            </div>
+            <div class="ws-body" id="gc-config"></div>
+            <div class="ws-body" id="gc-codes" hidden></div>
+            <div class="ws-body" id="gc-redemptions" hidden></div>
+          </div>
         </div>
-        <div class="cup-rules">
-          <section class="cup-rule-group" aria-labelledby="cup-rules-all"><h4 id="cup-rules-all">单人与组队</h4>
-            <div class="field"><label for="cup-turns">回合上限</label><div class="input-unit"><input id="cup-turns" type="number" min="0" max="30" step="1" aria-describedby="cup-turns-hint"><span>回合</span></div><small class="hint" id="cup-turns-hint">0–30；0 不限，由 BOSS 自身规则结束</small></div>
-          </section>
-          <section class="cup-rule-group team" aria-labelledby="cup-rules-team"><h4 id="cup-rules-team">仅组队<span>新建房间生效，单人不变</span></h4>
-            <div class="field"><label for="cup-team-cost">起始 COST</label><div class="input-unit"><input id="cup-team-cost" type="number" min="3" max="10" step="1" aria-describedby="cup-cost-hint"><span>COST</span></div><small class="hint" id="cup-cost-hint">开局可用 COST，3–10，默认 3</small></div>
-            <div class="field"><label for="cup-rate">积分倍率</label><div class="input-unit"><input id="cup-rate" type="number" min="1" max="1000" step="1" aria-describedby="cup-rate-hint"><span>%</span></div><small class="hint" id="cup-rate-hint">积分 = 敌方损失的 HP × 倍率，1–1000</small></div>
-          </section>
+      </div>
+      <div class="savebar" id="gc-savebar">
+        <div class="savebar-status"><span class="pill" id="gc-version"></span><span id="gc-state" aria-live="polite"></span></div>
+        <div class="savebar-actions">
+          <button type="button" class="secondary" id="gc-discard" data-gc-action="discard" hidden>放弃修改</button>
+          <button type="button" class="secondary" id="gc-save" data-gc-action="save" data-save-shortcut>保存草稿</button>
+          <button type="button" class="primary" id="gc-publish" data-gc-action="publish">发布</button>
         </div>
-        <p class="field-error" id="cup-errors" hidden></p>
-        <div class="table-wrap grades-wrap"><table class="grades"><thead><tr><th class="grade-col">档位</th><th class="score-col">所需积分</th><th>固定奖励（每档最多10项，只领一次）</th></tr></thead><tbody id="cup-grades"></tbody></table></div>
-        <details class="tool-drawer" id="cup-copy-tool"><summary>批量：复制本杯设置到其他圣剑杯</summary>
-          <p class="hint">只修改草稿，核对后需点击“保存配置”。复制后各杯仍可逐项调整。</p>
-          <div class="checks" id="cup-copy-parts"><label><input type="checkbox" value="score" checked> 九档门槛</label><label><input type="checkbox" value="rewards" checked> 九档奖励</label><label><input type="checkbox" value="limits"> 回合上限、组队起始 COST 与倍率</label></div>
-          <div class="toolbar"><button class="secondary sm" id="cup-copy-all" type="button">全选其他副本</button><button class="secondary sm" id="cup-copy-none" type="button">全不选</button></div>
-          <div class="check-grid" id="cup-copy-targets"></div>
-          <div class="toolbar"><button class="secondary" id="cup-copy-apply" type="button">复制到所选副本草稿</button><span class="hint" id="cup-copy-result"></span></div>
-        </details>
-      </div></div>
-      <div class="panel"><div class="panel-head"><div><h2>探索奖励</h2><span class="hint">每项奖励独立抽取：100% 必得、0% 不掉落，可同时掉落多项；出发时确定并保存结果。移除全部奖励即关闭该事件的奖励，地图与事件演出保持不变。</span></div></div><div class="panel-body">
-        <div class="toolbar"><label class="inline-field">全部探索奖励概率 <span class="input-unit"><input id="explore-chance-all" type="number" min="0" max="100" step="0.0001" value="100" aria-label="统一概率"><span>%</span></span></label><button class="secondary" id="explore-set-chance" type="button">统一设置</button><span class="hint">界面百分比 × 10000 = 服务器 chance_per_million；数量字段不受影响。</span></div>
-        <div id="explore-reward-slots" class="slot-list"></div>
-      </div></div>
+      </div>
+    </section>
+
+    <!-- 圣剑杯与探索：两套互不相关的奖励，分页签编辑、一次保存 -->
+    <section class="view content-editor" id="activity-rewards">
+      <div class="view-alert" role="alert" hidden></div>
+      <div class="page-switch" role="tablist" aria-label="奖励类型">
+        <button type="button" role="tab" id="activity-tab-cup" aria-controls="activity-cup" aria-selected="true" data-activity-tab="cup">
+          <span class="page-switch-icon"><svg class="icon"><use href="#i-trophy"/></svg></span>
+          <span class="page-switch-text"><b>圣剑杯</b><small id="activity-cup-meta">Boss 九档积分奖励与挑战规则</small></span>
+          <span class="tab-dot" id="activity-cup-dirty" title="圣剑杯有未保存的修改" hidden></span>
+        </button>
+        <button type="button" role="tab" id="activity-tab-explore" aria-controls="activity-explore" aria-selected="false" data-activity-tab="explore" tabindex="-1">
+          <span class="page-switch-icon"><svg class="icon"><use href="#i-compass"/></svg></span>
+          <span class="page-switch-text"><b>探索奖励</b><small id="activity-explore-meta">探索地图事件的路途奖励与宝箱</small></span>
+          <span class="tab-dot" id="activity-explore-dirty" title="探索奖励有未保存的修改" hidden></span>
+        </button>
+      </div>
+      <div class="page-switch-panel" id="activity-cup" role="tabpanel" aria-labelledby="activity-tab-cup">
+        <div class="rule-strip">
+          <div><svg class="icon"><use href="#i-info"/></svg><b>下次挑战生效</b><span>已开始的战斗沿用进入时的回合、COST、倍率与倒下结束设置。</span></div>
+          <div><svg class="icon"><use href="#i-check"/></svg><b>领取记录保留</b><span>单人与组队分别记录领取进度，保存配置不会重置。</span></div>
+        </div>
+        <div class="panel"><div class="panel-head"><div><h2>圣剑杯积分奖励</h2><span class="hint">单人与组队均按有效扣血 × 倍率计分，九档奖励各领一次。好友卡组单人挑战可以计分领奖，但不参与个人排行榜。</span></div></div><div class="panel-body">
+          <div class="cup-head">
+            <div class="field grow"><label for="cup-select">编辑副本</label><select id="cup-select" data-search="输入圣剑杯名称或 ID 搜索" aria-label="编辑副本"></select></div>
+          </div>
+          <div class="cup-hp" id="cup-boss-hp" aria-live="polite" hidden></div>
+          <section class="cup-rules" aria-labelledby="cup-rules-title"><h4 id="cup-rules-title">挑战规则<span>单人与组队共用，开战时冻结</span></h4>
+            <div class="field cup-rule"><label for="cup-turns">回合上限</label><div class="input-unit"><input id="cup-turns" type="number" min="0" max="30" step="1" aria-describedby="cup-turns-hint"><span>回合</span></div><small class="hint" id="cup-turns-hint">0–30；0 不限，由 BOSS 自身规则结束</small></div>
+            <div class="field cup-rule"><span class="field-label" id="cup-dead-label">倒下结束</span><label class="switch"><input id="cup-member-dead-end" type="checkbox" aria-labelledby="cup-dead-label" aria-describedby="cup-dead-hint"><span id="cup-dead-state"></span></label><small class="hint" id="cup-dead-hint"></small></div>
+            <div class="field cup-rule"><label for="cup-team-cost">起始 COST</label><div class="input-unit"><input id="cup-team-cost" type="number" min="3" max="10" step="1" aria-describedby="cup-cost-hint"><span>COST</span></div><small class="hint" id="cup-cost-hint">开局可用 COST，3–10，默认 3</small></div>
+            <div class="field cup-rule"><label for="cup-rate">积分倍率</label><div class="input-unit"><input id="cup-rate" type="number" min="1" max="1000" step="1" aria-describedby="cup-rate-hint"><span>%</span></div><small class="hint" id="cup-rate-hint">积分 = 敌方损失的 HP × 倍率，1–1000</small></div>
+          </section>
+          <p class="field-error" id="cup-errors" hidden></p>
+          <div class="table-wrap grades-wrap"><table class="grades"><thead><tr><th class="grade-col">档位</th><th class="score-col">所需积分</th><th>固定奖励（每档最多10项，单人／组队各领一次）</th></tr></thead><tbody id="cup-grades"></tbody></table></div>
+          <details class="tool-drawer" id="cup-copy-tool"><summary>批量：复制本杯设置到其他圣剑杯</summary>
+            <p class="hint">只修改草稿，核对后需点击“保存配置”。复制后各杯仍可逐项调整。</p>
+            <div class="checks" id="cup-copy-parts"><label><input type="checkbox" value="score" checked> 九档门槛</label><label><input type="checkbox" value="rewards" checked> 九档奖励</label><label><input type="checkbox" value="limits"> 回合上限、倒下结束、起始 COST 与倍率</label></div>
+            <div class="toolbar"><button class="secondary sm" id="cup-copy-all" type="button">全选其他副本</button><button class="secondary sm" id="cup-copy-none" type="button">全不选</button></div>
+            <div class="check-grid" id="cup-copy-targets"></div>
+            <div class="toolbar"><button class="secondary" id="cup-copy-apply" type="button">复制到所选副本草稿</button><span class="hint" id="cup-copy-result"></span></div>
+          </details>
+        </div></div>
+      </div>
+      <div class="page-switch-panel" id="activity-explore" role="tabpanel" aria-labelledby="activity-tab-explore" hidden>
+        <div class="rule-strip">
+          <div><svg class="icon"><use href="#i-info"/></svg><b>下次出发生效</b><span>出发时抽取并保存结果；已出发的探索沿用原结果。</span></div>
+          <div><svg class="icon"><use href="#i-check"/></svg><b>与圣剑杯无关</b><span>这里只影响探索地图事件的掉落，不改任何 Boss 或积分档位。</span></div>
+        </div>
+        <div class="panel"><div class="panel-head"><div><h2>探索事件奖励</h2><span class="hint">每项奖励独立抽取：100% 必得、0% 不掉落，可同时掉落多项；出发时确定并保存结果。移除全部奖励即关闭该事件的奖励，地图与事件演出保持不变。</span></div></div><div class="panel-body">
+          <div class="toolbar"><label class="inline-field">全部探索奖励概率 <span class="input-unit"><input id="explore-chance-all" type="number" min="0" max="100" step="0.0001" value="100" aria-label="统一概率"><span>%</span></span></label><button class="secondary" id="explore-set-chance" type="button">统一设置</button><span class="hint">界面百分比 × 10000 = 服务器 chance_per_million；数量字段不受影响。</span></div>
+          <p class="field-error" id="explore-errors" hidden></p>
+          <div id="explore-reward-slots" class="slot-list"></div>
+        </div></div>
+      </div>
       <div class="savebar"><div class="savebar-status"><span class="pill" id="activity-version"></span><span id="activity-summary" aria-live="polite"></span></div><div class="savebar-actions"><button id="activity-export" class="secondary">导出方案</button><label class="secondary file-button" tabindex="0">导入方案<input id="activity-import" type="file" accept="application/json,.json" hidden></label><button id="activity-save" data-save-shortcut class="primary">保存配置</button></div></div>
     </section>
 
@@ -147,6 +362,7 @@
         <div class="filterbar">
           <input class="search" id="account-search" type="search" placeholder="搜索角色名、登录账号、ID 或 UUID">
           <select id="account-binding" aria-label="账号类型"><option value="">所有玩家</option><option value="bound">已绑定</option><option value="guest">游客</option><option value="system">系统伙伴</option></select>
+          <select id="account-login-block" aria-label="登录状态"><option value="">所有登录状态</option><option value="blocked">封禁中</option><option value="unblocked">未封禁</option></select>
           <select id="account-job" aria-label="当前职业"><option value="">全部职业</option><option value="1">佣兵</option><option value="2">富豪</option><option value="3">盗贼</option><option value="4">歌姬</option></select>
           <span class="range" role="group" aria-label="等级范围"><input id="account-level-min" type="number" min="1" max="999" placeholder="Lv 最低" aria-label="最低等级"><span>–</span><input id="account-level-max" type="number" min="1" max="999" placeholder="最高" aria-label="最高等级"></span>
           <select id="account-sort" aria-label="排序"><option value="id">按 ID</option><option value="created">最新注册</option><option value="login">最近登录</option><option value="level">等级从高到低</option></select>
@@ -164,7 +380,7 @@
         <details class="tool-drawer" id="account-time-range"><summary>注册与登录时间范围（本机时区）</summary><div class="form-grid four"><div class="field"><label for="account-created-after">注册晚于</label><input type="datetime-local" id="account-created-after"></div><div class="field"><label for="account-created-before">注册早于</label><input type="datetime-local" id="account-created-before"></div><div class="field"><label for="account-login-after">最近登录晚于</label><input type="datetime-local" id="account-login-after"></div><div class="field"><label for="account-login-before">最近登录早于</label><input type="datetime-local" id="account-login-before"></div></div></details>
         <div class="selbar">
           <div class="selbar-count"><b id="accounts-selection">已选 0 名玩家</b><span class="hint">跨页、跨筛选保留</span></div>
-          <div class="selbar-actions"><button class="secondary sm" id="accounts-select-page">选中本页</button><button class="secondary sm" id="accounts-unselect-page">取消本页</button><button class="secondary sm" id="accounts-select-filter">选中全部筛选结果</button><button class="secondary sm" id="accounts-clear">清空全部选择</button><button class="primary sm" id="accounts-mail"><svg class="icon"><use href="#i-gift"/></svg>给已选玩家发礼物</button></div>
+          <div class="selbar-actions"><button class="secondary sm" id="accounts-select-page">选中本页</button><button class="secondary sm" id="accounts-unselect-page">取消本页</button><button class="secondary sm" id="accounts-select-filter">选中全部筛选结果</button><button class="secondary sm" id="accounts-clear">清空全部选择</button><button class="secondary sm" id="accounts-whitelist">加入登录白名单</button><button class="primary sm" id="accounts-mail"><svg class="icon"><use href="#i-gift"/></svg>给已选玩家发礼物</button></div>
         </div>
         <div class="list-head"><span class="pill" id="account-count"></span></div>
         <div class="table-wrap"><table class="accounts-table"><thead><tr><th class="check-col"><span class="sr-only">选择</span></th><th>角色 / ID</th><th>等级 / 职业</th><th class="num">金币 / 水晶</th><th>登录账号</th><th>最近登录 / 注册</th><th>操作</th></tr></thead><tbody id="account-rows"></tbody></table></div>
@@ -177,11 +393,11 @@
       <div class="view-alert" role="alert" hidden></div>
       <ol class="steps" id="mail-steps"><li data-step="players"><b>1</b><span>收件人</span><em id="mail-step-players">0 名</em></li><li data-step="rewards"><b>2</b><span>奖励</span><em id="mail-step-rewards">0 种</em></li><li data-step="content"><b>3</b><span>标题与正文</span><em id="mail-step-content">—</em></li><li data-step="send"><b>4</b><span>预览并发放</span><em>确认后执行</em></li></ol>
       <div class="mail-layout">
-        <div class="panel"><div class="panel-head"><div><h2>物品目录</h2><span class="hint">按类型、来源、职业、星级等筛选；勾选即加入右侧奖励篮，跨页保留。</span></div><span class="pill" id="catalog-count">—</span></div><div class="panel-body">
+        <div class="panel"><div class="panel-head"><div><h2>物品目录</h2><span class="hint">按类型、职业、星级等筛选；勾选即加入右侧奖励篮，跨页保留。</span></div><span class="pill" id="catalog-count">—</span></div><div class="panel-body">
           <div class="kind-tabs" id="catalog-kinds" role="group" aria-label="目录类型"><button data-kind="currency">货币</button><button class="active" data-kind="card">卡牌</button><button data-kind="item">道具</button><button data-kind="material">素材卡</button><button data-kind="sphere">召唤石</button><button data-kind="buddy">传承卡</button><button data-kind="costume">变身皮肤</button><button data-kind="stamp">对话／表情</button><button data-kind="honor">称号</button></div>
           <div class="filterbar"><input class="search" id="catalog-search" type="search" placeholder="搜索名称、ID 或描述"><select id="catalog-rarity" aria-label="卡牌星级"><option value="0">全部星级</option><option value="1">1 星</option><option value="2">2 星</option><option value="3">3 星</option><option value="4">4 星</option><option value="5">5 星</option><option value="6">6 星</option><option value="7">7 星</option><option value="8">8 星</option></select><button class="secondary" id="catalog-reset-filters">清除筛选</button></div>
-          <div class="chip-row"><span class="chip-label">来源</span><div class="kind-tabs small" id="catalog-sources" role="group" aria-label="卡牌来源"><button class="active" data-source="">全部</button><button data-source="gacha">扭蛋</button><button data-source="dungeon">副本掉落</button><button data-source="boss_coin">BOSS币</button><button data-source="evolution">进化／乖离</button><button data-source="awakening">因子觉醒</button><button data-source="limit">限界突破</button><button data-source="event">特典／活动</button><button data-source="jp_import">日服卡牌</button><button data-source="other">其他／未标注</button></div></div>
-          <div class="chip-row"><span class="chip-label">职业</span><div class="kind-tabs small" id="catalog-jobs" role="group" aria-label="卡牌所属职业"><button class="active" data-job="0">全部</button><button data-job="1">佣兵</button><button data-job="2">富豪</button><button data-job="3">盗贼</button><button data-job="4">歌姬</button><button data-job="-1">通用</button></div></div>
+          <div class="chip-row"><span class="chip-label">职业</span><div class="kind-tabs small" id="catalog-jobs" role="group" aria-label="卡牌所属职业"><button class="active" data-job="0">全部</button><button data-job="1">佣兵</button><button data-job="2">富豪</button><button data-job="3">盗贼</button><button data-job="4">歌姬</button><button data-job="5">炼金</button><button data-job="-1">通用</button></div></div>
+          <div class="chip-row" id="catalog-stamp-filter" hidden><span class="chip-label">内容</span><div class="kind-tabs small" id="catalog-stamp-kinds" role="group" aria-label="对话与表情类型"><button class="active" data-stamp-kind="">全部</button><button data-stamp-kind="dialog">对话</button><button data-stamp-kind="image">表情</button><button data-stamp-kind="voice">语音表情</button></div></div>
           <p class="hint filter-summary" id="catalog-filter-summary" aria-live="polite"></p>
           <div class="selbar slim"><div class="selbar-count" id="catalog-status">选择目录类型后加载</div><div class="selbar-actions"><button class="secondary sm" id="catalog-select-page">全选本页</button><button class="secondary sm" id="catalog-unselect-page">取消本页</button></div></div>
           <div class="catalog-grid" id="catalog-grid"></div>
@@ -191,14 +407,32 @@
           <div class="table-wrap basket-scroll"><table class="basket"><thead><tr><th>奖励</th><th>数量</th><th><span class="sr-only">操作</span></th></tr></thead><tbody id="mail-basket"></tbody></table></div>
           <div class="toolbar"><button class="secondary sm" id="basket-clear">清空奖励篮</button><button class="secondary sm" id="basket-export">导出方案</button><label class="secondary sm file-button" tabindex="0">导入方案<input id="basket-import" type="file" accept="application/json,.json" hidden></label></div>
           <details class="tool-drawer"><summary>批量设置数量与卡牌属性</summary><div class="field"><label for="mail-quantity">新选奖励的默认数量</label><input id="mail-quantity" type="number" min="1" max="10000000" value="1"></div>
-            <div class="checks"><label><input id="mail-max-level" type="checkbox"> 卡牌满级</label><label><input id="mail-max-fame" type="checkbox"> 满名声</label><label><input id="mail-max-love" type="checkbox"> 满忠诚度</label></div><button id="basket-apply-defaults" class="secondary sm">应用到已选奖励</button></details>
+            <div class="checks"><label><input id="mail-max-level" type="checkbox"> 卡牌／传承满级</label><label><input id="mail-max-fame" type="checkbox"> 满名声</label><label><input id="mail-max-love" type="checkbox"> 满忠诚度</label></div><button id="basket-apply-defaults" class="secondary sm">应用到已选奖励</button></details>
           <div class="divider"></div>
-          <div class="recipient-head"><b id="mail-recipients">尚未选择玩家</b><span class="toolbar"><button id="mail-select-all-players" class="secondary sm" title="选择当前全部玩家（不含系统伙伴），名单在预览时固定">全部玩家</button><button id="mail-select-players" class="secondary sm">去账号页选择</button><button id="mail-clear-players" class="secondary sm" disabled>清空</button></span></div><div id="mail-recipient-preview" class="hint"></div>
-          <details class="tool-drawer"><summary>按 ID 批量添加收件人</summary><div class="field"><textarea id="mail-recipient-list" rows="3" placeholder="输入 ID，以逗号、空格或换行分隔"></textarea></div><button class="secondary sm" id="mail-add-ids">添加到收件名单</button></details>
+          <div class="recipient-block">
+            <div class="recipient-head"><b>收件人</b><span class="hint" id="mail-recipients">尚未选择</span></div>
+            <div class="seg recipient-mode" id="mail-scope" role="radiogroup" aria-label="收件范围">
+              <label class="seg-option"><input type="radio" name="mail-scope" value="some" checked><span>指定玩家</span></label>
+              <label class="seg-option"><input type="radio" name="mail-scope" value="all"><span>全部玩家</span></label>
+            </div>
+            <div class="recipient-pane" id="mail-scope-some">
+              <div class="recipient-chips" id="mail-recipient-preview"></div>
+              <div class="toolbar"><button id="mail-select-players" class="secondary sm" type="button">去账号页选择</button><button id="mail-clear-players" class="secondary sm" type="button" disabled>清空</button><span class="hint">每批最多 500 名</span></div>
+              <details class="tool-drawer"><summary>按 ID 批量添加收件人</summary><div class="field"><textarea id="mail-recipient-list" rows="3" placeholder="输入 ID，以逗号、空格或换行分隔"></textarea></div><button class="secondary sm" id="mail-add-ids" type="button">添加到收件名单</button></details>
+            </div>
+            <div class="recipient-pane scope-all" id="mail-scope-all" hidden>
+              <div class="scope-all-count"><b id="mail-all-count">—</b><span>名玩家<small>当前人数，预览时重新统计</small></span><button class="ghost sm" id="mail-all-refresh" type="button" title="重新统计"><svg class="icon"><use href="#i-refresh"/></svg></button></div>
+              <ul class="scope-notes">
+                <li>不含系统伙伴，不受 500 人上限限制</li>
+                <li>名单在预览时固定，之后注册的玩家不会收到</li>
+                <li>手动选择的玩家已保留，切回「指定玩家」即可恢复</li>
+              </ul>
+            </div>
+          </div>
           <div class="field"><label for="mail-title">邮件标题</label><input id="mail-title" maxlength="40" value="运营赠礼"></div>
           <div class="field"><label for="mail-message">正文</label><textarea id="mail-message" maxlength="200" rows="3">感谢游玩。</textarea></div>
           <button class="primary block" id="mail-send">预览发放名单与奖励</button>
-          <p class="hint">每批最多500名玩家、120种奖励，每种奖励为一封原生礼物；每名玩家的整组奖励与收据一次保存，重复执行不会重复发放。</p>
+          <p class="hint">每种奖励为一封原生礼物（每批最多 120 种）；按每 10 人推进，可暂停或继续，已完成的玩家不会重复发放。</p>
         </div></div>
       </div>
       <div class="panel batch-panel"><div class="panel-head"><div><h2>发放批次</h2><span class="hint">断网或刷新后从这里继续；已成功玩家自动跳过。</span></div><button id="mail-jobs-refresh" class="secondary sm">刷新批次</button></div><div class="panel-body">
@@ -212,15 +446,23 @@
     <!-- Boss 发布 -->
     <section class="view" id="bosses">
       <div class="view-alert" role="alert" hidden></div>
-      <div class="tabs" id="boss-catalogs" role="group" aria-label="目录"><button class="active" data-catalog="activity">活动／素材副本</button><button data-catalog="past">往期 BOSS</button></div>
-      <div class="panel"><div class="panel-head"><div><h2>发布设置</h2><span class="hint">仅发布当前 Tab 的目录；两类入口独立。普通副本、圣剑学习和已开始的战斗不受影响。</span></div></div><div class="panel-body">
+      <div class="tabs" id="boss-catalogs" role="group" aria-label="目录"><button class="active" data-catalog="activity">活动／素材副本</button><button data-catalog="past">往期 BOSS</button><button data-catalog="tower">炼金塔</button></div>
+      <div class="panel"><div class="panel-head"><div><h2>发布设置<span class="tag info" id="boss-publish-scope">仅活动／素材副本</span></h2><span class="hint" id="boss-publish-hint">活动／素材副本、往期 BOSS 和炼金塔各自单独发布。</span></div></div><div class="panel-body">
         <div class="publish-row">
-          <div class="field"><label>开放方式</label><div class="mode"><button id="mode-all">全部开放</button><button id="mode-selected">仅选中组</button></div></div>
-          <div class="field"><label for="boss-start">目录开始展示（本机时区，留空立即）</label><input type="datetime-local" id="boss-start"></div>
-          <div class="field"><label for="boss-end">目录结束展示（留空不限）</label><input type="datetime-local" id="boss-end"></div>
+          <div class="field"><label>开放方式</label><div class="mode"><button id="mode-all">全部开放</button><button id="mode-selected">仅开放选中项</button></div></div>
+          <div class="field"><label for="boss-start">开放开始（可选，本机时间）</label><input type="datetime-local" id="boss-start" title="留空为立即"></div>
+          <div class="field"><label for="boss-end">开放结束（可选）</label><input type="datetime-local" id="boss-end" title="留空为不限"></div>
         </div>
+        <p class="boss-window" id="boss-window-state" aria-live="polite"></p>
       </div></div>
-      <div class="panel"><div class="panel-body">
+      <div class="panel" id="boss-tower-panel" hidden>
+        <div class="panel-head">
+          <div><h2>炼金塔</h2><span class="hint">按整座塔开放。关闭后玩家不能进入，已有的楼层进度、星级和首通记录都会保留。</span></div>
+          <span class="pill" id="tower-count"></span>
+        </div>
+        <div class="panel-body"><div id="tower-scope"></div><div class="table-wrap tower-table-wrap"><table class="tower-table"><thead><tr><th>炼金塔</th><th class="num">层数</th><th>当前生效</th><th>开放</th><th><span class="sr-only">掉落与首通</span></th></tr></thead><tbody id="tower-rows"></tbody></table></div></div>
+      </div>
+      <div class="panel" id="boss-groups-panel"><div class="panel-body">
         <div class="filterbar"><input class="search" id="boss-search" type="search" placeholder="搜索组名、难度、group ID、boss ID"><select id="boss-attribute" aria-label="BOSS属性"></select><select id="boss-difficulty" aria-label="难度"><option value="">全部难度</option></select><select id="boss-published" aria-label="发布状态"><option value="">全部发布状态</option><option value="open">当前开放</option><option value="closed">当前关闭</option></select><button class="secondary" id="boss-reset">清除筛选</button></div>
         <div class="kind-tabs small" id="boss-kinds" role="group" aria-label="类型"><button class="active" data-kind="all">全部类型</button><button data-kind="material">素材副本</button><button data-kind="3d">3D Boss</button><button data-kind="2d">2D Boss</button></div>
         <div class="selbar slim"><div class="selbar-count" id="boss-summary"></div><div class="selbar-actions"><div class="mode small" id="boss-view" role="group" aria-label="显示方式"><button data-mode="list">列表</button><button data-mode="cards">卡片</button></div><span class="divider-v"></span><button class="secondary sm" id="select-visible">选中全部匹配</button><button class="secondary sm" id="clear-selected">清空全部选择</button></div></div>
@@ -233,22 +475,39 @@
     <!-- Boss 掉落 -->
     <section class="view content-editor" id="drops">
       <div class="view-alert" role="alert" hidden></div>
-      <div class="panel"><div class="panel-head"><div><h2>选择副本难度</h2><span class="hint">同一副本 ID 在活动和往期入口共用掉落配置；切换筛选会保留正在编辑的草稿。</span></div></div><div class="panel-body">
-        <div class="kind-tabs" id="drop-kinds" role="group" aria-label="副本类型"><button class="active" data-kind="all">全部</button><button data-kind="past">往期 BOSS</button><button data-kind="boss">其他 BOSS</button><button data-kind="material">素材副本</button></div>
-        <div class="filterbar"><input class="search" id="drop-search" type="search" placeholder="搜索 BOSS 名称、难度或 ID"><select id="drop-attribute" aria-label="掉落BOSS属性"></select><select id="drop-difficulty" aria-label="掉落难度"><option value="">全部难度</option></select><button class="secondary" id="drop-reset">清除筛选</button><span class="hint" id="drop-filter-count"></span></div>
-        <div class="field"><label for="drop-select">副本难度</label><select id="drop-select" aria-label="选择BOSS难度"></select></div>
+      <div class="tabs" id="drop-catalogs" role="group" aria-label="掉落目录"><button class="active" data-catalog="boss" aria-pressed="true">BOSS 副本</button><button data-catalog="tower" aria-pressed="false">炼金塔</button></div>
+      <div class="drop-layout">
+      <div class="panel drop-pick" id="drop-pick-panel"><div class="panel-head"><div><h2 id="drop-pick-title">选择副本难度</h2><span class="hint" id="drop-pick-hint">同一副本 ID 在活动和往期入口共用掉落配置；切换筛选会保留正在编辑的草稿。</span></div></div><div class="panel-body">
+        <div id="drop-boss-pick">
+          <div class="kind-tabs" id="drop-kinds" role="group" aria-label="副本类型"><button class="active" data-kind="all">全部</button><button data-kind="past">往期 BOSS</button><button data-kind="boss">其他 BOSS</button><button data-kind="material">素材副本</button></div>
+          <div class="filterbar picker-filters"><label class="sr-only" for="drop-select">副本难度</label><select id="drop-select" data-search="输入 BOSS 名称、难度或 ID 搜索" aria-label="选择BOSS难度"></select><select id="drop-attribute" aria-label="掉落BOSS属性"></select><select id="drop-difficulty" aria-label="掉落难度"><option value="">全部难度</option></select><button class="secondary" id="drop-reset">清除筛选</button><span class="hint" id="drop-filter-count"></span></div>
+        </div>
+        <div id="drop-tower-pick" class="tower-pick" hidden>
+          <div class="field"><label for="drop-tower-select">炼金塔</label><select id="drop-tower-select"></select></div>
+          <p class="tower-pick-summary"><span id="drop-tower-summary"></span><span class="tower-pick-others" id="drop-tower-others" hidden></span></p>
+          <div class="floor-nav" id="drop-floors" role="group" aria-label="选择战斗楼层"></div>
+          <p class="floor-legend"><span class="floor-key draft">未保存</span><span class="floor-key custom">已调整</span><span class="hint">无标记：沿用包内默认</span></p>
+        </div>
       </div></div>
+      <div class="drop-main">
       <div class="editing" id="drop-current"></div>
-      <div class="panel"><div class="panel-head"><div><h2>怪物／部位掉落</h2><span class="hint">每行独立判断概率；怪物死亡／部位破坏时掉落。新开战使用新配置，已有战斗保留开战时的掉落表。首通、金币和经验奖励保持原配置。</span></div></div><div class="panel-body">
+      <div class="panel"><div class="panel-head"><div><h2>怪物／部位掉落</h2><span class="hint" id="drop-panel-hint">每行独立判断概率；怪物死亡／部位破坏时掉落。新开战使用新配置，已有战斗保留开战时的掉落表。首通、金币和经验奖励保持原配置。</span></div></div><div class="panel-body">
         <div class="toolbar"><select id="drop-target" aria-label="掉落波次及部位"></select><button class="secondary" id="drop-add">为此目标添加奖励</button><span class="spacer"></span><label class="inline-field">概率 <span class="input-unit"><input id="drop-chance-all" type="number" min="0" max="100" step="0.0001" value="100" aria-label="统一概率"><span>%</span></span></label><button class="secondary" id="drop-set-chance">统一概率</button></div>
         <div class="table-wrap"><table><thead><tr><th>波次／怪物／部位</th><th>奖励</th><th>数量</th><th>概率</th><th><span class="sr-only">操作</span></th></tr></thead><tbody id="drop-rows"></tbody></table></div>
         <div class="toolbar tools-row"><button class="secondary" id="drop-base">载入包内默认</button><span class="joined"><select id="drop-copy-from" aria-label="同组难度"></select><button class="secondary" id="drop-copy">复制同组难度</button></span><button class="secondary" id="drop-export">导出方案</button><label class="secondary file-button" tabindex="0">导入方案<input hidden type="file" id="drop-import" accept=".json"></label></div>
-        <details class="tool-drawer"><summary>保存时同时写入同组其他难度</summary><p class="hint">只复制掉落，目标波次／部位必须相同；任何一项无效则整批不保存。</p><div class="checks content-targets" id="drop-copy-targets"></div></details>
+        <details class="tool-drawer" id="drop-bulk-copy"><summary>保存时同时写入同组其他难度</summary><p class="hint">只复制掉落，目标波次／部位必须相同；任何一项无效则整批不保存。</p><div class="checks content-targets" id="drop-copy-targets"></div></details>
+      </div></div>
+      <div class="panel" id="tower-first-panel" hidden><div class="panel-head"><div><h2>楼层首通奖励</h2><span class="hint">每位玩家第一次通关这一层时发放一次，与概率掉落分开结算。修改不影响已经领过的玩家。</span></div></div><div class="panel-body">
+        <div class="toolbar"><div class="seg" id="tower-first-mode" role="radiogroup" aria-label="楼层首通奖励"><label class="seg-option" title="跟随资源包，资源更新后自动变化"><input type="radio" name="tower-first-mode" value="default"><span>沿用包内默认</span></label><label class="seg-option"><input type="radio" name="tower-first-mode" value="off"><span>不发奖励</span></label><label class="seg-option" title="以包内默认为起点，保存后不再跟随资源包"><input type="radio" name="tower-first-mode" value="custom"><span>自定义奖励</span></label></div><button class="secondary" id="tower-first-add" hidden>添加首通奖励</button></div>
+        <div class="table-wrap"><table><thead><tr><th>首通奖励</th><th>数量</th><th><span class="sr-only">操作</span></th></tr></thead><tbody id="tower-first-rows"></tbody></table></div>
+        <p class="hint">通关星级只记录评级，不发奖励；本页不设星级奖励或排行榜。</p>
       </div></div>
       <div class="panel"><div class="panel-head"><div><h2>名声奖励</h2><span class="hint">自定义池每个名声宝箱等概率抽取一项，空池关闭名声奖励。触发几率按队长名声，满名声仍为两份；开战后不受配置修改影响。</span></div></div><div class="panel-body">
-        <div class="toolbar"><select id="fame-mode" aria-label="名声奖励模式"><option value="default">沿用默认奖励</option><option value="custom">自定义奖励池</option></select><button id="fame-add" class="secondary">添加名声奖励</button><button id="fame-clear" class="secondary">关闭此难度名声奖励</button></div>
+        <div class="toolbar"><div class="seg" id="fame-mode" role="radiogroup" aria-label="名声奖励"><label class="seg-option"><input type="radio" name="fame-mode" value="default"><span>沿用默认</span></label><label class="seg-option"><input type="radio" name="fame-mode" value="off"><span>关闭</span></label><label class="seg-option"><input type="radio" name="fame-mode" value="custom"><span>自定义奖励池</span></label></div><button id="fame-add" class="secondary" hidden>添加名声奖励</button></div>
         <div class="table-wrap"><table><thead><tr><th>候选奖励</th><th>数量</th><th><span class="sr-only">操作</span></th></tr></thead><tbody id="fame-rows"></tbody></table></div>
       </div></div>
+      </div>
+      </div>
       <div class="savebar"><div class="savebar-status"><span class="pill" id="drop-version"></span><span id="drop-summary" aria-live="polite"></span></div><div class="savebar-actions"><button class="primary" id="drop-save" data-save-shortcut>保存掉落配置</button></div></div>
     </section>
 
@@ -256,8 +515,8 @@
     <section class="view content-editor" id="exchanges">
       <div class="view-alert" role="alert" hidden></div>
       <div class="panel"><div class="panel-head"><div><h2>选择兑换所</h2><span class="hint">筛选不会切换正在编辑的兑换所；以下方“正在编辑”为准。</span></div></div><div class="panel-body">
-        <div class="filterbar"><input id="exchange-shop-search" class="search" type="search" placeholder="搜索兑换所名称或 ID"><select id="exchange-shop-status" aria-label="兑换所状态"><option value="">全部兑换所</option><option value="active">开放中</option><option value="scheduled">未开始</option><option value="closed">关闭／已结束</option><option value="deleted">已删除</option></select><button class="secondary" id="exchange-reset">清除筛选</button></div>
-        <div class="toolbar"><select id="exchange-select" aria-label="选择兑换所"></select><button class="secondary" id="exchange-new">新增兑换所</button><button class="secondary" id="exchange-clone">复制为新兑换所</button><span class="spacer"></span><button class="danger" id="exchange-delete">删除兑换所</button><button class="secondary" id="exchange-restore" hidden>恢复兑换所</button></div>
+        <div class="filterbar picker-filters"><select id="exchange-select" data-search="输入兑换所名称或 ID 搜索" aria-label="选择兑换所"></select><select id="exchange-shop-status" aria-label="兑换所状态"><option value="">全部兑换所</option><option value="active">开放中</option><option value="scheduled">未开始</option><option value="closed">关闭／已结束</option><option value="deleted">已删除</option></select><span class="hint" id="exchange-filter-count"></span></div>
+        <div class="toolbar"><button class="secondary" id="exchange-new">新增兑换所</button><button class="secondary" id="exchange-clone">复制为新兑换所</button><span class="spacer"></span><button class="danger" id="exchange-delete">删除兑换所</button><button class="secondary" id="exchange-restore" hidden>恢复兑换所</button></div>
       </div></div>
       <div class="editing" id="exchange-current"></div>
       <fieldset id="exchange-fields" class="editor-fields">
@@ -266,12 +525,12 @@
           <div class="form-grid four"><div class="field"><label>开放状态</label><label class="switch"><input id="exchange-enabled" type="checkbox"><span>开放兑换所</span></label></div><div class="field"><label for="exchange-tab">游戏分类</label><select id="exchange-tab"><option value="0">普通</option><option value="1">活动</option></select></div><div class="field"><label for="exchange-start">开始时间（本机时区，留空立即）</label><input id="exchange-start" type="datetime-local"></div><div class="field"><label for="exchange-end">结束时间（留空不限）</label><input id="exchange-end" type="datetime-local"></div></div>
           <p class="hint" id="exchange-schedule"></p>
         </div></div>
-        <div class="panel"><div class="panel-head"><div><h2>商品</h2><span class="hint">限购 -1 表示不限量；按每位玩家累计，不随上下架或重启重置。已有商品只能下架，换奖励请新增商品。</span></div></div><div class="panel-body">
-          <div class="batch-box"><span class="batch-title">新增与批量设置</span><label class="inline-field">兑换货币 <span class="joined"><input id="exchange-currency-search" type="search" placeholder="搜索货币" aria-label="搜索兑换货币"><select id="exchange-currency"></select></span></label><label class="inline-field">单价 <input id="exchange-price" type="number" min="1" max="10000000" value="100"></label><label class="inline-field">每人限兑 <input id="exchange-stock" type="number" min="-1" max="999999" value="99"></label>
+        <div class="panel"><div class="panel-head"><div><h2>商品</h2><span class="hint">限兑按每位玩家累计，留空为不限量，不随上下架或重启重置。已有商品只能下架，换奖励请新增商品。</span></div></div><div class="panel-body">
+          <div class="batch-box"><span class="batch-title">新增与批量设置</span><label class="inline-field">兑换货币 <select id="exchange-currency" data-search="搜索货币名称或 ID" aria-label="兑换货币"></select></label><label class="inline-field">单价 <input id="exchange-price" type="number" min="1" max="10000000" value="100"></label><label class="inline-field">每人限兑 <input id="exchange-stock" type="number" min="1" max="999999" value="99" placeholder="不限"></label>
             <div class="toolbar"><button class="secondary sm" id="exchange-add">从目录批量添加商品</button><button class="secondary sm" id="exchange-fusion">补齐卡牌强化素材</button><button class="secondary sm" id="exchange-evolution">补齐卡牌进化素材</button><span class="hint">使用左侧价格与限购加入草稿，跳过本店已有商品。</span></div></div>
           <div class="filterbar"><input class="search" id="exchange-search" type="search" placeholder="搜索本店商品名称或 ID"><select id="exchange-offer-status" aria-label="上架状态"><option value="">全部商品</option><option value="on">上架中</option><option value="off">已下架</option></select></div>
           <div class="selbar"><div class="selbar-count"><b id="exchange-selection">已选 0 项</b></div><div class="selbar-actions"><button class="secondary sm" id="exchange-select-page">选中本页</button><button class="secondary sm" id="exchange-unselect-page">取消本页</button><button class="secondary sm" id="exchange-clear">清空全部选择</button><span class="divider-v"></span><button class="secondary sm" id="exchange-batch">把货币／单价／限兑应用到所选</button><button class="secondary sm" id="exchange-on">所选上架</button><button class="secondary sm" id="exchange-off">所选下架</button></div></div>
-          <div class="table-wrap"><table><thead><tr><th class="check-col"><span class="sr-only">选择</span></th><th>上架</th><th>商品／奖励</th><th>数量</th><th>兑换货币</th><th>单价</th><th>限兑</th></tr></thead><tbody id="exchange-rows"></tbody></table></div>
+          <div class="table-wrap"><table><thead><tr><th class="check-col"><span class="sr-only">选择</span></th><th>上架</th><th>商品／奖励</th><th>数量</th><th>兑换货币</th><th>单价</th><th>每人限兑</th></tr></thead><tbody id="exchange-rows"></tbody></table></div>
           <div class="pager"><button class="secondary" id="exchange-prev">上一页</button><span id="exchange-page-info" class="page-info"></span><label>跳至 <input id="exchange-page" type="number" min="1" value="1" aria-label="页码"> 页</label><button class="secondary" id="exchange-next">下一页</button></div>
         </div></div>
       </fieldset>
@@ -281,11 +540,12 @@
     <!-- 道具商店 -->
     <section class="view" id="shop">
       <div class="view-alert" role="alert" hidden></div>
-      <div class="panel"><div class="panel-head"><div><h2>商店商品</h2><span class="hint">按原游戏页签出售。限购以份数计，0 为不限；每日零点、每周一零点、每月 1 日零点按北京时间重置。下架与改价都保留玩家的购买计数。</span></div><span class="pill" id="shop-summary"></span></div><div class="panel-body">
+      <div class="panel"><div class="panel-head"><div><h2>商店商品</h2><span class="hint">按原游戏页签出售。下架、改价和修改限购都不会清零玩家已有的购买计数。</span></div><span class="pill" id="shop-summary"></span></div><div class="panel-body">
+        <div class="rule-strip shop-rules"><div><b>份</b><span>购买与计价的单位：单价按份收取，一份含「每份含」个物品</span></div><div><b>总共</b><span>每个账号累计最多可买的份数，永不重置</span></div><div><b>每日／每周／每月</b><span>周期内最多可买的份数，北京时间每日零点、周一零点、每月 1 日零点重置；与总共同时设置时取剩余较少者</span></div></div>
         <div class="kind-tabs shop-tabs" id="shop-tabs" role="group" aria-label="商店页签"></div>
         <div class="filterbar"><input class="search" id="shop-search" type="search" placeholder="搜索商品名称或编号" aria-label="搜索商品"><select id="shop-status" aria-label="上架状态"><option value="">全部状态</option><option value="on">上架中</option><option value="off">已下架</option></select><span class="spacer"></span>
           <button class="secondary" id="shop-add" type="button"><svg class="icon"><use href="#i-plus"/></svg>添加道具／表情</button><span class="joined shop-extend"><select id="shop-extend" aria-label="扩容商品"><option value="4">卡牌持有容量</option><option value="3">卡牌仓库容量</option></select><button class="secondary" id="shop-add-extend" type="button">添加扩容</button></span></div>
-        <div class="table-wrap"><table class="shop-table"><thead><tr><th>上架</th><th>商品</th><th>页签</th><th>价格</th><th>每次购买</th><th>限购（0 为不限）</th></tr></thead><tbody id="shop-rows"></tbody></table></div>
+        <div class="table-wrap"><table class="shop-table"><thead><tr><th>上架</th><th>商品／页签</th><th>单价（每份）</th><th>购买单位</th><th>每人限购（留空不限）</th></tr></thead><tbody id="shop-rows"></tbody></table></div>
         <p class="hint shop-filter-note" id="shop-filter-note" hidden></p>
       </div></div>
       <div class="savebar"><div class="savebar-status"><span class="pill" id="shop-version"></span><span id="shop-draft-state" aria-live="polite"></span></div><div class="savebar-actions"><button class="primary" id="shop-save" data-save-shortcut disabled>保存商店</button></div></div>
@@ -296,8 +556,8 @@
       <div class="view-alert" role="alert" hidden></div>
       <div class="panel"><div class="panel-body">
         <p class="hint">全部内置常规池均可开关，并须处于卡池自身排期内；仅新手固定单抽／十一连不受运营配置影响。</p>
-        <div class="filterbar"><input id="gacha-search" class="search" type="search" placeholder="搜索扭蛋名称、组 ID、卡池 ID 或消耗道具"><select id="gacha-status" aria-label="发布状态"><option value="">全部发布状态</option><option value="open">已勾选发布</option><option value="closed">未勾选发布</option></select></div>
-        <div class="selbar slim"><div class="selbar-count" id="gacha-summary"></div><div class="selbar-actions"><button class="secondary sm" id="gacha-select-filtered">勾选筛选结果</button><button class="secondary sm" id="gacha-clear-filtered">取消筛选结果</button><span class="divider-v"></span><button class="secondary sm" id="gacha-select-all">全部开放</button><button class="secondary sm" id="gacha-clear-all">全部关闭</button></div></div>
+        <div class="filterbar"><input id="gacha-search" class="search" type="search" placeholder="搜索扭蛋名称、分类、组 ID、卡池 ID 或消耗道具"><select id="gacha-status" aria-label="开放状态"><option value="">全部开放状态</option><option value="open">开放</option><option value="closed">关闭</option><option value="pending">有未保存的开关修改</option></select><select id="gacha-category" aria-label="扭蛋分类"><option value="">全部扭蛋分类</option></select></div>
+        <div class="selbar slim"><div class="selbar-count" id="gacha-summary"></div><div class="selbar-actions"><button class="secondary sm" id="gacha-select-filtered">开放筛选结果</button><button class="secondary sm" id="gacha-clear-filtered">关闭筛选结果</button><span class="divider-v"></span><button class="secondary sm" id="gacha-select-all">全部开放</button><button class="secondary sm" id="gacha-clear-all">全部关闭</button></div></div>
         <div class="gacha-grid" id="gacha-rows"></div>
       </div></div>
       <div class="savebar"><div class="savebar-status"><span class="pill gold" id="gacha-revision">revision —</span><span id="gacha-draft-state" aria-live="polite"></span></div><div class="savebar-actions"><button class="primary" id="gacha-save" data-save-shortcut>保存并即时发布</button></div></div>
@@ -307,26 +567,35 @@
     <section class="view" id="pool-editor">
       <div class="view-alert" role="alert" hidden></div>
       <div class="panel"><div class="panel-head"><div><h2>选择卡池</h2><span class="hint">筛选不会切换正在编辑的卡池。开放由「扭蛋发布」统一控制。</span></div></div><div class="panel-body">
-        <div class="filterbar"><input id="pool-name-search" class="search" type="search" placeholder="搜索卡池名称或 ID"><select id="pool-config-status" aria-label="配置状态"><option value="">全部配置状态</option><option value="open">排期内</option><option value="closed">未开始／已结束</option><option value="draft">有未发布草稿</option><option value="custom">后台新建</option><option value="deleted">已删除</option></select><span class="hint" id="pool-filter-count"></span></div>
-        <div class="toolbar"><select id="pool-select" aria-label="选择卡池"></select><button class="secondary" id="pool-create" type="button"><svg class="icon"><use href="#i-plus"/></svg>新建卡池</button><button class="danger" id="pool-delete" type="button" hidden>移入回收站</button><button class="secondary" id="pool-restore" type="button" hidden>恢复卡池</button><span class="spacer"></span><button class="secondary" id="pool-export">导出配置</button><label class="secondary file-button" tabindex="0">导入配置<input id="pool-import" type="file" accept=".json" hidden></label></div>
+        <div class="filterbar picker-filters"><select id="pool-select" data-search="输入卡池名称或任一抽法 ID 搜索" aria-label="选择卡池"></select><select id="pool-config-status" aria-label="配置状态"><option value="">全部配置状态</option><option value="open">排期内</option><option value="closed">未开始／已结束</option><option value="draft">有未发布草稿</option><option value="custom">后台新建</option><option value="deleted">已删除</option></select><select id="pool-category-filter" aria-label="扭蛋分类"><option value="">全部扭蛋分类</option></select><span class="hint" id="pool-filter-count"></span></div>
+        <div class="toolbar"><button class="secondary" id="pool-create" type="button"><svg class="icon"><use href="#i-plus"/></svg>新建卡池</button><button class="danger" id="pool-delete" type="button" hidden>移入回收站</button><button class="secondary" id="pool-restore" type="button" hidden>恢复卡池</button><span class="spacer"></span><button class="secondary" id="pool-export">导出配置</button><label class="secondary file-button" tabindex="0">导入配置<input id="pool-import" type="file" accept=".json" hidden></label></div>
         <details id="pool-trash-panel" class="tool-drawer"><summary id="pool-trash-summary">卡池回收站</summary><p class="hint">这里保留可恢复的配置及抽取计数。永久删除须到维护工具预览、备份后执行。</p><div class="table-wrap"><table><thead><tr><th>卡池</th><th>分池</th><th>配置状态</th><th>操作</th></tr></thead><tbody id="pool-trash-rows"></tbody></table></div></details>
       </div></div>
       <div class="editing"><span id="pool-current"></span><span class="hint" id="pool-contract"></span></div>
       <div class="pool-note bad" id="pool-deleted-note" role="status" hidden><svg class="icon"><use href="#i-alert"/></svg><span>此卡池已删除，玩家看不到它。恢复后才能编辑或发布；抽取次数与历史记录均已保留。</span></div>
-      <div class="panel pool-setup"><div class="panel-head"><div><h2>卡池设置</h2><span class="hint">封面、排期和累计限抽由整个卡池共用；每个分池（抽法）有自己的开放、名称、消耗、价格和奖池。</span></div></div><div class="panel-body">
+      <div class="panel pool-setup"><div class="panel-head"><div><h2>卡池设置</h2><span class="hint">封面、排期、概率页说明、限抽次数和扭蛋分类由整个卡池共用；每个分池（抽法）有自己的开放、名称、消耗、价格和奖池。</span></div></div><div class="panel-body">
         <div class="pool-shared">
           <div class="gacha-art cover-preview" id="pool-cover-preview"></div>
-          <div class="pool-shared-copy"><div class="cover-title"><b>卡池封面</b><span class="tag" id="pool-cover-state">包内封面</span></div><div class="toolbar"><label class="secondary file-button" tabindex="0" id="pool-cover-upload-label"><svg class="icon"><use href="#i-upload"/></svg>上传封面<input id="pool-cover-upload" type="file" accept="image/png,image/jpeg" hidden></label><button class="secondary" id="pool-cover-reset" type="button">恢复包内封面</button></div><p class="hint">PNG 或 JPEG，2 MiB 以内，建议 934×372。客户端列表显示第一个分池的封面，所有分池保存同一引用；发布后生效，读取位置在「运营设置 → 卡池封面来源」切换。</p></div>
+          <div class="pool-shared-copy"><div class="cover-title"><b>卡池封面</b><span class="tag" id="pool-cover-state">包内封面</span></div><div class="toolbar"><label class="secondary file-button" tabindex="0" id="pool-cover-upload-label"><svg class="icon"><use href="#i-upload"/></svg>上传封面<input id="pool-cover-upload" type="file" accept="image/png,image/jpeg" hidden></label><button class="secondary" id="pool-cover-reset" type="button">恢复包内封面</button></div><div id="pool-cover-alert"></div><p class="hint">PNG 或 JPEG，2 MiB 以内，建议 934×372。客户端列表显示第一个分池的封面，所有分池保存同一引用；发布后生效；读取位置（本服务器或 S3／CDN）与首页轮播图共用，在「运营设置 › 上传图片」切换。</p></div>
           <div class="pool-shared-rules">
             <div class="field"><label for="pool-start">开始时间（本机时区，留空立即）</label><input id="pool-start" type="datetime-local"></div>
             <div class="field"><label for="pool-end">结束时间（留空不限）</label><input id="pool-end" type="datetime-local"></div>
             <div class="field"><label for="pool-play-limit">每人累计限抽次数</label><input id="pool-play-limit" type="number" min="0" max="1000000" value="0"></div>
-            <p class="hint">排期与限抽对全部分池（含职业分池）一起生效。限抽 0 为不限、1 为一次性，单抽或连抽都计一次。</p>
+            <div class="field"><label for="pool-daily-limit">每人每日限抽次数</label><input id="pool-daily-limit" type="number" min="0" max="1000000" value="0"></div>
+            <div class="field"><label for="pool-category">扭蛋分类</label><select id="pool-category"></select></div>
+            <p class="hint">排期、限抽和分类对全部分池（含职业分池）一起生效。限抽填 0 为不限，累计填 1 为一次性；每日限抽按北京时间 0 点换日。单抽、连抽和免费首抽都计一次，抽取失败不计；到达上限后卡池仍可查看。</p>
+            <p class="hint">扭蛋分类决定卡池出现在游戏扭蛋列表的哪个入口，不改消耗方式和价格。只有含可见卡池的入口才会显示；兑换所是独立入口，不在此列。</p>
             <p class="pool-warning" id="pool-schedule-note" hidden></p>
           </div>
+          <div class="pool-odds-msg">
+            <div class="pool-odds-msg-head"><label for="pool-odds-msg">概率页说明</label><span class="pool-odds-msg-count" id="pool-odds-msg-count"></span></div>
+            <textarea id="pool-odds-msg" rows="3" aria-describedby="pool-odds-msg-help pool-odds-msg-count"></textarea>
+            <p class="hint" id="pool-odds-msg-help">显示在游戏概率页上方，单抽、连抽和职业分池共用这一份。留空则不显示；发布后生效。</p>
+          </div>
         </div>
-        <div class="pool-variants-head"><h3>分池</h3><span class="hint" id="pool-variants-hint">点击一行编辑该分池的奖池；可只开放其中几个（至少一个）。</span><span class="spacer"></span><input id="pool-payment-search" class="search narrow" type="search" placeholder="筛选消耗道具" aria-label="筛选消耗道具"></div>
+        <div class="pool-variants-head"><h3>分池</h3><span class="hint" id="pool-variants-hint">点击一行编辑该分池的奖池；可只开放其中几个（至少一个）。</span></div>
         <div class="table-wrap"><table class="dense strategy-table"><thead><tr><th><span class="sr-only">编辑</span></th><th>开放</th><th>分池</th><th>显示名称</th><th>消耗方式</th><th>消耗道具</th><th>价格</th><th>奖池</th></tr></thead><tbody id="pool-strategies"></tbody></table></div>
+        <div class="pool-buttons" id="pool-buttons"></div>
       </div></div>
       <div class="pool-variant-bar" id="pool-variant-bar">
         <div class="pool-variant-title"><span>正在编辑分池</span><b id="pool-variant-name">—</b></div>
@@ -338,8 +607,7 @@
       <div id="pool-card-editor" class="pool-columns">
         <div class="panel"><div class="panel-head"><div><h2>卡牌目录</h2><span class="hint" id="pool-eligibility-hint">点击卡牌加入或移出草稿。</span></div></div><div class="panel-body">
           <div class="filterbar"><input class="search" id="pool-search" type="search" placeholder="搜索卡牌名称、ID、图像 ID"><select id="pool-rarity" aria-label="稀有度"><option value="0">全部星级</option><option value="1">1 星</option><option value="2">2 星</option><option value="3">3 星</option><option value="4">4 星</option><option value="5">5 星</option><option value="6">6 星</option><option value="7">7 星</option><option value="8">8 星</option></select><label class="inline-check" id="pool-eligible-only-field"><input id="pool-eligible-only" type="checkbox" checked> 只显示可加入的卡牌</label><label class="inline-check"><input id="pool-ready" type="checkbox"> 仅资源已闭包</label></div>
-          <div class="chip-row"><span class="chip-label">来源</span><div class="kind-tabs small" id="pool-sources" role="group" aria-label="卡牌来源"><button class="active" data-source="">全部</button><button data-source="gacha">扭蛋</button><button data-source="dungeon">副本掉落</button><button data-source="boss_coin">BOSS币</button><button data-source="evolution">进化／乖离</button><button data-source="awakening">因子觉醒</button><button data-source="limit">限界突破</button><button data-source="event">特典／活动</button><button data-source="jp_import">日服卡牌</button><button data-source="other">其他／未标注</button></div></div>
-          <div class="chip-row"><span class="chip-label">职业</span><div class="kind-tabs small" id="pool-jobs" role="group" aria-label="卡牌所属职业"><button class="active" data-job="0">全部</button><button data-job="1">佣兵</button><button data-job="2">富豪</button><button data-job="3">盗贼</button><button data-job="4">歌姬</button><button data-job="-1">通用</button></div></div>
+          <div class="chip-row"><span class="chip-label">职业</span><div class="kind-tabs small" id="pool-jobs" role="group" aria-label="卡牌所属职业"><button class="active" data-job="0">全部</button><button data-job="1">佣兵</button><button data-job="2">富豪</button><button data-job="3">盗贼</button><button data-job="4">歌姬</button><button data-job="5">炼金</button><button data-job="-1">通用</button></div></div>
           <div class="selbar slim"><div class="selbar-count" id="pool-card-count"></div><div class="selbar-actions"><button class="secondary sm" id="pool-add-matches">加入全部匹配</button><button class="secondary sm" id="pool-prev">上一页</button><button class="secondary sm" id="pool-next">下一页</button></div></div>
           <div class="catalog-grid" id="pool-cards"></div>
         </div></div>
@@ -358,15 +626,59 @@
           <div class="pager" id="pool-selected-pager"><button class="secondary" id="pool-selected-prev">上一页</button><span id="pool-selected-page-info" class="page-info"></span><label>跳至 <input id="pool-selected-page" type="number" min="1" value="1" aria-label="页码"> 页</label><button class="secondary" id="pool-selected-next">下一页</button></div>
         </div></div>
       </div>
-      <div id="pool-mixed-editor" class="panel" style="display:none"><div class="panel-head"><div><h2>阶段与混合奖励</h2><span class="hint">保留预设奖励身份与赠礼规则，可调整各阶段价格、每项权重；最后阶段重复。</span></div></div><div class="panel-body">
-        <select id="pool-mixed-variant" aria-label="抽法" hidden></select><select id="pool-stage" aria-label="阶段" hidden></select>
-        <div class="kind-tabs stage-tabs" id="pool-stage-tabs" role="group" aria-label="阶段" hidden></div>
-        <div class="stage-settings"><div class="field"><label id="pool-stage-price-label" for="pool-stage-price">本阶段价格</label><input id="pool-stage-price" type="number" min="1" max="10000000"></div>
-          <div class="field" id="pool-stage-payment"><label for="pool-stage-pay-type">本阶段消耗</label><div class="stage-pay"><select id="pool-stage-pay-type"><option value="0">沿用抽法设置</option><option value="3">水晶</option><option value="4">道具</option><option value="6">付费水晶</option></select><input id="pool-stage-item-search" type="search" placeholder="筛选道具" aria-label="筛选阶段消耗道具"><select id="pool-stage-pay-item" aria-label="阶段消耗道具"></select></div></div></div>
-        <div class="filterbar"><input id="pool-mixed-search" class="search" type="search" placeholder="搜索奖励名称或 ID"><span class="hint" id="pool-mixed-total"></span></div>
-        <div class="table-wrap"><table class="pool-mixed-table"><thead><tr><th>奖励</th><th class="num">数量</th><th>权重</th></tr></thead><tbody id="pool-mixed-rows"></tbody></table></div>
-        <div class="pager"><button id="pool-mixed-prev" class="secondary">上一页</button><span id="pool-mixed-page" class="page-info"></span><button id="pool-mixed-next" class="secondary">下一页</button></div><p id="pool-mixed-gifts" class="hint"></p>
-      </div></div>
+      <div id="pool-mixed-editor" class="panel" hidden>
+        <div class="panel-head">
+          <div><h2 id="pool-mixed-title">奖励表</h2><span class="hint" id="pool-mixed-note"></span></div>
+          <span class="tag info" id="pool-mixed-rule"></span>
+        </div>
+        <div class="panel-body">
+          <div class="stage-strip" id="pool-stage-tabs" role="tablist" aria-label="阶段" hidden></div>
+          <div class="stage-settings" id="pool-stage-settings" hidden>
+            <div class="field">
+              <label id="pool-stage-price-label" for="pool-stage-price">本阶段价格</label>
+              <input id="pool-stage-price" type="number" min="1" max="10000000">
+            </div>
+            <div class="field">
+              <label for="pool-stage-pay-type">本阶段消耗</label>
+              <div class="stage-pay">
+                <select id="pool-stage-pay-type">
+                  <option value="0">沿用分池设置</option>
+                  <option value="3">水晶</option>
+                  <option value="4">道具</option>
+                  <option value="6">付费水晶</option>
+                </select>
+                <select id="pool-stage-pay-item" data-search="搜索道具名称或 ID" aria-label="阶段消耗道具"></select>
+              </div>
+            </div>
+          </div>
+          <div class="toolbar">
+            <input id="pool-mixed-search" class="search narrow" type="search" placeholder="搜索奖励名称或 ID" aria-label="搜索奖励">
+            <span class="hint" id="pool-mixed-total"></span>
+            <span class="spacer"></span>
+            <button type="button" class="secondary sm" id="pool-mixed-copy">复制上一阶段奖励</button>
+            <button type="button" class="primary sm" id="pool-mixed-add"><svg class="icon"><use href="#i-plus"/></svg>添加奖励</button>
+          </div>
+          <div class="table-wrap mixed-scroll">
+            <table class="dense pool-mixed-table">
+              <thead><tr><th>奖励</th><th>数量</th><th>权重</th><th>单次概率</th><th><span class="sr-only">操作</span></th></tr></thead>
+              <tbody id="pool-mixed-rows"></tbody>
+            </table>
+          </div>
+          <div class="pager" id="pool-mixed-pager">
+            <button type="button" id="pool-mixed-prev" class="secondary">上一页</button>
+            <span id="pool-mixed-page" class="page-info"></span>
+            <button type="button" id="pool-mixed-next" class="secondary">下一页</button>
+          </div>
+          <p id="pool-mixed-gifts" class="hint" hidden></p>
+        </div>
+      </div>
+      <div class="panel pool-gifts" id="pool-gifts-panel" hidden>
+        <div class="panel-head">
+          <div><h2>随机附赠 <span class="pill" id="pool-gifts-count"></span></h2><span class="hint">本分池每次抽取成功后，按抽取次数区间逐组判定：每组最多附赠一项，按权重抽出；空奖权重命中时不附赠。次数按分池分别累计。</span></div>
+          <div class="pool-gifts-actions"><button class="secondary sm" id="pool-gifts-copy" type="button">应用到其他分池</button><button class="secondary sm" id="pool-gifts-add" type="button"><svg class="icon"><use href="#i-plus"/></svg>添加一组</button></div>
+        </div>
+        <div class="panel-body" id="pool-gifts-body"></div>
+      </div>
       <div class="panel preview-panel"><div class="panel-head"><h2>预览</h2></div><div id="pool-preview" class="panel-body"></div></div>
       <div class="savebar"><div class="savebar-status"><ol class="flow" id="pool-flow" aria-label="发布流程"><li data-flow="edit">编辑</li><li data-flow="preview">保存草稿并预览</li><li data-flow="publish">发布</li></ol><span class="pill gold" id="pool-version">—</span></div><div class="savebar-actions"><button class="secondary" id="pool-discard" title="放弃已保存的草稿和未保存的修改，恢复为已发布版本">放弃草稿</button><button class="secondary" id="pool-save-preview" data-save-shortcut>保存草稿并预览</button><button class="primary" id="pool-publish" disabled>发布已预览草稿</button></div></div>
     </section>
@@ -374,7 +686,7 @@
     <!-- 公告与奖励 -->
     <section class="view" id="player-policy">
       <div class="view-alert" role="alert" hidden></div>
-      <nav class="section-nav sticky" aria-label="本页分区"><a href="#pp-notice">游戏公告</a><a href="#pp-mail">新手毕业邮件</a><a href="#pp-story">剧情首通</a><a href="#pp-login">签到奖励</a><a href="#pp-navi">看板购买</a><span class="hint">整页一次保存，保存后生效并在重启后保留；签到与剧情保留领取进度。</span></nav>
+      <nav class="section-nav sticky" aria-label="本页分区"><a href="#pp-notice">游戏公告</a><a href="#pp-banners">首页轮播</a><a href="#pp-mail">新手毕业邮件</a><a href="#pp-story">剧情首通</a><a href="#pp-login">签到奖励</a><a href="#pp-navi">看板购买</a><span class="hint">整页一次保存，保存后生效并在重启后保留；签到与剧情保留领取进度。</span></nav>
       <div class="panel" id="pp-notice"><div class="panel-head"><h2>游戏公告</h2><a href="/api/player-policy/notice-preview" target="_blank" rel="noopener">查看已发布公告 ↗</a></div><div class="panel-body">
         <label class="switch"><input id="player-notice-enabled" type="checkbox"><span>显示公告内容</span></label>
         <div class="form-grid three"><div class="field"><label for="player-notice-title">标题</label><input id="player-notice-title" maxlength="80"></div><div class="field"><label for="player-notice-start">开始显示（本机时区，留空立即）</label><input id="player-notice-start" type="datetime-local"></div><div class="field"><label for="player-notice-end">结束显示（留空不限）</label><input id="player-notice-end" type="datetime-local"></div></div>
@@ -382,6 +694,38 @@
         <div class="field"><label for="player-notice-body">正文（纯文字，支持换行）</label><textarea id="player-notice-body" maxlength="8000" rows="6"></textarea></div>
         <p class="hint">关闭时公告页显示“暂无公告”，游戏入口保留。</p>
       </div></div>
+      <div class="panel" id="pp-banners">
+        <div class="panel-head">
+          <div><h2>首页轮播</h2><span class="hint">按列表顺序每 5.5 秒轮换；保存整页后，玩家下次回到首页或重新登录时生效。</span></div>
+          <span class="pill" id="home-banner-count"></span>
+        </div>
+        <div class="panel-body hb-body">
+          <div class="hb-top">
+            <div class="hb-mode">
+              <span class="field-label">轮播来源</span>
+              <div class="seg" id="home-banner-mode" role="radiogroup" aria-label="轮播来源">
+                <label class="seg-option"><input type="radio" name="home-banner-mode" value="system"><span>默认横幅</span></label>
+                <label class="seg-option"><input type="radio" name="home-banner-mode" value="custom"><span>自定义轮播</span></label>
+              </div>
+              <p class="hint" id="home-banner-mode-note"></p>
+              <ul class="hb-rules">
+                <li>图片：PNG／JPEG，2 MiB 以内；横幅位为 408×150，建议同比例</li>
+                <li>读取位置：<span id="home-banner-source">home-banners 文件夹，与卡池封面共用读取设置</span><button type="button" class="ghost" data-jump="settings">运营设置 › 上传图片</button></li>
+                <li>每张可单独启停、排期和设置点击跳转；时间留空即立即开始、不限结束</li>
+                <li>拖动左侧序号调整顺序，拖入图片可直接添加或更换</li>
+              </ul>
+            </div>
+            <figure class="hb-stage" id="home-banner-stage" aria-live="polite"></figure>
+          </div>
+          <ol class="hb-list" id="home-banner-list" aria-label="轮播图片"></ol>
+          <div class="hb-dropzone">
+            <button type="button" class="secondary hb-add" id="home-banner-add"><svg class="icon"><use href="#i-plus"/></svg>添加图片</button>
+            <span class="hint">可一次选择多张，或把图片拖到这里</span>
+            <input type="file" id="home-banner-files" accept="image/png,image/jpeg" multiple hidden>
+          </div>
+          <div id="home-banner-upload-alert"></div>
+        </div>
+      </div>
       <div class="panel" id="pp-mail"><div class="panel-head"><h2>新手毕业邮件</h2><span class="pill" id="player-mail-count"></span></div><div class="panel-body">
         <label class="switch"><input id="player-mail-enabled" type="checkbox"><span>全部新手训练完成后发送</span></label>
         <div class="form-grid"><div class="field"><label for="player-mail-title">邮件标题</label><input id="player-mail-title" maxlength="40"></div>
@@ -399,8 +743,8 @@
         <div><h3>新手签到</h3><div class="table-wrap"><table class="dense"><thead><tr><th>天数</th><th>奖励</th><th>数量</th><th>说明</th></tr></thead><tbody id="player-login-beginner"></tbody></table></div></div>
         <div><h3>累计登录</h3><div class="table-wrap"><table class="dense"><thead><tr><th>累计天数</th><th>奖励</th><th>数量</th><th>说明</th></tr></thead><tbody id="player-login-total_milestones"></tbody></table></div></div>
       </div></div>
-      <div class="panel" id="pp-navi"><div class="panel-head"><div><h2>看板购买</h2><span class="hint">只能配置已有完整资源的看板。妖精乌莎哈为初始看板；关闭购买后已拥有的玩家仍可使用。</span></div></div><div class="panel-body">
-        <div class="toolbar"><label class="inline-field">批量价格 <input id="player-navi-batch-price" type="number" min="1" max="10000000" value="500"></label><button class="secondary sm" id="player-navi-batch">应用到全部看板</button></div>
+      <div class="panel" id="pp-navi"><div class="panel-head"><div><h2>看板购买</h2><span class="hint">价格单位为水晶，购买时先扣免费水晶、不足再扣付费水晶。只能配置已有完整资源的看板。妖精乌莎哈为初始看板；关闭购买后已拥有的玩家仍可使用。</span></div></div><div class="panel-body">
+        <div class="toolbar"><label class="inline-field">批量价格 <span class="input-unit"><input id="player-navi-batch-price" type="number" min="1" max="10000000" value="500"><span>水晶</span></span></label><button class="secondary sm" id="player-navi-batch">应用到全部看板</button></div>
         <div class="navi-grid" id="player-navis"></div>
       </div></div>
       <div class="savebar"><div class="savebar-status"><span class="pill" id="player-policy-version">正在读取</span><span id="player-policy-state" aria-live="polite"></span></div><div class="savebar-actions"><button class="secondary" id="player-policy-default">载入包内默认值</button><button class="primary" id="player-policy-save" data-save-shortcut disabled>保存配置</button></div></div>
@@ -429,22 +773,86 @@
     <!-- 运营设置 -->
     <section class="view" id="settings">
       <div class="view-alert" role="alert" hidden></div>
-      <div class="grid2 even">
-        <div class="panel"><div class="panel-head"><h2>水晶购买</h2><span class="pill" id="settings-state">正在读取</span></div><div class="panel-body">
-          <label class="switch"><input type="checkbox" id="settings-crystal"><span>允许购买增加水晶</span></label>
-          <p>默认关闭：玩家可以完成购买，接口返回成功，水晶余额保持不变。开启后，新订单按商品数量增加水晶。</p>
-          <p class="hint">包含购买月卡时附赠的水晶；月卡权益及每日领取仍按原规则执行。关闭期间已完成的订单不会因开启或重试而补发。礼物、剧情等其他水晶奖励不受影响。</p>
-        </div></div>
-        <div class="panel"><div class="panel-head"><h2>组队战斗</h2></div><div class="panel-body">
-          <div class="field narrow"><label for="settings-battle-speed">演出倍速</label><select id="settings-battle-speed"><option value="100">1 倍</option><option value="150">1.5 倍（默认）</option><option value="200">2 倍</option></select></div>
-          <p class="hint">保存后新建房间生效；已有房间及重连保持建房时的速度。选牌倒计时不变，单人战斗仍使用玩家自己的倍速设置。</p>
-        </div></div>
+      <div class="panel">
+        <div class="panel-head"><h2>游戏规则</h2></div>
+        <div class="setting-row">
+          <div class="setting-label"><h3>水晶购买</h3><p>购买水晶商品时是否增加水晶，包含购买月卡时附赠的水晶。</p></div>
+          <div class="setting-control">
+            <div class="setting-inline"><label class="switch"><input type="checkbox" id="settings-crystal"><span>允许购买增加水晶</span></label><span class="pill" id="settings-state">正在读取</span></div>
+            <p class="hint">默认关闭：玩家可以完成购买，接口返回成功，水晶余额保持不变。开启后，新订单按商品数量增加水晶。月卡权益及每日领取仍按原规则执行；关闭期间已完成的订单不会因开启或重试而补发；礼物、剧情等其他水晶奖励不受影响。</p>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label"><h3><label for="settings-battle-speed">组队演出倍速</label></h3><p>组队战斗的演出速度，可由后台统一指定。</p></div>
+          <div class="setting-control">
+            <select id="settings-battle-speed"><option value="0">不限（使用房主客户端设置）</option><option value="100">1 倍</option><option value="150">1.5 倍</option><option value="200">2 倍</option></select>
+            <p class="hint">不限时采用房主客户端设置，指定倍速时由后台统一覆盖。保存后新建房间生效；已有房间及重连保持建房时的速度。选牌倒计时不变，单人战斗仍使用玩家自己的倍速设置。</p>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label"><h3><label for="settings-creation-limit">同 IP 每日创建账号上限</label></h3><p>首次以游客进入，或在没有角色的设备上直接注册账号，都会创建新账号；给已有的游客角色设置账号密码不算。</p></div>
+          <div class="setting-control">
+            <div class="setting-inline"><div class="input-unit"><input id="settings-creation-limit" type="number" min="0" max="10000" step="1" inputmode="numeric" required aria-describedby="settings-creation-limit-error settings-creation-limit-help"><span>个／天</span></div><span class="pill gold" id="settings-creation-state" hidden>已暂停创建新账号</span></div>
+            <p class="field-error" id="settings-creation-limit-error" hidden></p>
+            <p class="hint" id="settings-creation-limit-help">同一 IP 的新账号合计计算，每天北京时间 00:00 重置。0 表示暂停创建新账号，已有账号仍可登录。</p>
+            <p class="hint" id="settings-creation-limit-note" aria-live="polite" hidden></p>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label"><h3 id="settings-creation-verification-label">新账号创建验证</h3><p>新建角色前，让玩家的设备先完成一段计算。</p></div>
+          <div class="setting-control">
+            <div class="setting-inline"><label class="switch"><input type="checkbox" id="settings-creation-verification" aria-describedby="settings-creation-verification-help"><span>开启验证</span></label></div>
+            <div class="pow-strength" id="settings-creation-strength" hidden>
+              <div class="pow-strength-head"><label for="settings-creation-bits">计算强度</label><output id="settings-creation-bits-value" for="settings-creation-bits"></output><span class="pill" id="settings-creation-bits-level"></span></div>
+              <input id="settings-creation-bits" type="range" min="16" max="32" step="1" value="18" aria-describedby="settings-creation-bits-facts">
+              <div class="pow-strength-scale" aria-hidden="true"><span>16</span><span>20</span><span>24</span><span>28</span><span>32</span></div>
+              <dl class="pow-strength-facts" id="settings-creation-bits-facts">
+                <div><dt>平均计算</dt><dd id="settings-creation-bits-work"></dd></div>
+                <div><dt>高性能电脑参考</dt><dd id="settings-creation-bits-pc"></dd></div>
+                <div><dt>单次计算上限</dt><dd id="settings-creation-bits-budget"></dd></div>
+              </dl>
+              <p class="pow-strength-foot">电脑参考按高性能台式机的求解测速估算，不代表所有设备；手机耗时尚未实测。玩家等待时会看到按自己设备速度估算的预计时间，超过单次计算上限则需重新尝试。</p>
+            </div>
+            <p class="hint" id="settings-creation-verification-help">仅新建角色时进行，增加批量建号的计算成本；已有角色登录无需重复验证。强度每增加 1 bit，平均计算量约翻倍。</p>
+            <p class="hint" id="settings-creation-verification-note" aria-live="polite" hidden></p>
+          </div>
+        </div>
       </div>
-      <div class="panel"><div class="panel-head"><div><h2>卡池封面来源</h2><span class="hint">只影响后台上传的自定义封面，包内封面不变。保存后玩家下次打开扭蛋页生效。</span></div><span class="pill" id="settings-cover-state">正在读取</span></div><div class="panel-body">
-        <div class="choice-row" role="radiogroup" aria-label="卡池封面来源"><label class="choice"><input type="radio" name="settings-cover-source" value="server" id="settings-cover-server"><span><b>本服务器</b><small>从本服务器的封面目录读取（默认）</small></span></label><label class="choice"><input type="radio" name="settings-cover-source" value="storage" id="settings-cover-storage"><span><b>存储容器</b><small>从 S3、对象存储或 CDN 读取</small></span></label></div>
-        <div class="field" id="settings-cover-base-field"><label for="settings-cover-base">存储容器地址</label><input id="settings-cover-base" type="url" maxlength="512" placeholder="https://cdn.example.com/kairisei/" autocomplete="off"></div>
-        <p class="hint" id="settings-cover-example"></p>
-      </div></div>
+      <div class="panel" id="access-panel">
+        <div class="panel-head"><div><h2>登录与访问</h2><span class="hint">每项单独保存，保存后对新的登录和请求立即生效。单个玩家的封禁在「账号管理」中设置。</span></div><div class="ov-head-side"><button class="ghost" type="button" data-jump="accounts">前往账号管理</button></div></div>
+        <div class="setting-row">
+          <div class="setting-label"><h3><label for="wl-enabled">登录白名单</label></h3><p>开启后只有名单内的玩家可以登录，适合内测，或维护结束后先放行测试账号。</p></div>
+          <div class="setting-control" id="access-whitelist-body"><p class="hint">正在读取…</p></div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label"><h3><label for="ip-list">IP 黑名单</label></h3><p>名单内的地址无法使用游戏服务：不能拉取服务器列表、不能登录，也不能建立组队连接。</p></div>
+          <div class="setting-control" id="access-ip-body"><p class="hint">正在读取…</p></div>
+        </div>
+      </div>
+      <div class="panel" id="modules-panel">
+        <div class="panel-head"><div><h2>游戏功能开关</h2><span class="hint">关闭后玩家看不到对应的入口或提示。单独保存，玩家下次回到标题画面时生效。</span></div><span class="pill" id="modules-state">正在读取</span></div>
+        <div class="module-body" id="modules-body"><p class="hint">正在读取…</p></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><div><h2>上传图片</h2><span class="hint">后台上传的卡池封面和首页轮播图从哪里读取；包内封面和默认横幅不受影响。</span></div><span class="pill" id="settings-cover-state">正在读取</span></div>
+        <div class="setting-row">
+          <div class="setting-label"><h3>图片来源</h3><p>保存后玩家下次打开扭蛋页或回到首页时生效。</p></div>
+          <div class="setting-control">
+            <div class="choice-row" role="radiogroup" aria-label="上传图片来源"><label class="choice"><input type="radio" name="settings-cover-source" value="server" id="settings-cover-server"><span><b>本服务器</b><small>从本服务器的图片目录读取（默认）</small></span></label><label class="choice"><input type="radio" name="settings-cover-source" value="storage" id="settings-cover-storage"><span><b>存储容器</b><small>从 S3、对象存储或 CDN 读取</small></span></label></div>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label"><h3><label for="settings-cover-base">存储容器地址</label></h3><p>存储桶的公开下载地址。下方同步和切换后的读取都使用已保存的地址。</p></div>
+          <div class="setting-control">
+            <input id="settings-cover-base" type="url" maxlength="512" placeholder="https://cdn.example.com/kairisei/" autocomplete="off">
+            <p class="hint" id="settings-cover-example"></p>
+          </div>
+        </div>
+        <div class="setting-row" id="image-sync-tool">
+          <div class="setting-label"><h3>同步到存储容器</h3><p>把首页轮播和卡池封面正在使用的上传图片复制到上面已保存的地址。路径和文件名不变；已存在的文件跳过，不会覆盖或删除存储里的文件。</p></div>
+          <div class="setting-control" id="image-sync-body"><p class="hint">正在读取…</p></div>
+        </div>
+      </div>
       <div class="savebar"><div class="savebar-status"><span class="pill" id="settings-version"></span><span id="settings-draft-state" aria-live="polite"></span></div><div class="savebar-actions"><button class="primary" id="settings-save" data-save-shortcut disabled>保存设置</button></div></div>
     </section>
 
@@ -454,10 +862,61 @@
       <div class="mt-status" id="maintenance-card">
         <div class="mt-status-main"><span class="mt-light" aria-hidden="true"></span><div><span class="mt-kicker">服务器状态</span><h2 id="maintenance-state">正在读取</h2><p id="maintenance-detail" aria-live="polite"></p></div></div>
         <dl class="mt-metrics"><div><dt>组队房间</dt><dd id="maintenance-rooms">—</dd></div><div><dt>处理中的游戏请求</dt><dd id="maintenance-game">—</dd></div><div><dt>进行中的后台操作</dt><dd id="maintenance-admin">—</dd></div></dl>
-        <div class="mt-actions"><button class="secondary" id="maintenance-refresh" type="button"><svg class="icon"><use href="#i-refresh"/></svg>刷新状态</button><button class="primary" id="maintenance-toggle" type="button" disabled>开启维护</button></div>
+        <div class="mt-actions"><button class="secondary" id="maintenance-refresh" type="button"><svg class="icon"><use href="#i-refresh"/></svg>刷新状态</button><button class="danger" id="maintenance-interrupt" type="button" disabled>中断未结算对局</button><button class="primary" id="maintenance-toggle" type="button" disabled>开启维护</button></div>
       </div>
-      <p class="hint mt-note">维护期间暂停注册、登录和游戏写入请求，资源下载与本后台仍可访问；维护状态在重启后保留。有组队房间时不能开启，请先等待房间结束。下面的清理工具都需要先开启维护，每次先预览，再备份并执行。</p>
+      <p class="hint mt-note">有组队房间也可以开启维护。开启后立即暂停新的注册、登录和游戏请求，并拦截建房、预约、入房及重连；已受理的请求继续完成。资源下载与本后台仍可访问，维护状态在重启后保留。</p>
+      <p class="hint mt-note">需要让房间里的玩家退出时，先开启维护，再点击「中断未结算对局」：已开始的结算事务会先正常完成，随后断开组队连接，并丢弃未结算的单人对局；已提交的奖励和回执保留。下方清理工具须在维护开启且对局中断、请求结束后使用，每次先预览，再备份并执行。</p>
       <div class="mt-tools">
+        <article class="panel mt-tool" id="maintenance-history-tool">
+          <div class="panel-head">
+            <div><h2>清理历史数据</h2><span class="hint">删除已经用不到的礼物发放记录、通关卡组和 Boss 得分榜，控制数据库增长。玩家的礼物箱、卡牌、货币、进度和领奖记录都不受影响。</span></div>
+            <span class="mt-lock">需先开启维护</span>
+          </div>
+          <div class="panel-body">
+            <div class="hc-size" id="history-size"><p class="hint">正在读取数据量…</p></div>
+            <div class="hc-grid">
+              <section class="hc-card" data-hc="mail">
+                <label class="hc-check"><input type="checkbox" id="history-mail"><b>礼物发放批次</b></label>
+                <p class="hc-now" id="history-mail-now">—</p>
+                <div class="hc-body">
+                  <div class="field"><label for="history-mail-before">清理此时间之前创建、且已全部发放完成的批次</label><input id="history-mail-before" type="datetime-local"></div>
+                </div>
+                <ul class="hc-notes">
+                  <li>同时删除每位收件人的发放回执；玩家礼物箱里的礼物不受影响</li>
+                  <li>未完成的批次保留，仍可继续发放</li>
+                  <li>清理后的批次编号不能再次发放；执行前先压缩备份</li>
+                </ul>
+              </section>
+              <section class="hc-card" data-hc="clear">
+                <label class="hc-check"><input type="checkbox" id="history-clear"><b>通关卡组与昨日排行</b></label>
+                <p class="hc-now" id="history-clear-now">—</p>
+                <div class="hc-body">
+                  <div class="field"><label for="history-clear-days">保留最近几天（含今天）</label><div class="input-unit"><input id="history-clear-days" type="number" min="2" max="29" step="1" value="7"><span>天</span></div></div>
+                </div>
+                <ul class="hc-notes">
+                  <li>玩家看到的「最近通关卡组」只剩保留期内的记录</li>
+                  <li>「昨日排行」读取昨天的数据，因此至少保留 2 天</li>
+                  <li>系统本就自动只保留 30 天；这类展示数据不备份</li>
+                </ul>
+              </section>
+              <section class="hc-card" data-hc="rank">
+                <label class="hc-check"><input type="checkbox" id="history-rank"><b>Boss 得分排行榜</b></label>
+                <p class="hc-now" id="history-rank-now">—</p>
+                <div class="hc-body">
+                  <div class="toolbar"><button class="secondary sm" id="history-rank-closed" type="button">选择已停止计分的</button><button class="secondary sm" id="history-rank-none" type="button">全不选</button></div>
+                  <div class="hc-bosses" id="history-rank-bosses"></div>
+                </div>
+                <ul class="hc-notes">
+                  <li>所选 Boss 的个人榜与组队榜一并从零开始；圣剑杯档位奖励与领取记录保留</li>
+                  <li>执行前先压缩备份被删除的名次</li>
+                </ul>
+              </section>
+            </div>
+            <label class="hc-vacuum"><input type="checkbox" id="history-vacuum"><span><b>完成后整理数据库文件（VACUUM）</b><small>把释放的空间还给磁盘，数据库文件随之变小。需要约等于数据库大小的临时磁盘空间，数据库较大时需要几分钟。</small></span></label>
+            <ol class="mt-steps"><li><span>预览</span><button class="secondary" id="history-preview" type="button" disabled>预览清理</button></li><li><span>执行</span><button class="danger" id="history-apply" type="button" disabled>备份并清理</button></li><li><button class="ghost sm" id="history-refresh" type="button"><svg class="icon"><use href="#i-refresh"/></svg>刷新数据量</button></li></ol>
+            <div id="history-report" class="mt-report" aria-live="polite"></div>
+          </div>
+        </article>
         <article class="panel mt-tool" id="maintenance-state-tool">
           <div class="panel-head"><div><h2>清理无引用运营状态</h2><span class="hint">只清理已没有任何配置引用的抽取／自选／每日免费记录及商店、兑换限额。过期、停用、草稿与回收站中的配置仍保留计数；卡牌、货币、奖励领取和战斗进度不参与。</span></div><span class="mt-lock">需先开启维护</span></div>
           <div class="panel-body"><ol class="mt-steps"><li><span>预览</span><button class="secondary" id="maintenance-preview" type="button" disabled>预览可清理状态</button></li><li><span>执行</span><button class="danger" id="maintenance-apply" type="button" disabled>备份并清理</button></li></ol>
@@ -482,11 +941,40 @@
     <section class="view" id="audit">
       <div class="view-alert" role="alert" hidden></div>
       <div class="panel"><div class="panel-body">
-        <div class="filterbar"><input id="audit-search" class="search" type="search" placeholder="搜索玩家 ID、批次编号或操作内容"><select id="audit-operation" aria-label="操作类型"><option value="">所有操作</option><option value="mail-delivery">批量赠礼</option><option value="account-mail">单封赠礼</option><option value="account-mail-delete">删除玩家邮件</option><option value="account-grant">资源与进度调整</option><option value="account-credentials-admin">账号绑定／密码</option><option value="account-unbind">解除绑定</option><option value="boss-policy">BOSS发布</option><option value="boss-rules">BOSS难度规则</option><option value="boss-drops">BOSS掉落</option><option value="activity-rewards">圣剑杯与探索</option><option value="exchange-shops">兑换所</option><option value="item-shop">道具商店</option><option value="gacha-policy">扭蛋发布</option><option value="gacha-draft">卡池草稿</option><option value="gacha-live">卡池发布</option><option value="gacha-custom">新建／删除卡池</option><option value="runtime-settings">运营设置</option><option value="player-policy">公告与奖励</option></select>
+        <div class="filterbar"><input id="audit-search" class="search" type="search" placeholder="搜索玩家 ID、批次编号或操作内容"><select id="audit-operation" aria-label="操作类型"><option value="">所有操作</option><option value="mail-delivery">批量赠礼</option><option value="account-mail">单封赠礼</option><option value="account-mail-delete">删除玩家邮件</option><option value="account-grant">资源与进度调整</option><option value="account-credentials-admin">账号绑定／密码</option><option value="account-unbind">解除绑定</option><option value="boss-policy">BOSS发布</option><option value="boss-rules">BOSS难度规则</option><option value="boss-drops">BOSS掉落</option><option value="activity-rewards">圣剑杯与探索</option><option value="exchange-shops">兑换所</option><option value="item-shop">道具商店</option><option value="gacha-policy">扭蛋发布</option><option value="gacha-draft">卡池草稿</option><option value="gacha-live">卡池发布</option><option value="gacha-custom">新建／删除卡池</option><option value="runtime-settings">运营设置</option><option value="image-sync">运营图片同步</option><option value="player-policy">公告与奖励</option></select>
           <span class="range" role="group" aria-label="时间范围"><input type="datetime-local" id="audit-after" aria-label="开始时间"><span>–</span><input type="datetime-local" id="audit-before" aria-label="结束时间"></span><button class="secondary" id="audit-reset">清除筛选</button><button id="audit-export" class="secondary">导出本页</button></div>
         <div class="table-wrap"><table><thead><tr><th>ID / 时间</th><th>操作</th><th>目标</th><th>详细内容</th></tr></thead><tbody id="audit-rows"></tbody></table></div>
         <div class="pager" id="audit-pager"><button class="secondary" id="audit-prev">上一页</button><span id="audit-page-info" class="page-info"></span><label>跳至 <input id="audit-page" type="number" min="1" value="1" aria-label="页码"> 页</label><button class="secondary" id="audit-next">下一页</button></div>
       </div></div>
+    </section>
+    <!-- 运行日志 -->
+    <section class="view" id="runtime-logs">
+      <div class="view-alert" role="alert" hidden></div>
+      <div class="panel log-query"><div class="panel-body">
+        <form class="log-form" id="log-form" novalidate>
+          <div class="log-form-main">
+            <label class="log-q"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><input id="log-q" type="search" placeholder="搜索消息、错误、接口路径、请求 ID 或附加字段的值（按日志原文匹配）" aria-label="搜索日志"></label>
+            <div id="log-level" class="log-level-seg" aria-label="日志级别"></div>
+            <button class="primary" type="submit" id="log-run"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>查询</button>
+          </div>
+          <div class="log-form-more">
+            <label class="log-field"><span>接口路径</span><input id="log-path" placeholder="如 /__domain/HomeShow" title="精确匹配完整路径" spellcheck="false"></label>
+            <label class="log-field log-narrow"><span>状态码</span><input id="log-status" type="text" inputmode="numeric" placeholder="如 500"></label>
+            <label class="log-field log-narrow"><span>业务耗时至少</span><span class="input-unit"><input id="log-elapsed" type="text" inputmode="numeric" placeholder="0"><span>毫秒</span></span></label>
+            <label class="log-field log-id"><span>请求 ID</span><input id="log-request" placeholder="精确匹配" spellcheck="false"></label>
+            <label class="log-field log-narrow"><span>玩家 UID</span><input id="log-user" type="text" inputmode="numeric" placeholder="精确匹配" spellcheck="false" title="只看该玩家的记录（日志中的 user_id 字段）"></label>
+            <div class="log-field log-time"><span>时间范围（UTC+8，含起始、不含结束）</span><span class="range" role="group" aria-label="时间范围"><input type="datetime-local" step="1" id="log-from" aria-label="起始时间"><span>–</span><input type="datetime-local" step="1" id="log-to" aria-label="结束时间"></span></div>
+          </div>
+          <p class="field-error" id="log-error" role="alert" hidden></p>
+          <div class="chip-row log-presets-row"><span class="chip-label">快捷</span><div class="chips" id="log-presets"></div><span class="spacer"></span><button type="button" class="ghost" id="log-reset">清除筛选</button></div>
+        </form>
+      </div></div>
+      <div class="panel log-panel">
+        <div class="panel-head"><div><h2>日志记录</h2><span class="hint" id="log-scope"></span></div><div class="log-head-side"><span class="log-follow-state" id="log-follow-state"></span><label class="switch"><input type="checkbox" id="log-follow"><span>实时跟踪</span></label><button type="button" class="secondary sm" id="log-export"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>导出已载入</button></div></div>
+        <div class="log-overview" id="log-overview" hidden></div>
+        <div class="log-stream" id="log-stream"></div>
+        <div class="log-more" id="log-more"></div>
+      </div>
     </section>
   </main>
 </div>
@@ -504,7 +992,7 @@
 <div class="modal" id="account-modal" role="dialog" aria-modal="true" aria-labelledby="account-detail-title"><div class="dialog wide">
   <div class="dialog-head"><div><h2 id="account-detail-title">账号详情</h2><p class="lead" id="account-detail-lead">正在加载该账号存档…</p></div><button class="icon-button dialog-x" type="button" aria-label="关闭"><svg class="icon"><use href="#i-close"/></svg></button></div>
   <div class="dialog-body"><div class="detail-grid facts" id="account-detail-body"></div></div>
-  <div class="dialog-actions"><button class="secondary" id="account-detail-close" data-dismiss>关闭</button></div>
+  <div class="dialog-actions"><button class="secondary" id="account-detail-block" hidden>封禁登录</button><span class="spacer"></span><button class="secondary" id="account-detail-close" data-dismiss>关闭</button></div>
 </div></div>
 <div class="modal" id="inbox-modal" role="dialog" aria-modal="true" aria-labelledby="inbox-title"><div class="dialog wide">
   <div class="dialog-head"><div><h2 id="inbox-title">邮件管理</h2><p class="lead">未领取邮件可直接撤回；已领取邮件仅删除记录，不回收奖励。玩家重新打开礼物箱后可看到变更。</p></div><button class="icon-button dialog-x" type="button" aria-label="关闭"><svg class="icon"><use href="#i-close"/></svg></button></div>
@@ -517,15 +1005,20 @@
 </div></div>
 <div class="modal" id="mail-review-modal" role="dialog" aria-modal="true" aria-labelledby="mail-review-title"><div class="dialog">
   <div class="dialog-head"><div><h2 id="mail-review-title">奖励发放预览</h2><p class="lead">名单在此固定；确认后按每10人一组执行，可随时暂停后续发放。</p></div><button class="icon-button dialog-x" type="button" aria-label="关闭"><svg class="icon"><use href="#i-close"/></svg></button></div>
-  <div class="dialog-body"><pre id="mail-review" class="review-text"></pre></div>
+  <div class="dialog-body"><div id="mail-review" class="mail-review"></div></div>
   <div class="dialog-actions"><button class="secondary" id="mail-review-cancel" data-dismiss>返回修改</button><button class="primary" id="mail-review-confirm">确认发放</button></div>
+</div></div>
+<div class="modal" id="mail-batch-modal" role="dialog" aria-modal="true" aria-labelledby="mail-batch-title"><div class="dialog wide">
+  <div class="dialog-head"><div><h2 id="mail-batch-title">发放批次详情</h2><p class="lead" id="mail-batch-lead"></p></div><button class="icon-button dialog-x" type="button" aria-label="关闭"><svg class="icon"><use href="#i-close"/></svg></button></div>
+  <div class="dialog-body"><div id="mail-batch-detail" class="mail-review"></div></div>
+  <div class="dialog-actions"><button class="secondary" id="mail-batch-close" data-dismiss>关闭</button><button class="secondary" id="mail-batch-actions" disabled>前往批次操作</button></div>
 </div></div>
 <div class="modal" id="content-picker" role="dialog" aria-modal="true" aria-labelledby="content-picker-title"><div class="dialog picker">
   <div class="dialog-head"><div><h2 id="content-picker-title">选择奖励</h2><p class="lead">在左侧搜索并点选，右侧为本次已选内容（跨页、跨类型保留）；数量在加入后逐项调整。</p></div><button class="icon-button dialog-x" type="button" aria-label="关闭"><svg class="icon"><use href="#i-close"/></svg></button></div>
   <div class="dialog-body picker-body">
     <div class="picker-results">
-      <div class="filterbar"><select id="content-kind" aria-label="奖励类型"><option value="material">素材卡</option><option value="card">卡牌</option><option value="item">道具</option></select><input class="search" id="content-search" type="search" placeholder="搜索名称、ID 或描述"></div>
-      <div class="filterbar"><select id="content-job" aria-label="职业"><option value="0">全部职业</option><option value="1">佣兵</option><option value="2">富豪</option><option value="3">盗贼</option><option value="4">歌姬</option><option value="-1">通用</option></select><select id="content-rarity" aria-label="卡牌星级"><option value="0">全部星级</option><option value="1">1 星</option><option value="2">2 星</option><option value="3">3 星</option><option value="4">4 星</option><option value="5">5 星</option><option value="6">6 星</option><option value="7">7 星</option><option value="8">8 星</option></select><select id="content-source" aria-label="来源"><option value="">全部来源</option><option value="dungeon">副本</option><option value="gacha">扭蛋</option><option value="evolution">进化</option><option value="boss_coin">BOSS币</option><option value="jp_import">日服卡牌</option><option value="other">其他／未标注</option></select></div>
+      <div class="filterbar"><select id="content-kind" aria-label="奖励类型"><option value="material">素材卡</option><option value="card">卡牌</option><option value="item">道具</option></select><select id="content-stamp-kind" aria-label="对话与表情类型" hidden><option value="">全部内容</option><option value="dialog">对话</option><option value="image">表情</option><option value="voice">语音表情</option></select><input class="search" id="content-search" type="search" placeholder="搜索名称、ID 或描述"></div>
+      <div class="filterbar"><select id="content-job" aria-label="职业"><option value="0">全部职业</option><option value="1">佣兵</option><option value="2">富豪</option><option value="3">盗贼</option><option value="4">歌姬</option><option value="5">炼金</option><option value="-1">通用</option></select><select id="content-rarity" aria-label="卡牌星级"><option value="0">全部星级</option><option value="1">1 星</option><option value="2">2 星</option><option value="3">3 星</option><option value="4">4 星</option><option value="5">5 星</option><option value="6">6 星</option><option value="7">7 星</option><option value="8">8 星</option></select></div>
       <div class="selbar slim"><div class="selbar-count" id="content-page-summary"></div><div class="selbar-actions"><button class="secondary sm" id="content-select-page">全选本页</button><button class="secondary sm" id="content-unselect-page">取消本页</button></div></div>
       <div class="catalog-grid picker-grid" id="content-catalog"></div>
       <div class="pager"><button class="secondary" id="content-prev">上一页</button><span id="content-page-info" class="page-info"></span><label>跳至 <input id="content-page" type="number" min="1" value="1" aria-label="页码"> 页</label><button class="secondary" id="content-next">下一页</button></div>
@@ -544,19 +1037,29 @@
   <div class="dialog-body" id="pool-preview-modal-body"></div>
   <div class="dialog-actions"><span class="hint" id="pool-preview-reason"></span><span class="spacer"></span><button class="secondary" id="pool-preview-close" data-dismiss>稍后发布</button><button class="primary" id="pool-preview-publish">发布到游戏</button></div>
 </div></div>
-<div class="modal" id="pool-create-modal" role="dialog" aria-modal="true" aria-labelledby="pool-create-title"><div class="dialog">
-  <div class="dialog-head"><div><h2 id="pool-create-title">新建卡池</h2><p class="lead">选择抽取规则并核对摘要，再编辑卡池内容。新卡池先保存为草稿，发布并开放后玩家才能看到。</p></div><button class="icon-button dialog-x" type="button" aria-label="关闭"><svg class="icon"><use href="#i-close"/></svg></button></div>
-  <div class="dialog-body">
-    <div class="choice-row create-mode" role="radiogroup" aria-label="创建方式"><label class="choice"><input type="radio" name="pool-create-mode-choice" value="rule"><span><b>按规则模板</b><small>内置抽取规则与默认内容，保留每日免费、阶段、附赠等机制</small></span></label><label class="choice"><input type="radio" name="pool-create-mode-choice" value="copy"><span><b>复制现有卡池</b><small>复制当前生效的卡牌与价格，不含每日免费和赠礼</small></span></label></div>
-    <select id="pool-create-mode" hidden aria-hidden="true" tabindex="-1"><option value="rule">选择规则模板</option><option value="copy">复制现有卡池</option></select>
-    <div class="field"><label id="pool-create-source-label" for="pool-create-source">规则模板</label><select id="pool-create-source"></select></div>
-    <details class="tool-drawer" id="pool-create-professions"><summary>启用原生职业选择（可选）</summary><p class="hint">不勾选时沿用模板；勾选后为每种抽数创建对应分池，玩家抽取时选择职业。</p><div class="checks"><label><input type="checkbox" value="1">佣兵</label><label><input type="checkbox" value="2">富豪</label><label><input type="checkbox" value="3">盗贼</label><label><input type="checkbox" value="4">歌姬</label><label><input type="checkbox" value="5">混合</label></div><p class="hint" id="pool-create-profession-note"></p></details>
-    <div id="pool-create-summary" class="create-summary"></div>
-    <div class="field"><label for="pool-create-name">新卡池名称</label><input id="pool-create-name" maxlength="60" placeholder="例如：秋季限定扭蛋" autocomplete="off"></div>
-    <ol class="next-steps"><li>在卡池配置中调整卡牌、概率、抽出名声和封面</li><li>保存草稿并预览后发布（全部抽法一起发布）</li><li>到「扭蛋发布」开启这个卡池，玩家才能看到</li></ol>
-    <p class="hint" id="pool-create-note"></p>
+<div class="modal" id="pool-create-modal" role="dialog" aria-modal="true" aria-labelledby="pool-create-title"><div class="dialog wide create-dialog">
+  <div class="dialog-head">
+    <div>
+      <h2 id="pool-create-title">新建卡池</h2>
+      <p class="lead">新卡池先保存为草稿：添加内容、预览并发布后，再到「扭蛋发布」开启，玩家才能看到。</p>
+    </div>
+    <button class="icon-button dialog-x" type="button" aria-label="关闭"><svg class="icon"><use href="#i-close"/></svg></button>
   </div>
-  <div class="dialog-actions"><span class="spacer"></span><button class="secondary" id="pool-create-cancel" type="button" data-dismiss>取消</button><button class="primary" id="pool-create-apply" type="button">创建草稿卡池</button></div>
+  <div class="dialog-body create-body">
+    <div class="mode" id="pool-create-modes" role="tablist" aria-label="创建方式">
+      <button type="button" role="tab" data-create-mode="rule">按规则类型新建</button>
+      <button type="button" role="tab" data-create-mode="copy">复制现有卡池</button>
+    </div>
+    <div class="create-grid">
+      <div class="create-options" id="pool-create-options" role="radiogroup" aria-label="规则类型或复制来源"></div>
+      <div class="create-detail" id="pool-create-detail"></div>
+    </div>
+  </div>
+  <div class="dialog-actions">
+    <span class="spacer"></span>
+    <button class="secondary" id="pool-create-cancel" type="button" data-dismiss>取消</button>
+    <button class="primary" id="pool-create-apply" type="button">创建草稿卡池</button>
+  </div>
 </div></div>
 <div class="modal" id="review-modal" role="dialog" aria-modal="true" aria-labelledby="review-title"><div class="dialog wide">
   <div class="dialog-head"><div><h2 id="review-title">核对变更</h2><p class="lead" id="review-lead"></p></div><button class="icon-button dialog-x" type="button" aria-label="关闭"><svg class="icon"><use href="#i-close"/></svg></button></div>
@@ -572,6 +1075,32 @@
   </div>
   <div class="dialog-actions"><button id="credentials-unbind" class="danger" hidden>解除绑定</button><span class="spacer"></span><button id="credentials-cancel" class="secondary" data-dismiss>取消</button><button id="credentials-apply" class="primary">保存</button></div>
 </div></div>
+<div class="modal" id="ms-target-picker" role="dialog" aria-modal="true" aria-labelledby="ms-target-title"><div class="dialog picker">
+  <div class="dialog-head"><div><h2 id="ms-target-title">选择 BOSS</h2><p class="lead" id="ms-target-lead"></p></div><button class="icon-button dialog-x" type="button" aria-label="关闭"><svg class="icon"><use href="#i-close"/></svg></button></div>
+  <div class="dialog-body picker-body">
+    <div class="picker-results">
+      <div class="mt-filters"><input id="ms-target-search" type="search" placeholder="搜索名称或编号" aria-label="搜索名称或编号"><div id="ms-target-kinds"></div></div>
+      <div id="ms-target-list" class="mt-list"></div>
+    </div>
+    <aside class="picker-selected" aria-label="已选目标"><div class="picker-selected-head"><b id="ms-target-count">已选 0 项</b><button class="secondary sm" type="button" id="ms-target-clear">清空</button></div><p class="field-error mt-limit" id="ms-target-error" hidden></p><ul id="ms-target-selected" class="selected-list"></ul></aside>
+  </div>
+  <div class="dialog-actions"><button class="secondary" type="button" id="ms-target-cancel" data-dismiss>取消</button><button class="primary" type="button" id="ms-target-apply">确定</button></div>
+</div></div>
+<div class="modal" id="block-modal" role="dialog" aria-modal="true" aria-labelledby="block-title"><div class="dialog block-dialog">
+  <div class="dialog-head"><div><h2 id="block-title">封禁登录</h2><p class="lead" id="block-lead"></p></div><button class="icon-button dialog-x" type="button" aria-label="关闭"><svg class="icon"><use href="#i-close"/></svg></button></div>
+  <div class="dialog-body">
+    <div class="field"><span class="field-label">封禁期限</span><div id="block-terms"></div></div>
+    <div class="field" id="block-until-field" hidden><label for="block-until">解封时间（UTC+8）</label><input type="datetime-local" id="block-until" aria-describedby="block-until-error"><p class="field-error" id="block-until-error" hidden></p></div>
+    <p class="block-result" id="block-result" aria-live="polite"></p>
+    <p class="hint">封禁立即生效：玩家当前的登录会失效，重新登录时会看到封禁提示；已开始的组队对局按原流程结束。到期后自动解封。</p>
+  </div>
+  <div class="dialog-actions"><button class="secondary" id="block-lift" hidden>解除封禁</button><span class="spacer"></span><button class="secondary" id="block-cancel" data-dismiss>取消</button><button class="danger" id="block-apply">封禁</button></div>
+</div></div>
+<div class="modal" id="ask-modal" role="alertdialog" aria-modal="true" aria-labelledby="ask-title" aria-describedby="ask-message"><div class="dialog ask">
+  <div class="dialog-head"><h2 id="ask-title"></h2></div>
+  <div class="dialog-body"><p id="ask-message"></p><div class="field" id="ask-field" hidden><label for="ask-input" id="ask-label"></label><input id="ask-input" autocomplete="off"></div></div>
+  <div class="dialog-actions"><button class="secondary" id="ask-cancel" data-dismiss>取消</button><button class="primary" id="ask-confirm">确定</button></div>
+</div></div>
 <div class="toast-stack" id="toast-stack"></div>
 <script defer src="/admin.js"></script>
 <script defer src="/operations.js"></script>
@@ -580,7 +1109,18 @@
 <script defer src="/settings.js"></script>
 <script defer src="/evolution.js"></script>
 <script defer src="/content.js"></script>
+<script defer src="/tower-drops.js"></script>
 <script defer src="/player-policy.js"></script>
+<script defer src="/kit.js"></script>
+<script defer src="/home-banners.js"></script>
+<script defer src="/maintenance-history.js"></script>
+<script defer src="/image-sync.js"></script>
+<script defer src="/missions.js"></script>
+<script defer src="/gift-codes.js"></script>
+<script defer src="/pool-rules.js"></script>
 <script defer src="/insights.js"></script>
+<script defer src="/access.js"></script>
+<script defer src="/runtime-logs.js"></script>
+<script defer src="/pool-gifts.js"></script>
 </body>
 </html>

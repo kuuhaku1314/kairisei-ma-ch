@@ -60,9 +60,9 @@ func classify(name string) (string, int) {
 		return "NAVI_VOICE", trailingID(lower, "cv_navi")
 	case strings.HasPrefix(lower, "cv_ep"):
 		return "STORY_VOICE", trailingID(lower, "cv_ep")
-	case lower == "mov_prologue":
+	case lower == "mov_prologue" || lower == "mov_pv":
 		return "MOVIE", 0
-	case lower == "mov_op":
+	case lower == "mov_op" || lower == "mov_op2":
 		return "MOVIE", 1
 	case strings.HasPrefix(lower, "mov_"):
 		id := trailingID(lower, "mov")

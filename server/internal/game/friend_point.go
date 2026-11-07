@@ -32,8 +32,8 @@ type FriendPointAccountRelation struct {
 }
 
 // FollowAddResult is the protocol-visible outcome of one atomic follow batch.
-// IsFriendFull is raised after a successful batch that fills the requester's
-// mutual-friend capacity; capacity failures are returned as FollowAddError.
+// IsFriendFull retains the native mutual-friend notification. Mutual friends
+// are a subset of follows and have no separate configured capacity.
 type FollowAddResult struct {
 	RequestUserIDs []int
 	IsFriendFull   bool
@@ -43,7 +43,9 @@ type FollowAddResult struct {
 // rental inbox outside an individual account handler. Static partner decks
 // remain in account snapshots; only successful rental events enter the inbox.
 type FriendPointAccountRepository interface {
-	ListFriendPointAccountRelations(userID int) ([]FriendPointAccountRelation, error)
+	ListFollowedFriendPointAccounts(userID int) ([]FriendPointAccountRelation, error)
+	ListFollowerFriendPointAccounts(userID int, limit int) ([]FriendPointAccountRelation, int, error)
+	FindFriendPointAccountByInviteID(userID int, inviteID string) ([]FriendPointAccountRelation, error)
 	ListFriendPointPartnerRecommendations(userID int) ([]FriendPointAccountRelation, error)
 	LoadFriendPointAccountRelations(userID int, targetUserIDs []int) ([]FriendPointAccountRelation, error)
 	FriendPointAccountStates(userID int, targetUserIDs []int) (map[int]int8, error)
@@ -51,11 +53,9 @@ type FriendPointAccountRepository interface {
 		userID int,
 		targetUserIDs []int,
 		followMaximum int,
-		friendMaximum int,
 	) (FollowAddResult, error)
 	UnfollowFriendPointAccount(userID int, targetUserID int) error
 	ListFriendPointRentalEvents(userID int, afterEventID int64) ([]FriendPointRentalEvent, error)
-	RecordFriendPointRentals(eventKey string, renterUserID int, credits []FriendPointRentalCredit, bossID int) error
 }
 
 type friendPointHomeReward struct {

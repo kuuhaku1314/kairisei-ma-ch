@@ -82,7 +82,7 @@ func TestPlayerPolicySaveRestartAndNewAccounts(t *testing.T) {
 		t.Fatal("public policy was not restored")
 	}
 	for i, uuid := range []string{"00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"} {
-		identity, err := accounts.ResolveLogin(uuid)
+		identity, err := accounts.ResolveInternalLogin(uuid)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -100,7 +100,7 @@ func TestPlayerPolicySaveRestartAndNewAccounts(t *testing.T) {
 		if err := accounts.PersistState(identity.UserID, state); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := accounts.ResolveLogin(uuid); err != nil {
+		if _, err := accounts.ResolveInternalLogin(uuid); err != nil {
 			t.Fatal(err)
 		}
 		state, err = accounts.LoadState(identity.UserID)

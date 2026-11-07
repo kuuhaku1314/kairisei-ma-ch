@@ -20,19 +20,21 @@ const (
 )
 
 type NormalQuestRuntimeMaster struct {
-	SchemaVersion                  int                                 `json:"schema_version"`
-	ConfigVersion                  int                                 `json:"config_version"`
-	ClientProfile                  string                              `json:"client_profile"`
-	GeneratedUTC                   string                              `json:"generated_utc"`
-	State                          string                              `json:"state"`
-	Confidence                     string                              `json:"confidence"`
-	Sources                        []json.RawMessage                   `json:"sources"`
-	SourceState                    map[string]string                   `json:"source_state"`
-	OfficialServiceTopologyClaimed bool                                `json:"official_service_topology_claimed"`
-	EntryGroups                    []json.RawMessage                   `json:"entry_groups"`
-	Areas                          []json.RawMessage                   `json:"areas"`
-	Replays                        []gamestate.TeamBattleReplay        `json:"replays"`
-	Rewards                        []gamestate.TeamBattleRewardProfile `json:"rewards"`
+	SchemaVersion                  int                                           `json:"schema_version"`
+	ConfigVersion                  int                                           `json:"config_version"`
+	ClientProfile                  string                                        `json:"client_profile"`
+	GeneratedUTC                   string                                        `json:"generated_utc"`
+	State                          string                                        `json:"state"`
+	Confidence                     string                                        `json:"confidence"`
+	Sources                        []json.RawMessage                             `json:"sources"`
+	SourceState                    map[string]string                             `json:"source_state"`
+	OfficialServiceTopologyClaimed bool                                          `json:"official_service_topology_claimed"`
+	MainQuestSection               *gamestate.MainQuestSectionDefinition         `json:"main_quest_section,omitempty"`
+	MainQuestReadingSections       []gamestate.MainQuestReadingSectionDefinition `json:"main_quest_reading_sections,omitempty"`
+	EntryGroups                    []json.RawMessage                             `json:"entry_groups"`
+	Areas                          []json.RawMessage                             `json:"areas"`
+	Replays                        []gamestate.TeamBattleReplay                  `json:"replays"`
+	Rewards                        []gamestate.TeamBattleRewardProfile           `json:"rewards"`
 	Summary                        struct {
 		Areas                    int            `json:"areas"`
 		EntryGroups              int            `json:"entry_groups"`
@@ -108,6 +110,13 @@ func validateNormalQuestRuntimeMaster(master NormalQuestRuntimeMaster) error {
 		len(master.EntryGroups) != 18 || len(master.Areas) != 18 ||
 		len(master.Replays) != 50 || len(master.Rewards) != 100 {
 		return errors.New("CN normal quest runtime master identity or coverage is invalid")
+	}
+	if section := master.MainQuestSection; section != nil &&
+		(section.SectionID <= 0 || section.Title == "" || section.BGPictID <= 0 || section.IconPictID <= 0) {
+		return errors.New("normal quest directory header is invalid")
+	}
+	if err := validateMainQuestReadingSections(master); err != nil {
+		return err
 	}
 	expectedStates := map[string]string{
 		"area_stage_party_enemy_identity":           "CONFIRMED",
@@ -212,7 +221,7 @@ func validateNormalQuestRuntimeMaster(master NormalQuestRuntimeMaster) error {
 		entry, exists := entryBosses[replay.BossID]
 		if !exists || replay.EnemyPartyID != replay.BossID || replay.EnemyType != 1 ||
 			replay.Seed != replay.BossID || replay.CostInitial != 3 ||
-			replay.BurstGaugeInitial != 0 || replay.HoldMax != 5 || replay.EndTurn != 0 ||
+			replay.BurstGaugeInitial != 0 || replay.HoldMax != 6 || replay.EndTurn != 0 ||
 			len(replay.Battles) < 3 || len(replay.Battles) > 6 ||
 			replay.Battles[0].EnemyPartyID != replay.EnemyPartyID ||
 			replay.Battles[0].EnemyType != replay.EnemyType || entry[0] != replay.BossID/100 {
@@ -315,6 +324,37 @@ func ApplyNormalQuestRuntimeMaster(state *gamestate.State, master NormalQuestRun
 	rewards = append(rewards, master.Rewards...)
 	state.TeamBattleRewards = rewards
 	state.StageQuestConfigVersion = master.ConfigVersion
+	state.NormalQuestSection = master.MainQuestSection
+	state.MainQuestReadingSections = master.MainQuestReadingSections
+	return nil
+}
+
+func validateMainQuestReadingSections(master NormalQuestRuntimeMaster) error {
+	sections := make(map[int]bool)
+	groups := make(map[int]bool)
+	stories := make(map[int]bool)
+	if master.MainQuestSection != nil {
+		sections[master.MainQuestSection.SectionID] = true
+	}
+	for _, section := range master.MainQuestReadingSections {
+		if section.SectionID <= 0 || section.Title == "" || section.BGPictID <= 0 || section.IconPictID <= 0 ||
+			sections[section.SectionID] || len(section.BossGroups) == 0 {
+			return errors.New("main quest reading section is invalid or duplicated")
+		}
+		sections[section.SectionID] = true
+		for _, group := range section.BossGroups {
+			if group.GroupID <= 0 || group.Name == "" || group.PictID <= 0 || groups[group.GroupID] || len(group.Stories) == 0 {
+				return errors.New("main quest reading group is invalid or duplicated")
+			}
+			groups[group.GroupID] = true
+			for _, story := range group.Stories {
+				if story.StoryTeamBattleID <= 0 || story.TalkID <= 0 || story.Title == "" || story.ResultCostumeID < 0 || stories[story.StoryTeamBattleID] {
+					return errors.New("main quest reading story is invalid or duplicated")
+				}
+				stories[story.StoryTeamBattleID] = true
+			}
+		}
+	}
 	return nil
 }
 

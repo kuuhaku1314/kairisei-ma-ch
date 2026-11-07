@@ -1,5 +1,7 @@
 package multiplayer
 
+import "kairisei.local/server/battlecontent"
+
 import "path/filepath"
 
 // LoadOperationsEnemyCatalog reuses the combat parsers without loading skills
@@ -8,8 +10,8 @@ import "path/filepath"
 func LoadOperationsEnemyCatalog(root string) (map[int]CombatEnemyParty, map[int]CombatEnemyDefinition, error) {
 	parties := make(map[int]CombatEnemyParty)
 	enemies := make(map[int]CombatEnemyDefinition)
-	err := readCombatCSV(filepath.Join(root, "enemy_party.csv"), func(row []string) error {
-		v, err := parseCombatEnemyParty(row)
+	err := battlecontent.ReadCSV(filepath.Join(root, "enemy_party.csv"), func(row []string) error {
+		v, err := battlecontent.ParseEnemyParty(row)
 		if err == nil {
 			parties[v.ID] = v
 		}
@@ -18,8 +20,8 @@ func LoadOperationsEnemyCatalog(root string) (map[int]CombatEnemyParty, map[int]
 	if err != nil {
 		return nil, nil, err
 	}
-	err = readCombatCSV(filepath.Join(root, "enemy.csv"), func(row []string) error {
-		v, err := parseCombatEnemy(row)
+	err = battlecontent.ReadCSV(filepath.Join(root, "enemy.csv"), func(row []string) error {
+		v, err := battlecontent.ParseEnemy(row)
 		if err == nil {
 			enemies[v.ID] = v
 		}
@@ -35,28 +37,44 @@ type OperationsCardInfo struct {
 	Cost        int    `json:"cost"`
 	NormalSkill string `json:"normal_skill"`
 	ArthurSkill string `json:"arthur_skill"`
+	SummonID    int    `json:"-"`
 }
 
-func LoadOperationsCardCatalog(cardPath, battleRoot string) (map[int]OperationsCardInfo, error) {
+func LoadOperationsCardCatalog(cardPath, battleRoot string, alchemistPaths ...string) (map[int]OperationsCardInfo, error) {
 	skills := make(map[int]CombatSkillDefinition)
-	if err := readCombatCSV(filepath.Join(battleRoot, "skill_player.csv"), func(row []string) error {
-		skill, err := parseCombatSkill(row)
-		if _, exists := skills[skill.ID]; err == nil && !exists {
-			skills[skill.ID] = skill
+	skillTables := []string{"skill_player.csv"}
+	if len(alchemistPaths) > 0 {
+		skillTables = append(skillTables, "skill_player_alchemist.csv")
+	}
+	for _, name := range skillTables {
+		if err := battlecontent.ReadCSV(filepath.Join(battleRoot, name), func(row []string) error {
+			skill, err := battlecontent.ParseSkill(row)
+			if _, exists := skills[skill.ID]; err == nil && !exists {
+				skills[skill.ID] = skill
+			}
+			return err
+		}); err != nil {
+			return nil, err
 		}
-		return err
-	}); err != nil {
-		return nil, err
 	}
 	result := make(map[int]OperationsCardInfo)
-	err := readCombatCSV(cardPath, func(row []string) error {
-		card, err := parseCombatCard(row)
+	for _, path := range append([]string{cardPath}, alchemistPaths...) {
+		err := battlecontent.ReadCardCSV(path, func(row []string) error {
+			card, err := battlecontent.ParseCard(row)
+			if err != nil {
+				return err
+			}
+			presentation, err := battlecontent.ParseCardPresentation(row)
+			if err != nil {
+				return err
+			}
+			normal, arthur := skills[card.NormalSkillID], skills[card.ArthurSkillID]
+			result[card.ID] = OperationsCardInfo{Prefix: presentation.Prefix, LimitCount: presentation.LimitCount, Attribute: normal.Attribute, Cost: normal.Cost, NormalSkill: normal.Name, ArthurSkill: arthur.Name, SummonID: card.SummonID}
+			return nil
+		})
 		if err != nil {
-			return err
+			return nil, err
 		}
-		normal, arthur := skills[card.NormalSkillID], skills[card.ArthurSkillID]
-		result[card.ID] = OperationsCardInfo{Prefix: combatField(row, 4), LimitCount: optionalCombatInt(row, 22), Attribute: normal.Attribute, Cost: normal.Cost, NormalSkill: normal.Name, ArthurSkill: arthur.Name}
-		return nil
-	})
-	return result, err
+	}
+	return result, nil
 }

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"net/http"
-	"sort"
 	"strings"
 	"time"
 
@@ -58,8 +57,6 @@ func (a *API) teamBattlePastBossShow(writer http.ResponseWriter, _ *http.Request
 	a.writeProtocol(writer, map[string]any{
 		"0": groups,
 		"1": numericArthurs,
-		"2": 0,
-		"3": 0,
 	})
 }
 
@@ -133,8 +130,13 @@ func (a *API) challengeShow(writer http.ResponseWriter, request *http.Request) {
 		writeError(writer, http.StatusBadRequest, "invalid challenge target time")
 		return
 	}
+	catalog, err := a.account.TeamBattleCatalog()
+	if err != nil {
+		a.writeStoreError(writer, err)
+		return
+	}
 	if _, found := teamBattleReplayForBoss(a.initialState.TeamBattleReplays, payload.BossID); !found ||
-		!teamBattleSoloHasBoss(a.account.TeamBattleSoloState(), payload.BossID) {
+		!catalog.HasBoss(payload.BossID) {
 		writeError(writer, http.StatusBadRequest, "unknown team battle boss")
 		return
 	}
@@ -144,20 +146,30 @@ func (a *API) challengeShow(writer http.ResponseWriter, request *http.Request) {
 // All stages require this preflight; only configured score stages expose rewards.
 func (a *API) teamBattleScoreRewardLineup(writer http.ResponseWriter, request *http.Request) {
 	var payload struct {
-		BossID int `json:"bossid"`
+		BossID int                       `json:"bossid"`
+		Mode   gamestate.BattleScoreMode `json:"mode"`
 	}
-	if err := decodeExact(request, []string{"bossid"}, &payload); err != nil {
+	if err := decodeExact(request, []string{"bossid", "mode"}, &payload); err != nil {
+		a.writeStoreError(writer, err)
+		return
+	}
+	if !payload.Mode.Valid() {
+		writeError(writer, http.StatusBadRequest, "invalid score reward mode")
+		return
+	}
+	catalog, err := a.account.TeamBattleCatalog()
+	if err != nil {
 		a.writeStoreError(writer, err)
 		return
 	}
 	if _, found := teamBattleReplayForBoss(a.initialState.TeamBattleReplays, payload.BossID); !found ||
-		!teamBattleSoloHasBoss(a.account.TeamBattleSoloState(), payload.BossID) {
+		!catalog.HasBoss(payload.BossID) {
 		writeError(writer, http.StatusBadRequest, "unknown team battle boss")
 		return
 	}
 
-	highScore, rewards := a.account.ScoreLineup(payload.BossID, a.initialState.TeamBattleRewards)
-	a.writeProtocol(writer, map[string]any{"high_score": highScore, "rewards": rewards})
+	highScore, rewards := a.account.ScoreLineup(a.scoreBossID(payload.BossID), a.initialState.TeamBattleRewards, payload.Mode)
+	a.writeProtocol(writer, map[string]any{"mode": payload.Mode, "high_score": highScore, "rewards": rewards})
 }
 
 func (a *API) userBuffExec(writer http.ResponseWriter, request *http.Request) {
@@ -197,46 +209,38 @@ func (a *API) userBuffExec(writer http.ResponseWriter, request *http.Request) {
 }
 
 func (a *API) teamBattleSoloStart(writer http.ResponseWriter, request *http.Request) {
-	var payload struct {
-		BossID              int                           `json:"bossid"`
-		DeckArthurType      int8                          `json:"deck_arthur_type"`
-		DeckArthurTypeIndex int8                          `json:"deck_arthur_type_idx"`
-		PartnerDeckSelects  []teamBattlePartnerDeckSelect `json:"partner_deck_selects"`
-		StartTime           int                           `json:"starttime"`
-		Flag                int                           `json:"flag"`
-	}
-	fields := []string{
-		"bossid",
-		"deck_arthur_type",
-		"deck_arthur_type_idx",
-		"partner_deck_selects",
-		"starttime",
-		"flag",
-	}
-	if err := decodeExact(request, fields, &payload); err != nil {
+	payload, err := decodeSoloBattleStart(request)
+	if err != nil {
 		a.writeStoreError(writer, err)
 		return
 	}
-	if payload.DeckArthurType < 1 || payload.DeckArthurType > 4 ||
-		payload.DeckArthurTypeIndex < 0 || payload.StartTime <= 0 || payload.Flag < 0 || payload.Flag > 2 ||
-		len(payload.PartnerDeckSelects) != 3 {
+	if payload.DeckArthurType < 1 || payload.DeckArthurType > 5 ||
+		payload.DeckArthurTypeIndex < 0 ||
+		len(payload.PartnerDeckSelects) > 3 {
 		writeError(writer, http.StatusBadRequest, "invalid local team battle start")
 		return
 	}
 	replay, found := teamBattleReplayForBoss(a.initialState.TeamBattleReplays, payload.BossID)
-	teamBattleSolo := a.account.TeamBattleSoloState()
-	isTowerBoss := a.account.TowerQuestHasBoss(payload.BossID)
-	isAccessible := isTowerBoss
-	if payload.Flag == 0 {
-		isAccessible = isAccessible || teamBattleSoloBossAccessible(teamBattleSolo, payload.BossID, time.Now().Unix())
-	} else {
-		isAccessible = teamBattlePastBossHasBoss(a.initialState.TeamBattlePastBossGroups, payload.BossID)
+	catalog, err := a.account.TeamBattleCatalog()
+	if err != nil {
+		a.writeStoreError(writer, err)
+		return
 	}
+	isTowerBoss, towerOpen := a.account.TowerQuestBossAdmission(payload.BossID)
+	if isTowerBoss && !towerOpen {
+		a.writeStoreError(writer, &game.BusinessError{Code: -1, Message: "炼金副本暂未开放。"})
+		return
+	}
+	isAccessible := isTowerBoss || catalog.BossAccessible(payload.BossID, time.Now().Unix())
 	if !found || !isAccessible {
 		writeError(writer, http.StatusBadRequest, "unknown team battle replay")
 		return
 	}
-	rules, rulesFound := a.account.TeamBattleEntryRulesForBoss(payload.BossID)
+	rules, rulesFound := catalog.EntryRules(payload.BossID)
+	if !rulesFound {
+		// Tower and past entries can live outside the ordinary publication view.
+		rules, rulesFound = a.account.TeamBattleEntryRulesForBoss(payload.BossID)
+	}
 	if !rulesFound {
 		writeError(writer, http.StatusInternalServerError, "team battle entry rules are unavailable")
 		return
@@ -245,30 +249,27 @@ func (a *API) teamBattleSoloStart(writer http.ResponseWriter, request *http.Requ
 		writeError(writer, http.StatusBadRequest, "this battle requires multiplayer")
 		return
 	}
+	party := make([]game.TeamBattleResultPartner, len(payload.PartnerDeckSelects))
+	for index, selection := range payload.PartnerDeckSelects {
+		party[index] = game.TeamBattleResultPartner{UserID: selection.UserID, ArthurType: selection.ArthurType, IsSelf: selection.UserID == a.initialState.User.UserID}
+	}
+	if err := rules.ValidateSoloParty(payload.DeckArthurType, party); err != nil {
+		writeError(writer, http.StatusBadRequest, err.Error())
+		return
+	}
 	battleSegments, err := teamBattleReplayBattles(replay)
 	if err != nil {
 		writeError(writer, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	cards, decks := a.account.Show()
-	cardByUniqueID := make(map[int64]game.CardInfo, len(cards))
-	for _, card := range cards {
-		cardByUniqueID[card.UniqueID] = card
-	}
-	playerDeck, found := game.ExactDeck(decks, payload.DeckArthurType, payload.DeckArthurTypeIndex)
-	if !found {
-		writeError(writer, http.StatusBadRequest, "selected player deck is unavailable")
+	player, err := a.account.BattleLoadout(a.initialState.User.UserID, payload.DeckArthurType, payload.DeckArthurTypeIndex)
+	if err != nil {
+		a.writeStoreError(writer, err)
 		return
 	}
-	playerLeader, found := game.PartnerLeaderCard(playerDeck, cardByUniqueID)
-	if !found || playerLeader.Fame <= 0 || playerLeader.Fame > 100 {
+	if player.LeaderFame <= 0 || player.LeaderFame > 100 {
 		writeError(writer, http.StatusBadRequest, "selected player leader card is unavailable")
-		return
-	}
-	avatars := a.account.AvatarsState()
-	if len(avatars) != 4 {
-		writeError(writer, http.StatusInternalServerError, "team battle avatars are unavailable")
 		return
 	}
 	var externalViews []friendPointPartnerView
@@ -295,37 +296,22 @@ func (a *API) teamBattleSoloStart(writer http.ResponseWriter, request *http.Requ
 		}
 	}
 
-	seenArthurTypes := map[int8]struct{}{payload.DeckArthurType: {}}
 	partnerDecks := make([]any, 0, 3)
 	friendPointReward := 0
 	rentalCredits := make([]game.FriendPointRentalCredit, 0, 3)
 	selectedResultPartners := make([]game.TeamBattleResultPartner, 0, 3)
 	clearDecks := make([]gamestate.BattleClearDeck, 0, 4)
 	if a.battleHistory != nil {
-		member, err := a.account.MultiplayerMember(a.initialState.User.UserID, payload.DeckArthurType, payload.DeckArthurTypeIndex)
-		if err != nil {
-			a.writeStoreError(writer, err)
-			return
-		}
-		clearDecks = append(clearDecks, gamestate.BattleClearDeck{UserID: member.UserID, Name: member.Name, ArthurType: member.ArthurType, HonorIDs: member.DeckHonorIDs, Deck: member.ClearDeck})
+		clearDecks = append(clearDecks, gamestate.BattleClearDeck{UserID: player.UserID, Name: player.Name, ArthurType: player.ArthurType, HonorIDs: player.DeckHonorIDs, Deck: player.ClearDeck})
 	}
 	deckHonorIDs, _ := a.account.HonorState()
 	localHonorIDs := make([]int, 4)
 	copy(localHonorIDs, deckHonorIDs)
-	selections := append([]teamBattlePartnerDeckSelect(nil), payload.PartnerDeckSelects...)
-	sort.Slice(selections, func(left, right int) bool {
-		return selections[left].ArthurType < selections[right].ArthurType
-	})
-	for _, selection := range selections {
+	for _, selection := range payload.PartnerDeckSelects {
 		if selection.ArthurType < 1 || selection.ArthurType > 4 || selection.DeckIndex < 0 {
 			writeError(writer, http.StatusBadRequest, "invalid partner deck selection")
 			return
 		}
-		if _, exists := seenArthurTypes[selection.ArthurType]; exists {
-			writeError(writer, http.StatusBadRequest, "duplicate team battle Arthur type")
-			return
-		}
-		seenArthurTypes[selection.ArthurType] = struct{}{}
 		if selection.UserID == a.initialState.User.UserID {
 			// The original SetDeckData sends the same account ID for each
 			// selected own profession. Reuse the ordinary partner deck DTO,
@@ -333,6 +319,10 @@ func (a *API) teamBattleSoloStart(writer http.ResponseWriter, request *http.Requ
 			view, available := partnerViewFromState(ownState, selection.ArthurType)
 			if !available {
 				writeError(writer, http.StatusBadRequest, "selected own partner profession is unavailable")
+				return
+			}
+			if err := a.validatePartnerDeckComposition(view, selection.DeckIndex); err != nil {
+				a.writeStoreError(writer, err)
 				return
 			}
 			deck, deckErr := view.deckWire(selection.DeckIndex)
@@ -368,6 +358,10 @@ func (a *API) teamBattleSoloStart(writer http.ResponseWriter, request *http.Requ
 		view, viewFound := findFriendPointPartnerView(externalViews, selection.UserID)
 		if !viewFound || view.ArthurType != selection.ArthurType {
 			writeError(writer, http.StatusBadRequest, "unknown persistent team battle partner")
+			return
+		}
+		if err := a.validatePartnerDeckComposition(view, selection.DeckIndex); err != nil {
+			a.writeStoreError(writer, err)
 			return
 		}
 		partnerDeck, deckErr := view.deckWire(selection.DeckIndex)
@@ -407,52 +401,18 @@ func (a *API) teamBattleSoloStart(writer http.ResponseWriter, request *http.Requ
 		}
 		partnerDecks = append(partnerDecks, partnerDeck)
 	}
-	if len(seenArthurTypes) != 4 {
-		writeError(writer, http.StatusBadRequest, "team battle requires all four Arthur types")
-		return
-	}
-	standaloneBPUse := 0
-	if !isTowerBoss {
-		standaloneBPUse, found = game.TeamBattleSoloBossBPUse(teamBattleSolo, payload.BossID)
-		if !found {
-			writeError(writer, http.StatusInternalServerError, "team battle BP cost is unavailable")
-			return
-		}
-	}
-	context, _, started, startErr := a.account.BeginTeamBattle(
-		payload.BossID,
-		teamBattleEnemyTypes(battleSegments),
-		standaloneBPUse,
-		true,
-		a.initialState.TeamBattleRewards,
-		fmt.Sprintf(
-			"solo:user=%d:boss=%d:start=%d",
-			a.initialState.User.UserID,
-			payload.BossID,
-			payload.StartTime,
-		),
-		[]game.TeamBattleFameSource{{
-			ArthurType: int(payload.DeckArthurType),
-			LeaderFame: playerLeader.Fame,
+	context, _, started, startErr := a.beginSoloBattleEntry(payload, game.SoloBattleEntry{
+		ScoreBossID:    a.scoreBossID(payload.BossID),
+		DeckArthurType: payload.DeckArthurType, UserID: a.initialState.User.UserID, BossID: payload.BossID,
+		EnemyTypes: teamBattleEnemyTypes(battleSegments),
+		Profiles:   a.initialState.TeamBattleRewards,
+		FameSources: []game.TeamBattleFameSource{{
+			MemberType: 1,
+			LeaderFame: player.LeaderFame,
 		}},
-		0,
-		game.RentalPartnerCount(selectedResultPartners),
-		friendPointReward,
-		rentalCredits,
-		func() string {
-			if len(rentalCredits) == 0 {
-				return ""
-			}
-			return fmt.Sprintf(
-				"solo-rental:user=%d:boss=%d:start=%d:nonce=%d",
-				a.initialState.User.UserID,
-				payload.BossID,
-				payload.StartTime,
-				time.Now().UnixNano(),
-			)
-		}(),
-		selectedResultPartners,
-	)
+		FriendPointPartners: game.RentalPartnerCount(selectedResultPartners), FriendPointReward: friendPointReward,
+		FriendPointRentalCredits: rentalCredits, SelectedPartners: selectedResultPartners,
+	})
 	if startErr != nil {
 		writeError(writer, http.StatusBadRequest, startErr.Error())
 		return
@@ -467,6 +427,9 @@ func (a *API) teamBattleSoloStart(writer http.ResponseWriter, request *http.Requ
 	}
 	if context.ScorePolicy != nil {
 		replay.EndTurn = context.ScorePolicy.EndTurn
+		if context.ScorePolicy.TeamCostInitial != 0 {
+			replay.CostInitial = context.ScorePolicy.TeamCostInitial
+		}
 	}
 	if a.battleHistory != nil {
 		if err := a.account.SetTeamBattleClearDecks(payload.BossID, clearDecks); err != nil {
@@ -495,10 +458,10 @@ func (a *API) teamBattleSoloStart(writer http.ResponseWriter, request *http.Requ
 
 	a.writeProtocol(writer, map[string]any{
 		"avatar": map[string]any{
-			"costumeid":       avatars[int(payload.DeckArthurType)-1].CostumeID,
-			"avatar_partsids": append([]int(nil), avatars[int(payload.DeckArthurType)-1].AvatarPartIDs...),
+			"costumeid":       player.CostumeID,
+			"avatar_partsids": append([]int(nil), player.PartsIDs...),
 		},
-		"partner_deck":                       partnerDecks,
+		"partner_deck":                       a.partnerDeckParameterViews(partnerDecks),
 		"seed":                               context.Seed,
 		"battles":                            battlesWire,
 		"is_unlimited_free_continue":         0,
@@ -509,9 +472,10 @@ func (a *API) teamBattleSoloStart(writer http.ResponseWriter, request *http.Requ
 		"is_active_only_burst_gauge_initial": 0,
 		"hold_max":                           replay.HoldMax,
 		"end_turn":                           replay.EndTurn,
+		"score_policy":                       soloScoreStartPolicy(context.ScorePolicy),
 		"is_solo_online":                     0,
 		"container":                          []any{},
-		"start_time":                         payload.StartTime,
+		"start_time":                         context.StartTime,
 	})
 }
 
@@ -541,6 +505,7 @@ func (a *API) teamBattleSoloEnd(writer http.ResponseWriter, request *http.Reques
 		InputCommand []string `json:"input_cmd"`
 		EnemyDeadBit []int    `json:"enemy_dead_bit"`
 		BossID       int      `json:"bossid"`
+		ScoreDamage  *int64   `json:"score_damage,omitempty"`
 	}
 	fields := []string{
 		"progress",
@@ -549,7 +514,7 @@ func (a *API) teamBattleSoloEnd(writer http.ResponseWriter, request *http.Reques
 		"enemy_dead_bit",
 		"bossid",
 	}
-	if err := decodeExact(request, fields, &payload); err != nil {
+	if err := decodeExact(request, fields, &payload, "score_damage"); err != nil {
 		a.rejectTeamBattleSoloReport(writer, payload.BossID, err)
 		return
 	}
@@ -567,10 +532,15 @@ func (a *API) teamBattleSoloEnd(writer http.ResponseWriter, request *http.Reques
 	a.teamBattleResultMu.Lock()
 	defer a.teamBattleResultMu.Unlock()
 	if cached, exists := a.account.TeamBattleSoloResultReceipt(requestDigest, payload.BossID); exists {
-		a.writeProtocol(writer, cached)
+		a.writeTeamBattleResultSnapshot(writer, cached, false)
 		return
 	}
-	if !teamBattleSoloHasBoss(a.account.TeamBattleSoloState(), payload.BossID) &&
+	catalog, err := a.account.TeamBattleCatalog()
+	if err != nil {
+		a.rejectTeamBattleSoloReport(writer, payload.BossID, err)
+		return
+	}
+	if !catalog.HasBoss(payload.BossID) &&
 		!a.account.TowerQuestHasBoss(payload.BossID) {
 		a.rejectTeamBattleSoloReport(writer, payload.BossID, errors.New("local team battle boss is unavailable"))
 		return
@@ -585,7 +555,7 @@ func (a *API) teamBattleSoloEnd(writer http.ResponseWriter, request *http.Reques
 		} else {
 			// SV_ERR.TEAMBATTLE_REWARD_NOT_FOUND. The original callback clears
 			// the pending local save before showing this business error.
-			a.writeProtocolResult(writer, map[string]any{}, -3207, "战斗记录已失效，无法结算本次奖励，请重新进入副本。")
+			a.writeExpiredBattleReport(writer)
 		}
 		return
 	}
@@ -599,11 +569,15 @@ func (a *API) teamBattleSoloEnd(writer http.ResponseWriter, request *http.Reques
 		a.rejectTeamBattleSoloReport(writer, payload.BossID, err)
 		return
 	}
+	report := game.TeamBattleDropReport{SoloChallenge: true, EnemyDeadBits: payload.EnemyDeadBit, Turns: nativeScoreTurns(payload.InputCommand)}
+	if payload.ScoreDamage != nil {
+		report.ScoreVerified, report.ScoreDamage = true, *payload.ScoreDamage
+	}
 	settlement, err := a.account.CompleteTeamBattle(
 		payload.BossID,
 		payload.IsClear != 0,
 		a.initialState.TeamBattleRewards,
-		game.TeamBattleDropReport{SoloChallenge: true, EnemyDeadBits: payload.EnemyDeadBit, Turns: nativeScoreTurns(payload.InputCommand)},
+		report,
 	)
 	if err != nil {
 		a.rejectTeamBattleSoloReport(writer, payload.BossID, err)
@@ -625,116 +599,37 @@ func (a *API) teamBattleSoloEnd(writer http.ResponseWriter, request *http.Reques
 		writeError(writer, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if payload.IsClear != 0 && len(settlement.Context.FriendPointRentalCredits) > 0 {
-		if a.friendPointAccounts == nil {
-			writeError(writer, http.StatusInternalServerError, "friend-point rental repository is unavailable")
-			return
-		}
-		if err := a.friendPointAccounts.RecordFriendPointRentals(
-			settlement.Context.FriendPointRentalEventKey,
-			a.initialState.User.UserID,
-			settlement.Context.FriendPointRentalCredits,
-			settlement.Context.BossID,
-		); err != nil {
-			a.logger.Error("record friend-point rental events", "error", err)
-			writeError(writer, http.StatusInternalServerError, "record friend-point rental events")
-			return
-		}
-	}
-	resultRewards := battleResultRewardsWire(settlement.Result.Rewards)
-	clearRewards := battleResultRewardsWire(settlement.FirstClear.Rewards)
-	newCards := append([]game.CardInfo(nil), settlement.Result.Cards...)
-	newCards = append(newCards, settlement.FirstClear.Cards...)
-	newCards = append(newCards, settlement.Score.Cards...)
-	newStackCards := append([]gamestate.CardStack(nil), settlement.Result.StackCards...)
-	newStackCards = append(newStackCards, settlement.FirstClear.StackCards...)
-	newStackCards = append(newStackCards, settlement.Score.StackCards...)
-	newItems := append([]gamestate.Item(nil), settlement.Result.Items...)
-	newItems = append(newItems, settlement.FirstClear.Items...)
-	newItems = append(newItems, settlement.Score.Items...)
-	newSpheres := append([]gamestate.Sphere(nil), settlement.Result.Spheres...)
-	newSpheres = append(newSpheres, settlement.FirstClear.Spheres...)
-	newSpheres = append(newSpheres, settlement.Score.Spheres...)
-	newBuddies := append([]gamestate.Buddy(nil), settlement.Result.Buddies...)
-	newBuddies = append(newBuddies, settlement.FirstClear.Buddies...)
-	newBuddies = append(newBuddies, settlement.Score.Buddies...)
-	for _, fameAward := range settlement.Fame {
-		newCards = append(newCards, fameAward.Result.Cards...)
-		newStackCards = append(newStackCards, fameAward.Result.StackCards...)
-		newItems = append(newItems, fameAward.Result.Items...)
-		newSpheres = append(newSpheres, fameAward.Result.Spheres...)
-		newBuddies = append(newBuddies, fameAward.Result.Buddies...)
-	}
-	fameRewards := battleFameRewardsWire(settlement.Fame)
-	// StageQuestAreaID identifies the permanent quest route. It is not the
-	// suppression/world-boss mode flag consumed by the result scene. Publishing
-	// a zero-point object here makes every ordinary quest show a false
-	// suppression-points popup, so keep the mode-specific result absent until a
-	// real suppression battle contract is recovered.
-	stageQuest := []any{}
-
-	// Damage, skill order, enemy AI and the native command CRC remain owned by the
-	// original CN libbattle engine. The HTTP boundary validates the recovered
-	// native report envelope before it applies local rewards. The result DTO still
-	// echoes all three selected partner projections, marking own decks as SELF.
-	response := map[string]any{
-		"is_clear":                        payload.IsClear,
-		"user":                            a.userPayload(),
-		"result_rewards":                  resultRewards,
-		"clear_rewards":                   clearRewards,
-		"fame_rewards":                    fameRewards,
-		"score_rewards":                   battleResultRewardsWire(settlement.Score.Rewards),
-		"challenge_rewards":               []any{},
-		"deck_cards":                      []any{},
-		"new_cards":                       toWireCards(newCards),
-		"new_stack_cards":                 toWireStackCards(newStackCards),
-		"new_items":                       a.itemInfosWire(newItems),
-		"new_sphrs":                       toWireSpheres(newSpheres),
-		"new_buddys":                      toWireBuddies(newBuddies),
-		"partners":                        partners,
-		"is_result_reward_in_present_box": game.BoolInt(settlement.Result.InPresentBox),
-		"is_clear_reward_in_present_box":  game.BoolInt(settlement.FirstClear.InPresentBox),
-		"is_fame_reward_in_present_box":   battleAwardsInPresentBox(settlement.Fame),
-		"is_stage_reward_in_present_box":  0,
-		"is_score_reward_in_present_box":  game.BoolInt(settlement.Score.InPresentBox),
-		"unlock_notice":                   []any{},
-		"bonus_fame_add":                  a.initialState.TeamBattleFameBonusPolicy.BonusFameAdd,
-		"rookie_type":                     0,
-		"stage_quest":                     stageQuest,
-		"show_boss_coin":                  0,
-		"scene_transition":                []any{},
-		"auto_fusion_result":              []any{},
-		"auto_loveup_result":              []any{},
-		"score":                           scoreInfoWire(settlement.ScoreInfo),
-		"challenge_results":               []any{},
-		"message":                         "",
-	}
-	encodedResponse, err := json.Marshal(response)
+	snapshot := settlement.ResultSnapshot(int(payload.IsClear), 1, a.initialState.TeamBattleFameBonusPolicy.BonusFameAdd, partners)
+	encodedSnapshot, err := json.Marshal(snapshot)
 	if err != nil {
-		writeError(writer, http.StatusInternalServerError, "encode solo team battle settlement")
+		writeError(writer, http.StatusInternalServerError, "encode solo team battle settlement snapshot")
 		return
 	}
-	if err := a.account.RecordTeamBattleSoloResultReceipt(
-		requestDigest,
-		payload.BossID,
-		encodedResponse,
-		time.Now(),
-	); err != nil {
+	if err := a.account.RecordTeamBattleSoloResultReceipt(requestDigest, payload.BossID, encodedSnapshot, time.Now()); err != nil {
 		writeError(writer, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if payload.IsClear != 0 && a.battleHistory != nil && len(settlement.Context.ClearDecks) == 4 {
-		record := gamestate.BattleClearRecord{BossID: payload.BossID, UserID: a.initialState.User.UserID, Mode: 0,
-			CompletedAt: time.Now().Unix(), EventKey: settlement.Context.FameSeed, Decks: settlement.Context.ClearDecks}
-		if err := a.battleHistory.PersistSoloClear(a.account.Snapshot(a.initialState), record, requestDigest); err != nil {
-			a.logger.Error("persist solo clear statistics and rewards", "error", err)
+	commit := game.SoloBattleCommit{BossID: payload.BossID, ReceiptSHA: requestDigest, Score: settlement.RankingScore}
+	if payload.IsClear != 0 {
+		commit.RentalEventKey, commit.RentalCredits = settlement.Context.FriendPointRentalEventKey, settlement.Context.FriendPointRentalCredits
+		if len(settlement.Context.ClearDecks) != 0 {
+			commit.Clear = &gamestate.BattleClearRecord{BossID: payload.BossID, UserID: a.initialState.User.UserID, Mode: 0,
+				CompletedAt: time.Now().Unix(), EventKey: settlement.Context.FameSeed, Decks: settlement.Context.ClearDecks}
+		}
+	}
+	if a.battleHistory != nil {
+		if err := a.battleHistory.PersistSoloBattle(a.account.Snapshot(a.initialState), commit); err != nil {
+			a.logger.Error("persist solo battle outcome", "error", err)
 			writeError(writer, http.StatusInternalServerError, "persist solo battle result")
 			return
 		}
+	} else if len(commit.RentalCredits) != 0 || commit.Score != nil {
+		writeError(writer, http.StatusInternalServerError, "solo settlement repository is unavailable")
+		return
 	} else if !a.persistOrError(writer) {
 		return
 	}
-	a.writeProtocol(writer, json.RawMessage(encodedResponse))
+	a.writeTeamBattleResultSnapshot(writer, encodedSnapshot, false)
 }
 
 func (a *API) rejectTeamBattleSoloReport(writer http.ResponseWriter, bossID int, err error) {
@@ -743,7 +638,7 @@ func (a *API) rejectTeamBattleSoloReport(writer http.ResponseWriter, bossID int,
 	// protocol response. HTTP 400 instead traps every subsequent login in
 	// the same retry, before HomeShow can retire this run. Persistence errors
 	// remain retryable and never pass through this business rejection path.
-	a.writeProtocolResult(writer, map[string]any{}, -3207, "战斗报告无法结算，请重新进入副本。")
+	a.writeExpiredBattleReport(writer)
 }
 
 // validateNativeTeamBattleReport enforces the wire shape produced by the CN
@@ -817,41 +712,6 @@ func validateNativeTeamBattleUnfinishedSegments(activeIndex int, inputCommands [
 		}
 	}
 	return nil
-}
-
-func teamBattleSoloResultPartners(
-	selected []game.TeamBattleResultPartner,
-	friendStates map[int]int8,
-) ([]any, error) {
-	if len(selected) != 3 {
-		return nil, errors.New("team battle result requires the three selected partners")
-	}
-	partners := make([]any, 0, len(selected))
-	for _, partner := range selected {
-		friendState := friendStates[partner.UserID]
-		if partner.IsSelf {
-			friendState = 4 // Original TeamBattleMemberWindow's all-self branch.
-		}
-		partners = append(partners, map[string]any{
-			"userid":            partner.UserID,
-			"name":              partner.Name,
-			"arthur_type":       partner.ArthurType,
-			"is_burst":          partner.IsBurst,
-			"lv":                partner.Level,
-			"deck_rank":         partner.DeckRank,
-			"state":             friendState,
-			"leader_cardid":     partner.LeaderCardID,
-			"leader_card_lv":    partner.LeaderLevel,
-			"leader_card_fame":  partner.LeaderFame,
-			"last_login_time":   partner.LastLoginUnix,
-			"comment":           partner.Comment,
-			"pvp_point":         partner.PVPPoint,
-			"is_first_matching": 0,
-			"rookie_type":       0,
-			"deck_honorids":     append([]int(nil), partner.HonorIDs...),
-		})
-	}
-	return partners, nil
 }
 
 func (a *API) teamBattleMultiRoomSearch(writer http.ResponseWriter, request *http.Request) {
@@ -1143,79 +1003,14 @@ func (a *API) teamBattleSoloPartnerRentalDeck(writer http.ResponseWriter, reques
 		writeError(writer, http.StatusInternalServerError, err.Error())
 		return
 	}
-	a.writeProtocol(writer, map[string]any{"partner_deck": partnerDecks})
+	a.writeProtocol(writer, map[string]any{"partner_deck": a.partnerDeckParameterViews(partnerDecks)})
 }
 
-func teamBattleSoloHasBoss(configuration json.RawMessage, bossID int) bool {
-	if bossID <= 0 {
-		return false
-	}
-	var top map[string]json.RawMessage
-	if json.Unmarshal(configuration, &top) != nil {
-		return false
-	}
-	for _, groupKey := range []string{"9", "10", "11", "12"} {
-		var groups []map[string]json.RawMessage
-		if json.Unmarshal(top[groupKey], &groups) != nil {
-			continue
-		}
-		for _, group := range groups {
-			var bosses []map[string]json.RawMessage
-			if json.Unmarshal(group["10"], &bosses) != nil {
-				continue
-			}
-			for _, boss := range bosses {
-				var current int
-				if json.Unmarshal(boss["0"], &current) == nil && current == bossID {
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
-
-func teamBattleSoloBossAccessible(configuration json.RawMessage, bossID int, nowUnix int64) bool {
-	if bossID <= 0 || nowUnix <= 0 {
-		return false
-	}
-	var top map[string]json.RawMessage
-	if json.Unmarshal(configuration, &top) != nil {
-		return false
-	}
-	for _, groupKey := range []string{"9", "10", "11", "12"} {
-		var groups []map[string]json.RawMessage
-		if json.Unmarshal(top[groupKey], &groups) != nil {
-			continue
-		}
-		for _, group := range groups {
-			var bosses []map[string]json.RawMessage
-			if json.Unmarshal(group["10"], &bosses) != nil {
-				continue
-			}
-			for _, boss := range bosses {
-				var current, state int
-				var expiration int64
-				if json.Unmarshal(boss["0"], &current) != nil || current != bossID ||
-					json.Unmarshal(boss["10"], &state) != nil ||
-					json.Unmarshal(boss["16"], &expiration) != nil {
-					continue
-				}
-				// TeamBattleBossInfo field "10" is the client presentation
-				// state, not an availability flag: the CN client renders 0 as
-				// NEW and 2 as CLEAR. Reject malformed states, but keep a new
-				// battle selectable while the publication has not expired.
-				return state >= 0 && state <= 2 && (expiration == 0 || expiration > nowUnix)
-			}
-		}
-	}
-	return false
-}
-
-func teamBattleSoloWithBattlePoints(
+func teamBattleSoloWithRuntimeState(
 	configuration json.RawMessage,
 	status game.BattlePointStatus,
 	medalCount int,
+	alchemistGroups []map[string]any,
 ) (json.RawMessage, error) {
 	// These balances come from the account, not the request. Project them as-is;
 	// recovery items can raise BP above its natural regeneration cap.
@@ -1238,6 +1033,11 @@ func teamBattleSoloWithBattlePoints(
 		return nil, fmt.Errorf("encode local team battle medal count: %w", err)
 	}
 	top["8"] = medals
+	roots, err := json.Marshal(alchemistGroups)
+	if err != nil {
+		return nil, err
+	}
+	top["alchemist_groups"] = roots
 	updated, err := json.Marshal(top)
 	if err != nil {
 		return nil, fmt.Errorf("encode local team battle point response: %w", err)
@@ -1263,14 +1063,14 @@ func battleResultRewardsWire(rewards []game.ReceivedReward) []any {
 func battleFameRewardsWire(awards []game.TeamBattleFameAward) []any {
 	result := make([]any, 0, len(awards))
 	for _, award := range awards {
-		if len(award.Result.Rewards) != 1 || award.ArthurType < 1 || award.ArthurType > 4 ||
+		if len(award.Result.Rewards) != 1 || award.MemberType < 1 || award.MemberType > 4 ||
 			(award.RewardKind != 0 && award.RewardKind != 1) {
 			continue
 		}
 		reward := battleResultRewardsWire(award.Result.Rewards)
 		result = append(result, map[string]any{
 			"result_reward":             reward[0],
-			"arthur_type":               award.ArthurType,
+			"member_type":               award.MemberType,
 			"ex_teambattle_reward_type": award.RewardKind,
 		})
 	}
@@ -1280,14 +1080,14 @@ func battleFameRewardsWire(awards []game.TeamBattleFameAward) []any {
 func battleHostRewardsWire(awards []game.TeamBattleFameAward) []any {
 	result := make([]any, 0, len(awards))
 	for _, award := range awards {
-		if len(award.Result.Rewards) != 1 || award.ArthurType < 1 || award.ArthurType > 4 ||
+		if len(award.Result.Rewards) != 1 || award.MemberType < 1 || award.MemberType > 4 ||
 			award.RewardKind != 5 {
 			continue
 		}
 		reward := battleResultRewardsWire(award.Result.Rewards)
 		result = append(result, map[string]any{
 			"result_reward":             reward[0],
-			"arthur_type":               award.ArthurType,
+			"member_type":               award.MemberType,
 			"ex_teambattle_reward_type": award.RewardKind,
 		})
 	}

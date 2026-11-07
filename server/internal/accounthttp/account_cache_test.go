@@ -1,6 +1,7 @@
 package accounthttp
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -11,16 +12,20 @@ import (
 )
 
 func TestAccountCacheReloadsDurableStateAfterUnsuccessfulMutation(t *testing.T) {
-	for _, failure := range []string{"persist", "validation", "panic"} {
+	for _, failure := range []string{"persist", "validation", "panic", "protocol"} {
 		t.Run(failure, func(t *testing.T) {
 			durable, builds := 100, 0
 			build := func(int) (http.Handler, error) {
 				builds++
 				cached := durable
-				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				outcome := &cacheOutcome{retain: true}
+				outcome.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == "/fail" {
 						cached -= 10
 						switch failure {
+						case "protocol":
+							outcome.retain = false
+							fmt.Fprint(w, `{"res_code":-1}`)
 						case "panic":
 							panic("failed mutation")
 						case "persist":
@@ -35,7 +40,8 @@ func TestAccountCacheReloadsDurableStateAfterUnsuccessfulMutation(t *testing.T) 
 						durable = cached
 					}
 					fmt.Fprint(w, cached)
-				}), nil
+				})
+				return outcome, nil
 			}
 			router := New(Config{Build: build, IdleLimit: idleAccountCacheLimit})
 			func() {
@@ -44,11 +50,11 @@ func TestAccountCacheReloadsDurableStateAfterUnsuccessfulMutation(t *testing.T) 
 						t.Fatalf("unexpected panic: %v", caught)
 					}
 				}()
-				router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/fail", nil))
+				router.ServeHTTP(httptest.NewRecorder(), primaryAccountRequest(http.MethodPost, "/fail", nil))
 			}()
 			for _, path := range []string{"/commit", "/read"} {
 				response := httptest.NewRecorder()
-				router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, path, nil))
+				router.ServeHTTP(response, primaryAccountRequest(http.MethodPost, path, nil))
 				if response.Code != http.StatusOK || response.Body.String() != "99" || durable != 99 {
 					t.Fatalf("%s retained failed mutation: status=%d body=%s durable=%d", path, response.Code, response.Body.String(), durable)
 				}
@@ -57,7 +63,11 @@ func TestAccountCacheReloadsDurableStateAfterUnsuccessfulMutation(t *testing.T) 
 				t.Fatalf("built %d handlers; want one reload, then successful cache reuse", builds)
 			}
 			snapshot := router.ActivitySnapshot()
-			if snapshot.Requests != 3 || snapshot.Errors != 1 || len(snapshot.Players) != 1 {
+			wantHTTPErrors := int64(1)
+			if failure == "protocol" {
+				wantHTTPErrors = 0
+			}
+			if snapshot.Requests != 3 || snapshot.Errors != wantHTTPErrors || len(snapshot.Players) != 1 {
 				t.Fatalf("activity request/unique player counters: %+v", snapshot)
 			}
 			old := snapshot.Players[0]
@@ -133,5 +143,38 @@ func TestConfiguredAccountCacheLimit(t *testing.T) {
 		if value == "" && limit != 32 {
 			t.Fatalf("default %d", limit)
 		}
+	}
+}
+
+type cacheOutcome struct {
+	http.Handler
+	retain bool
+}
+
+func (h *cacheOutcome) RetainAccountCache() bool { return h.retain }
+
+func TestCancelledAccountRequestDoesNotEnterAfterWaiting(t *testing.T) {
+	built := false
+	router := New(Config{Build: func(int) (http.Handler, error) {
+		built = true
+		return http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), nil
+	}})
+	lock := router.AccountLock(accountstore.PrimaryUserID)
+	lock.Lock()
+	defer lock.Unlock()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		router.ServeHTTP(httptest.NewRecorder(), primaryAccountRequest(http.MethodPost, "/mutate", nil).WithContext(ctx))
+	}()
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("cancelled request still waits for account")
+	}
+	if built {
+		t.Fatal("cancelled request constructed account")
 	}
 }

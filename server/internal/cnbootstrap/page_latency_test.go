@@ -42,7 +42,7 @@ func BenchmarkAccountPersist(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			identity, err := accounts.ResolveLogin("00000000-0000-4000-8000-000000000001")
+			identity, err := accounts.ResolveInternalLogin("00000000-0000-4000-8000-000000000001")
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -96,12 +96,12 @@ func probeCompleteRuntimePages(t *testing.T, handler http.Handler, savePath, see
 	})
 	accounts := testfixture.TestAccountRepository(t, storage)
 	testfixture.AttachProbeCardCatalog(t, storage, cards)
-	if _, err := accounts.ResolveLogin("00000000-0000-0000-0003-000000000000"); err != nil {
+	if _, err := accounts.ResolveInternalLogin("00000000-0000-0000-0003-000000000000"); err != nil {
 		t.Fatal(err)
 	}
 	rows := []map[string]any{}
 	for index, count := range []int{10, 2000} {
-		identity, err := accounts.ResolveLogin(fmt.Sprintf("00000000-0000-0000-0003-%012d", index+1))
+		identity, err := accounts.ResolveInternalLogin(fmt.Sprintf("00000000-0000-0000-0003-%012d", index+1))
 		if err != nil {
 			t.Fatal(err)
 		}

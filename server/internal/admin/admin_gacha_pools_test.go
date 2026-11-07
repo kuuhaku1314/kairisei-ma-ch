@@ -88,6 +88,13 @@ func TestOperatorGachaPoolLifecycle(t *testing.T) {
 		t.Fatal("failed creation left a pool or changed runtime", err)
 	}
 
+	// The copied pool inherits one probability-page description, independently of buymsg.
+	const copiedOdds = "复制来源的概率页说明"
+	for _, id := range operations.gachaGroupMembers(operations.gachaBases[60200211].GroupID) {
+		profile := operations.gachaBases[id]
+		profile.OddsMessage = copiedOdds
+		operations.gachaBases[id] = profile
+	}
 	// Copying one variant copies its whole group (ticket, single and ten-draw) as unpublished drafts.
 	if code, _ := call("/api/gacha-pools", map[string]any{"source_id": 60201206, "name": "x", "expected_revision": 0}); code != 200 {
 		t.Fatalf("lucky-bag group copy status=%d", code)
@@ -104,7 +111,7 @@ func TestOperatorGachaPoolLifecycle(t *testing.T) {
 	}
 	draft, err := operations.storage.ReadDocument("gacha-draft:60300004")
 	var draftConfig AdminGachaConfig
-	if err != nil || json.Unmarshal(draft.Payload, &draftConfig) != nil || draftConfig.Name != "秋季限定" || draftConfig.Price != 500 {
+	if err != nil || json.Unmarshal(draft.Payload, &draftConfig) != nil || draftConfig.Name != "秋季限定" || draftConfig.Price != 500 || draftConfig.OddsMessage != copiedOdds {
 		t.Fatalf("ten-draw variant draft: %+v %v", draftConfig, err)
 	}
 	active, _ := operations.GachaPublication()
@@ -113,29 +120,6 @@ func TestOperatorGachaPoolLifecycle(t *testing.T) {
 	}
 	if operations.GachaIDPublished(60300002, map[int]struct{}{60300002: {}}) {
 		t.Fatal("opening a group exposed an unpublished template")
-	}
-
-	// Accounts append operator pools (game tests); a saved account keeps their play counts and passes save
-	// validation although the catalog lacks them.
-	userID := testfixture.CreateNamedFriendCapacityAccount(t, accounts, 1)
-	state, err := accounts.LoadState(userID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, config := range operations.gachaConfigurations {
-		if config.Operator && config.Profile.GroupID == 60300002 {
-			profile := config.Profile
-			if profile.GachaID == 60300003 {
-				profile.PlayCount = 4
-			}
-			state.Gachas = append(state.Gachas, profile)
-		}
-	}
-	if err := accounts.PersistState(userID, state); err != nil {
-		t.Fatalf("account with an operator pool failed to save: %v", err)
-	}
-	if state, err = accounts.LoadState(userID); err != nil || state.OperatorGachaPlays[60300003] != 4 || findProfile(state.Gachas, 60300003) != nil {
-		t.Fatalf("operator pool plays not restored: %v %v", state.OperatorGachaPlays, err)
 	}
 
 	// Deletion is soft, covers the group, blocks publication and survives restart; restore reverses it.
@@ -236,8 +220,14 @@ func TestOperatorGachaPoolLifecycle(t *testing.T) {
 		}
 		group[i].CoverPath = coverPath
 		group[i].PlayCountMax = 2
+		group[i].OddsMessage = "整池共用的新说明"
 		expected[60300002+i] = gachaGroupExpectation{Draft: doc.Revision}
 	}
+	group[2].OddsMessage = "不同说明"
+	if code, _ := call("/api/gacha-editor/group/draft", map[string]any{"group_id": 60300002, "configs": group, "expected": expected}); code != 400 {
+		t.Fatalf("different per-variant odds messages accepted: %d", code)
+	}
+	group[2].OddsMessage = group[0].OddsMessage
 	group[2].CoverPath = ""
 	if code, _ := call("/api/gacha-editor/group/draft", map[string]any{"group_id": 60300002, "configs": group, "expected": expected}); code != 400 {
 		t.Fatalf("variants with different covers saved: %d", code)
@@ -254,6 +244,13 @@ func TestOperatorGachaPoolLifecycle(t *testing.T) {
 	}
 	for i := range group {
 		group[i].StartUnix = 1893456000
+	}
+	group[0].CategoryNum = 15
+	if code, _ := call("/api/gacha-editor/group/draft", map[string]any{"group_id": 60300002, "configs": group, "expected": expected}); code != 400 {
+		t.Fatalf("different variant categories accepted: %d", code)
+	}
+	for i := range group {
+		group[i].CategoryNum = 15
 	}
 	group[2].CardIDs = group[2].CardIDs[:1]
 	group[2].Weights = []int{9}
@@ -301,10 +298,33 @@ func TestOperatorGachaPoolLifecycle(t *testing.T) {
 		t.Fatalf("group publish: %d %v", code, published)
 	}
 	for _, config := range operations.gachaConfigurations {
-		if config.Profile.GroupID == 60300002 && (config.Profile.CoverPath != coverPath || config.Disabled != (config.Profile.GachaID == 60300003)) {
-			t.Fatalf("variant %d published without the pool cover or with the wrong open state", config.Profile.GachaID)
+		if config.Profile.GroupID == 60300002 && (config.Profile.OddsMessage != group[0].OddsMessage || config.Profile.CoverPath != coverPath || config.Disabled != (config.Profile.GachaID == 60300003) || config.Profile.CategoryNum != 15 || config.Profile.CategoryPictID != 4) {
+			t.Fatalf("variant %d published with the wrong cover, open state, or category", config.Profile.GachaID)
 		}
 	}
+	// Accounts append operator pools (game tests); a saved account keeps their play counts and passes save
+	// validation although the catalog lacks them.
+	userID := testfixture.CreateNamedFriendCapacityAccount(t, accounts, 1)
+	state, err := accounts.LoadState(userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, config := range operations.gachaConfigurations {
+		if config.Operator && config.Profile.GroupID == 60300002 {
+			profile := config.Profile
+			if profile.GachaID == 60300003 {
+				profile.PlayCount = 4
+			}
+			state.Gachas = append(state.Gachas, profile)
+		}
+	}
+	if err := accounts.PersistState(userID, state); err != nil {
+		t.Fatalf("account with an operator pool failed to save: %v", err)
+	}
+	if state, err = accounts.LoadState(userID); err != nil || state.OperatorGachaPlays[60300003] != 4 || findProfile(state.Gachas, 60300003) != nil {
+		t.Fatalf("operator pool plays not restored: %v %v", state.OperatorGachaPlays, err)
+	}
+
 	for id := range expected {
 		draft, _ := operations.storage.ReadDocument("gacha-draft:" + strconv.Itoa(id))
 		live, _ := operations.storage.ReadDocument("gacha-live:" + strconv.Itoa(id))
@@ -334,12 +354,14 @@ func TestOperatorGachaPoolLifecycle(t *testing.T) {
 			conflict++
 		}
 	}
-	reloaded, err := NewOperations(accounts.Database(), catalog.Gachas)
+	// Copies also persist their own rules; removing the source catalog cannot
+	// change their published payment, contents or per-player quota.
+	reloaded, err := NewOperations(accounts.Database(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, c := range reloaded.gachaConfigurations {
-		if c.Profile.GachaID == group[2].GachaID && (len(c.Profile.CardIDs) != 1 || c.Profile.CardWeights[0] != 9 || c.StartUnix != group[2].StartUnix || c.Profile.PlayCountMax != 2) {
+		if c.Profile.GachaID == group[2].GachaID && (len(c.Profile.CardIDs) != 1 || c.Profile.CardWeights[0] != 9 || c.StartUnix != group[2].StartUnix || c.Profile.PlayCountMax != 2 || c.Profile.OddsMessage != group[0].OddsMessage) {
 			t.Fatalf("independent variant or quota lost on reload: %+v", c)
 		}
 	}
@@ -444,6 +466,19 @@ func TestOperatorGachaPoolLifecycle(t *testing.T) {
 	if err != nil || reloaded.nextCustomGachaID() <= 60300004 {
 		t.Fatal("retired IDs reused after restart", err)
 	}
+	// Already stored template pools keep their original daily-free semantics.
+	registry := operations.customGachaDocument()
+	for version := 0; version <= 1; version++ {
+		id := 60301000 + version
+		registry.Pools = append(registry.Pools, customGachaPool{GachaID: id, GroupID: id, TemplateID: 60200101, Name: "已存在的友情池", RuleVersion: version})
+	}
+	if _, err := operations.storage.WriteDocument(customGachaKey, operations.customGachaRevision, registry, "test"); err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := NewOperations(accounts.Database(), catalog.Gachas)
+	if err != nil || legacy.gachaBases[60301000].DailyFirstFree || !legacy.gachaBases[60301001].DailyFirstFree {
+		t.Fatal("existing template rules changed", err)
+	}
 }
 
 func findProfile(gachas []gamestate.GachaProfile, id int) *gamestate.GachaProfile {
@@ -455,7 +490,7 @@ func findProfile(gachas []gamestate.GachaProfile, id int) *gamestate.GachaProfil
 	return nil
 }
 
-func TestRuleTemplatesCreatePublishReloadAndKeepDailyClaim(t *testing.T) {
+func TestRuleTypesCreatePublishReloadAndKeepDailyClaim(t *testing.T) {
 	accounts := testfixture.NewFriendCapacityTestAccounts(t)
 	catalog, err := accounts.Database().CatalogState()
 	if err != nil {
@@ -469,14 +504,14 @@ func TestRuleTemplatesCreatePublishReloadAndKeepDailyClaim(t *testing.T) {
 		}
 	}
 	accounts.Database().SetCatalog(catalog)
-	o, err := NewOperations(accounts.Database(), catalog.Gachas)
+	o, err := NewOperations(accounts.Database(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	entries := map[string]AdminCatalogEntry{}
 	for _, base := range catalog.Gachas {
 		for _, id := range base.CardIDs {
-			entries[adminCatalogKey(6, id)] = AdminCatalogEntry{Rarity: 6, ResourceState: "ready", FameMax: 100, ArthurType: catalog.DeckRankPolicy.Cards[id].ArthurType}
+			entries[adminCatalogKey(6, id)] = AdminCatalogEntry{Rarity: 6, ResourceState: "ready", FameMax: 100, LevelMax: 60, ArthurType: catalog.DeckRankPolicy.Cards[id].ArthurType}
 		}
 		entries[adminCatalogKey(8, base.PayTypeID)] = AdminCatalogEntry{ResourceState: "ready"}
 		pools := [][]gamestate.WeightedReward{base.RewardPool}
@@ -485,7 +520,7 @@ func TestRuleTemplatesCreatePublishReloadAndKeepDailyClaim(t *testing.T) {
 		}
 		for _, pool := range pools {
 			for _, item := range pool {
-				entries[adminCatalogKey(item.Reward.Type, item.Reward.RewardTypeID)] = AdminCatalogEntry{Rarity: 6, ResourceState: "ready", FameMax: 100}
+				entries[adminCatalogKey(item.Reward.Type, item.Reward.RewardTypeID)] = AdminCatalogEntry{Rarity: 6, ResourceState: "ready", FameMax: 100, LevelMax: 60}
 			}
 		}
 	}
@@ -493,7 +528,7 @@ func TestRuleTemplatesCreatePublishReloadAndKeepDailyClaim(t *testing.T) {
 	router := chi.NewRouter()
 	router.Get("/api/gacha-editor", admin.gachaEditorList)
 	router.Post("/api/gacha-pools", admin.createCustomGacha)
-	router.Post("/api/gacha-editor/group/{action:publish}", admin.gachaGroupAction)
+	router.Post("/api/gacha-editor/group/{action:draft|publish}", admin.gachaGroupAction)
 	call := func(path string, body any) (int, map[string]any) {
 		encoded, _ := json.Marshal(body)
 		r := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(encoded))
@@ -509,117 +544,148 @@ func TestRuleTemplatesCreatePublishReloadAndKeepDailyClaim(t *testing.T) {
 	listed := httptest.NewRecorder()
 	router.ServeHTTP(listed, httptest.NewRequest(http.MethodGet, "/api/gacha-editor", nil))
 	var list struct {
-		RuleTemplates []gachaRuleTemplate `json:"rule_templates"`
+		RuleTypes     []gachaRuleType       `json:"rule_types"`
+		MaxDrawCounts int                   `json:"max_draw_counts"`
+		Categories    []gachaEditorCategory `json:"categories"`
 	}
-	if listed.Code != 200 || json.Unmarshal(listed.Body.Bytes(), &list) != nil || len(list.RuleTemplates) == 0 {
-		t.Fatal("missing rule templates")
+	if listed.Code != 200 || json.Unmarshal(listed.Body.Bytes(), &list) != nil || len(list.RuleTypes) != 7 || list.MaxDrawCounts != 2 || len(o.gachaBases) != 0 || !reflect.DeepEqual(list.Categories, gachaEditorCategories) {
+		t.Fatal("rule catalog must be available without built-in pools")
 	}
 	for _, body := range []map[string]any{
-		{"rule_template_id": 90000200}, {"rule_template_id": -1},
-		{"rule_template_id": 60201302, "source_id": 60200211},
+		{"rule_template_id": 60200201},
+		{"rules": []gachaPoolRule{{Type: "unknown", DrawCount: 1}}},
+		{"rules": []gachaPoolRule{{Type: "standard", DrawCount: 1, DailyFirstFree: true}}},
+		{"rules": []gachaPoolRule{{Type: "standard", DrawCount: 1}, {Type: "standard", DrawCount: 1}}},
+		{"rules": []gachaPoolRule{{Type: "standard", DrawCount: 1}, {Type: "standard", DrawCount: 5}, {Type: "standard", DrawCount: 10}}},
+		{"rules": []gachaPoolRule{{Type: "step", DrawCount: 11, StepCount: 3}}, "professions": []int{1}},
+		{"rules": []gachaPoolRule{{Type: "select", DrawCount: 1, UserSelectMax: 2}}, "professions": []int{1}},
+		{"rules": []gachaPoolRule{{Type: "select", DrawCount: 1}}},
 	} {
 		body["name"], body["expected_revision"] = "invalid", 0
 		if code, _ := call("/api/gacha-pools", body); code != 400 {
-			t.Fatal("invalid template accepted", code, body)
+			t.Fatal("invalid rule accepted", code, body)
 		}
 	}
-	// A template must not inherit mutable published contents from its example pool.
-	changed := AdminGachaConfigFromProfile(o.gachaBases[60200211])
-	changed.Price = 37
-	changed.Closed = true
-	if _, err := o.storage.WriteDocument("gacha-live:60200211", 0, changed, "test"); err != nil {
-		t.Fatal(err)
-	}
-	created := map[int]int{}
-	for _, template := range list.RuleTemplates {
-		if len(template.Summary) == 0 {
-			t.Fatal("rule picker has no summary")
+	cardIDs := []int{}
+	for _, p := range catalog.Gachas {
+		if len(p.CardIDs) >= 2 {
+			cardIDs = p.CardIDs[:2]
+			break
 		}
-		code, result := call("/api/gacha-pools", map[string]any{"rule_template_id": template.ID, "name": "模板测试", "expected_revision": o.customGachaRevision})
+	}
+	for i, id := range cardIDs {
+		e := entries[adminCatalogKey(6, id)]
+		e.Rarity, e.ArthurType = 6-i, 0
+		entries[adminCatalogKey(6, id)] = e
+	}
+	entries[adminCatalogKey(4, 0)] = AdminCatalogEntry{Name: "金币", ResourceState: "ready"}
+	created := map[string]int{}
+	for _, kind := range list.RuleTypes {
+		if len(kind.Summary) == 0 {
+			t.Fatal("missing rule explanation", kind.ID)
+		}
+		body := map[string]any{"rules": []gachaPoolRule{kind.Default}, "name": "规则测试", "expected_revision": o.customGachaRevision}
+		if kind.ID == "standard" {
+			body["rules"] = []gachaPoolRule{kind.Default, {Type: "standard", DrawCount: 10}}
+			body["professions"] = []int{1, 2, 3, 4, 5}
+		}
+		code, result := call("/api/gacha-pools", body)
 		if code != 200 {
-			t.Fatalf("template %d: %d %v", template.ID, code, result)
+			t.Fatalf("create %s: %d %v", kind.ID, code, result)
 		}
 		group := int(result["group_id"].(float64))
-		created[template.ID] = group
+		created[kind.ID] = group
 		ids := result["gacha_ids"].([]any)
-		if len(ids) != len(template.GachaIDs) {
-			t.Fatal("missing template variant")
+		if kind.ID == "standard" && len(ids) != 10 {
+			t.Fatal("missing profession/draw variants")
 		}
 		expected := map[int]gachaGroupExpectation{}
-		for i, raw := range ids {
+		configs := []AdminGachaConfig{}
+		for _, raw := range ids {
 			id := int(raw.(float64))
-			base := o.gachaBases[id]
-			source := o.gachaBases[template.GachaIDs[i]]
-			if base.CardNum != source.CardNum || base.CardNumMax != source.CardNumMax || base.UnownedOnly != source.UnownedOnly ||
-				base.DailyFirstFree != source.DailyFirstFree || base.GuaranteedCount != source.GuaranteedCount ||
-				!reflect.DeepEqual(base.Steps, source.Steps) || !reflect.DeepEqual(base.Gifts, source.Gifts) {
-				t.Fatal("template lost its rules", template.ID)
+			pool := o.customGachas[id]
+			if pool.Rule == nil || pool.Rule.Type != kind.ID || pool.TemplateID != 0 {
+				t.Fatal("rule is not owned by pool", id)
 			}
-			doc, err := o.storage.ReadDocument("gacha-draft:" + strconv.Itoa(id))
+			doc, _ := o.storage.ReadDocument("gacha-draft:" + strconv.Itoa(id))
 			var config AdminGachaConfig
-			if err != nil || json.Unmarshal(doc.Payload, &config) != nil || config.Closed || config.Price != source.Price {
-				t.Fatal("template inherited live edits", err)
+			if json.Unmarshal(doc.Payload, &config) != nil || len(config.CardIDs) != 0 || len(config.RewardPool) != 0 {
+				t.Fatal("new pool inherited content")
 			}
 			expected[id] = gachaGroupExpectation{Draft: doc.Revision, SHA256: doc.SHA256}
 			if o.GachaIDPublished(id, map[int]struct{}{group: {}}) {
-				t.Fatal("unpublished template exposed")
+				t.Fatal("empty draft exposed to players")
 			}
+			if _, err := admin.validateGachaConfig(config); err == nil {
+				t.Fatal("empty pool passed validation")
+			}
+			if pool.Rule.mixed() {
+				config.RewardPool = []gamestate.WeightedReward{{Weight: 1, Reward: gamestate.Reward{Type: 4, Num: 7, CardSkillLevels: []int16{}}}}
+				for i := range config.Steps {
+					config.Steps[i].RewardPool = config.RewardPool
+				}
+				if _, err := admin.validateGachaConfig(config); err != nil {
+					t.Fatal("new rewards rejected", err)
+				}
+				config.RewardPool[0].Reward.Num = 0
+				if _, err := admin.validateGachaConfig(config); err == nil {
+					t.Fatal("invalid reward quantity accepted")
+				}
+				config.RewardPool[0].Reward.Num = 7
+			} else {
+				config.CardIDs, config.Weights = []int{cardIDs[0]}, []int{1}
+				if kind.ID == "select" {
+					if _, err := admin.validateGachaConfig(config); err == nil {
+						t.Fatal("self-select pool accepted fewer candidates than required")
+					}
+					config.CardIDs, config.Weights = cardIDs, []int{1, 2}
+					config.CategoryNum = 90
+					if _, err := admin.validateGachaConfig(config); err == nil {
+						t.Fatal("exchange category accepted for a gacha pool")
+					}
+					config.DailyPlayMax, config.CategoryNum = 1, gamestate.MainQuestGachaCategory
+					config.RandomGifts = []gamestate.GachaRandomGiftRule{{FromPlay: 1, ToPlay: 1, Pool: []gamestate.WeightedReward{
+						{Weight: 1, Reward: gamestate.Reward{Type: 4, Num: 7, CardSkillLevels: []int16{}}},
+					}}}
+				}
+				if kind.ID == "guaranteed" {
+					if _, err := admin.validateGachaConfig(config); err == nil {
+						t.Fatal("guarantee without remainder cards accepted")
+					}
+					config.CardIDs, config.Weights = append(config.CardIDs, cardIDs[1]), []int{1, 2}
+				}
+			}
+			configs = append(configs, config)
+		}
+		if err := admin.validateStoredGachas(); err != nil {
+			t.Fatal("empty drafts blocked startup", err)
+		}
+		if code, _ := call("/api/gacha-editor/group/publish", map[string]any{"group_id": group, "expected": expected}); code != 400 {
+			t.Fatal("empty drafts published")
+		}
+		if code, result := call("/api/gacha-editor/group/draft", map[string]any{"group_id": group, "configs": configs, "expected": expected}); code != 200 {
+			t.Fatal("save draft", code, result)
+		}
+		for id := range expected {
+			doc, _ := o.storage.ReadDocument("gacha-draft:" + strconv.Itoa(id))
+			expected[id] = gachaGroupExpectation{Draft: doc.Revision, SHA256: doc.SHA256}
 		}
 		if code, result := call("/api/gacha-editor/group/publish", map[string]any{"group_id": group, "expected": expected}); code != 200 {
-			t.Fatalf("template publish: %d %v", code, result)
+			t.Fatal("publish rule", code, result)
 		}
 	}
-	for _, group := range []int{60200101, 60200201, 60201102, 60201206, 60201302, 60201401} {
-		if created[group] == 0 {
-			t.Fatal("supported rule family missing", group)
-		}
-	}
-	if code, _ := call("/api/gacha-pools", map[string]any{"rule_template_id": created[60200201], "name": "invalid", "expected_revision": o.customGachaRevision}); code != 400 {
-		t.Fatal("operator pool offered as immutable template")
-	}
-	// The stock picker needs one row per profession/draw count, and sends that exact ID.
-	if code, _ := call("/api/gacha-pools", map[string]any{"rule_template_id": 60200201, "professions": []int{1, 5}, "name": "ambiguous", "expected_revision": o.customGachaRevision}); code != 400 {
-		t.Fatal("ambiguous payment alternatives accepted for the native picker")
-	}
-	code, professional := call("/api/gacha-pools", map[string]any{"rule_template_id": 60200301, "professions": []int{1, 2, 3, 4, 5}, "name": "职业测试", "expected_revision": o.customGachaRevision})
-	if code != 200 || len(professional["gacha_ids"].([]any)) != 10 {
-		t.Fatalf("profession creation: %d %v", code, professional)
-	}
-	professionGroup := int(professional["group_id"].(float64))
-	expected := map[int]gachaGroupExpectation{}
-	for _, raw := range professional["gacha_ids"].([]any) {
-		id := int(raw.(float64))
-		base := o.gachaBases[id]
-		if base.ArthurType < 1 || base.ArthurType > 5 || base.GroupID != professionGroup || len(base.CardIDs) == 0 {
-			t.Fatalf("invalid profession variant: %+v", base)
-		}
-		for _, card := range base.CardIDs {
-			job := catalog.DeckRankPolicy.Cards[card].ArthurType
-			if base.ArthurType != 5 && job != 0 && job != base.ArthurType {
-				t.Fatal("other profession leaked into pool", base.ArthurType, job)
-			}
-		}
-		doc, _ := o.storage.ReadDocument("gacha-draft:" + strconv.Itoa(id))
-		expected[id] = gachaGroupExpectation{Draft: doc.Revision, SHA256: doc.SHA256}
-	}
-	if code, result := call("/api/gacha-editor/group/publish", map[string]any{"group_id": professionGroup, "expected": expected}); code != 200 {
-		t.Fatalf("profession publish: %d %v", code, result)
-	}
-	restarted, err := NewOperations(accounts.Database(), catalog.Gachas)
+	restarted, err := NewOperations(accounts.Database(), nil)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal("restart without built-in pools", err)
 	}
 	admin.operations = restarted
 	if err := admin.validateStoredGachas(); err != nil {
-		t.Fatal("template restart", err)
+		t.Fatal("owned rule restart", err)
 	}
-	for id := range expected {
-		if !reflect.DeepEqual(restarted.gachaBases[id], o.gachaBases[id]) {
-			t.Fatal("profession or card filtering lost after restart", id)
+	for id, base := range o.gachaBases {
+		if !reflect.DeepEqual(restarted.gachaBases[id], base) {
+			t.Fatal("owned rule changed after restart", id)
 		}
-	}
-	if len(admin.gachaRuleTemplates()) != len(list.RuleTemplates) {
-		t.Fatal("templates grow after creating pools")
 	}
 	// First free draw, SQLite reload and a payment round trip must not reset the daily claim.
 	uid := testfixture.CreateNamedFriendCapacityAccount(t, accounts, 1)
@@ -629,6 +695,7 @@ func TestRuleTemplatesCreatePublishReloadAndKeepDailyClaim(t *testing.T) {
 	}
 	state.Onboarding.Step = 9
 	state.User.FriendPoint = 0
+	state.User.CoinFree = 1000
 	master, err := masterdata.LoadCardRuntimeMaster(testfixture.WriteTestCardMaster(t, t.TempDir()))
 	if err != nil {
 		t.Fatal(err)
@@ -668,8 +735,49 @@ func TestRuleTemplatesCreatePublishReloadAndKeepDailyClaim(t *testing.T) {
 	if err := accounts.PersistState(uid, account.Snapshot(state)); err != nil {
 		t.Fatal("published templates cannot persist in a player account", err)
 	}
-	id := created[60200101]
-	profile := restarted.gachaBases[id]
+	selectID := created["select"]
+	selection := []gamestate.Reward{game.GachaCardReward(cardIDs[0]), game.GachaCardReward(cardIDs[1])}
+	if _, err := account.PlayGacha(selectID, 3, selection[:1]); err == nil {
+		t.Fatal("incomplete self-select lineup accepted")
+	}
+	draw, err := account.PlayGacha(selectID, 3, selection)
+	if err != nil || len(draw.PresentGifts) != 1 || draw.PresentGifts[0].Type != 4 || draw.PresentGifts[0].Num != 7 {
+		t.Fatalf("self-select draw lost its random gift: %+v, %v", draw.PresentGifts, err)
+	}
+	if err := accounts.PersistState(uid, account.Snapshot(state)); err != nil {
+		t.Fatal("save self-select lineup and daily quota", err)
+	}
+	state, err = accounts.LoadState(uid)
+	if err != nil {
+		t.Fatal("reload self-select state", err)
+	}
+	account, err = game.New(state)
+	if err != nil {
+		t.Fatal("load account before self-select profile", err)
+	}
+	account.ApplyGachaConfiguration(restarted.gachaRevision, restarted.gachaConfigurations)
+	lastSelection, err := account.GachaSelectedLineup(selectID)
+	if err != nil || len(lastSelection) != 2 || lastSelection[0].Prize.RewardTypeID != cardIDs[0] || lastSelection[1].Prize.RewardTypeID != cardIDs[1] {
+		t.Fatalf("self-select lineup did not survive restart: %+v, %v", lastSelection, err)
+	}
+	checked := false
+	for _, visible := range account.GachaState() {
+		if visible.GachaID == selectID {
+			checked = visible.CategoryNum == gamestate.MainQuestGachaCategory && visible.CategoryPictID == 11 && visible.DailyGroupPlays == 1 && visible.DailyExhausted()
+		}
+	}
+	if !checked {
+		t.Fatal("main quest category or daily quota did not survive restart")
+	}
+	if _, err := account.PlayGacha(selectID, 3, selection); err == nil {
+		t.Fatal("restart cleared the daily limit")
+	}
+	id := created["friend"]
+	content, err := restarted.effectiveGachaConfig(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile := adminConfiguredGacha(restarted.gachaBases[id], content).Profile
 	configs := []game.GachaConfiguration{{Operator: true, Profile: profile}}
 	account.ApplyGachaConfiguration(1, configs)
 	if _, err := account.PlayGacha(id, 2, nil); err != nil {

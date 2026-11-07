@@ -16,7 +16,7 @@ func TestAdminMailBatchAtomicRetryAndRestart(t *testing.T) {
 	accounts := testfixture.NewFriendCapacityTestAccounts(t)
 	ids := []int{}
 	for i := 1; i <= 2; i++ {
-		a, err := accounts.ResolveLogin(fmt.Sprintf("00000000-0000-4000-8000-%012d", i))
+		a, err := accounts.ResolveInternalLogin(fmt.Sprintf("00000000-0000-4000-8000-%012d", i))
 		if err != nil {
 			t.Fatal(err)
 		}

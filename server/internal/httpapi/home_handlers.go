@@ -10,25 +10,31 @@ import (
 	"kairisei.local/server/internal/gamestate"
 )
 
-func (a *API) homeShow(writer http.ResponseWriter, _ *http.Request) {
+func (a *API) homeShow(writer http.ResponseWriter, request *http.Request) {
+	if _, err := a.account.InitializeAlchemist(); err != nil {
+		a.writeStoreError(writer, err)
+		return
+	}
 	// The original client submits its saved result before HomeShow. Reaching
 	// home abandons any remaining solo context, without refunding the entry.
 	a.account.AbandonSoloBattle()
-	a.account.ClearBurstStory()
+	a.account.ClearStoryBattleSession()
 	now := time.Now()
 	if !a.refreshPVPChallenges(writer, now) {
 		return
 	}
 	homeBanners := []any{}
-	if gachaID := a.account.HomeBannerGachaID(now); gachaID > 0 &&
-		a.account.FeatureUnlocked(20) && !a.account.OnboardingInProgress() {
-		homeBanners = append(homeBanners, map[string]any{
-			"home_banner_type": 12,
-			"image_url":        a.baseURL + "/local/home/banner.png",
-			"open_url":         "gacha:" + strconv.Itoa(gachaID),
-			"infomation":       []string{},
-			"eventid":          0,
-		})
+	if !a.homeBanners.Policy.Custom {
+		gachaID := a.account.HomeBannerGachaID(now)
+		if gachaID > 0 && a.account.FeatureUnlocked(20) && !a.account.OnboardingInProgress() && gachaPublished(request, gachaID) {
+			homeBanners = append(homeBanners, map[string]any{
+				"home_banner_type": 12,
+				"image_url":        a.baseURL + "/local/home/banner.png",
+				"open_url":         "gacha:" + strconv.Itoa(gachaID),
+				"infomation":       []string{},
+				"eventid":          0,
+			})
+		}
 	}
 	var friendPointReward any
 	if a.friendPointAccounts != nil {
@@ -60,6 +66,7 @@ func (a *API) homeShow(writer http.ResponseWriter, _ *http.Request) {
 			writeError(writer, http.StatusInternalServerError, "claim login bonuses")
 			return
 		}
+		a.account.ObserveMissionVisit(now)
 	}
 	onboardingQuests, err := a.account.HomeOnboardingQuests()
 	if err != nil {
@@ -80,28 +87,8 @@ func (a *API) homeShow(writer http.ResponseWriter, _ *http.Request) {
 	if !a.persistOrError(writer) {
 		return
 	}
-	eventPage := a.initialState.EventPageProfile
-	homeEvents := []any{}
-	// Event 0 is the generic official art template, not a configured event.
-	// Publishing it renders a blank green target banner in every open menu.
-	if eventPage.EventID > 0 && int64(eventPage.EndTime) > now.Unix() {
-		homeEvents = append(homeEvents, map[string]any{
-			"eventid":       eventPage.EventID,
-			"button_pictid": eventPage.HomeButtonPictID,
-			"end_time":      eventPage.EndTime,
-		})
-	}
-	// HOME2 is the lower native carousel. This retained event artwork belongs
-	// to the configured New Year replay, not to every future event profile.
-	if eventPage.EventID == 11801010 && int64(eventPage.EndTime) > now.Unix() &&
-		a.account.FeatureUnlocked(13) && !a.account.OnboardingInProgress() {
-		homeBanners = append(homeBanners, map[string]any{
-			"home_banner_type": 13,
-			"image_url":        a.baseURL + "/local/home/event-banner.png",
-			"open_url":         "eventpage",
-			"infomation":       []string{},
-			"eventid":          0,
-		})
+	if a.homeBanners.Policy.Custom {
+		homeBanners = a.configuredHomeBanners(request, now)
 	}
 	dailyBonuses, err := projectDailyLoginBonus(loginClaims.Daily)
 	if err != nil {
@@ -147,7 +134,7 @@ func (a *API) homeShow(writer http.ResponseWriter, _ *http.Request) {
 		"monthcardtime":     cardFlags["monthcardtime"],
 		"totalcoin":         0,
 		"rookie_bonus":      nil,
-		"home_event":        homeEvents,
+		"home_event":        []any{},
 		"max_rank":          maxRank,
 		"medal_num":         medalCount,
 		"expired_medal_num": 0,
@@ -264,35 +251,6 @@ func projectTotalLoginBonus(
 	return result, nil
 }
 
-func (a *API) mainQuestShow(writer http.ResponseWriter, request *http.Request) {
-	areaID := 0
-	selectArea := request.Method == http.MethodPost
-	if request.Method == http.MethodPost {
-		var payload struct {
-			AreaID int `json:"areaid"`
-			IsSolo int `json:"is_solo"`
-		}
-		if err := decodeExact(request, []string{"areaid", "is_solo"}, &payload); err != nil {
-			a.writeStoreError(writer, err)
-			return
-		}
-		if payload.AreaID <= 0 || (payload.IsSolo != 0 && payload.IsSolo != 1) {
-			writeError(writer, http.StatusBadRequest, "invalid local stage quest query")
-			return
-		}
-		areaID = payload.AreaID
-	}
-	payload, consumedNewClear, err := a.account.StageQuestPayload(areaID, selectArea)
-	if err != nil {
-		a.writeStoreError(writer, err)
-		return
-	}
-	if (consumedNewClear || selectArea) && !a.persistOrError(writer) {
-		return
-	}
-	a.writeProtocol(writer, payload)
-}
-
 func (a *API) teamBattleSoloShow(writer http.ResponseWriter, request *http.Request) {
 	var payload struct {
 		ActiveArthurType int8 `json:"active_arthur_type"`
@@ -301,8 +259,8 @@ func (a *API) teamBattleSoloShow(writer http.ResponseWriter, request *http.Reque
 		a.writeStoreError(writer, err)
 		return
 	}
-	if payload.ActiveArthurType < 1 || payload.ActiveArthurType > 4 {
-		writeError(writer, http.StatusBadRequest, "active Arthur type must be 1 through 4")
+	if payload.ActiveArthurType < 1 || payload.ActiveArthurType > 5 {
+		writeError(writer, http.StatusBadRequest, "active Arthur type must be 1 through 5")
 		return
 	}
 	teamBattleSolo := a.account.TeamBattleSoloState()
@@ -312,17 +270,17 @@ func (a *API) teamBattleSoloShow(writer http.ResponseWriter, request *http.Reque
 	}
 	bp := a.account.BattlePointState()
 	medalCount := a.account.ItemCount(a.initialState.TeamBattleMedalItemID)
-	teamBattleSolo, err := teamBattleSoloWithBattlePoints(teamBattleSolo, bp, medalCount)
+	alchemistGroups, err := a.alchemistGroups()
+	if err != nil {
+		a.writeStoreError(writer, err)
+		return
+	}
+	teamBattleSolo, err = teamBattleSoloWithRuntimeState(teamBattleSolo, bp, medalCount, alchemistGroups)
 	if err != nil {
 		writeError(writer, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if a.account.ClearPendingStageQuest() && !a.persistOrError(writer) {
-		return
-	}
-	teamBattleSolo, err = a.account.WithBurstQuest(teamBattleSolo, payload.ActiveArthurType)
-	if err != nil {
-		writeError(writer, http.StatusInternalServerError, err.Error())
 		return
 	}
 	a.writeProtocol(writer, teamBattleSolo)

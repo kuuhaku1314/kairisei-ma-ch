@@ -11,24 +11,39 @@ import (
 	"testing"
 	"time"
 
+	"kairisei.local/server/battlecore"
 	"kairisei.local/server/internal/gamestate"
 )
 
 func TestCompletedComebackAfterFinalFrameDisconnect(t *testing.T) {
-	for _, endType := range []int{1, 2} {
+	for _, endType := range []int{1, 2, 4} {
 		t.Run(strconv.Itoa(endType), func(t *testing.T) {
-			engine, members := nextBattleFixture(t)
-			engine.phase, engine.endType, engine.turn = battlePhaseEnded, endType, 1
+			var engine *BattleEngine
+			var members []Member
+			wantRewards := 0
 			if endType == 1 {
-				engine.enemies[0].HP, engine.enemies[0].DropReleased = 0, true
-			} else {
-				for index := range engine.players {
-					engine.players[index].HP, engine.players[index].GameOver = 0, true
+				engine, members = wonRoomBattle(t, BattleDrop{RewardType: 4, Num: 10})
+				wantRewards = 1
+			} else if endType == 4 {
+				engine, members = configuredRoomBattle(t, func(definitions *battlecore.Definitions, config *battlecore.Config, _ []battlecore.Participant) {
+					level := definitions.EnemyLevels[1]
+					level.InitialAwake = 1
+					definitions.EnemyLevels[1] = level
+					config.Drops = []BattleDrop{{RewardType: 4, Num: 10}}
+				})
+				openFixtureUserPhase(t, engine)
+				finishFixtureUserAttack(t, engine, true)
+				if engine.EndType() != 4 {
+					t.Fatal("fixture did not reach an ordinary awakened-body defeat")
 				}
+				wantRewards = 1
+			} else {
+				engine, members = knockedOutRoomBattle(t, 4, false, false)
 			}
 			hub := NewHub()
 			repository := &terminalCompletionRepository{}
 			hub.repository = repository
+			hub.completionCommit = repository.SaveCompleted
 			server, err := NewServer(hub, slog.New(slog.NewTextHandler(io.Discard, nil)))
 			if err != nil {
 				t.Fatal(err)
@@ -59,13 +74,13 @@ func TestCompletedComebackAfterFinalFrameDisconnect(t *testing.T) {
 				t.Fatal(err)
 			}
 			before, err := hub.SettlementFor(123, 1001)
-			if (endType == 1) != (err == nil) {
+			if (endType != 2) != (err == nil) {
 				t.Fatal(err)
 			}
-			if repository.saves != boolInt(endType == 1) {
+			if repository.saves != wantRewards {
 				t.Fatal("defeat was persisted as a claimable victory")
 			}
-			rng := engine.rng
+			state := engine.StateView()
 			listener, err := net.Listen("tcp", "127.0.0.1:0")
 			if err != nil {
 				t.Fatal(err)
@@ -112,13 +127,13 @@ func TestCompletedComebackAfterFinalFrameDisconnect(t *testing.T) {
 				}
 			}
 			after, err := hub.SettlementFor(123, 1001)
-			if (endType == 1) != (err == nil) || !reflect.DeepEqual(before, after) || engine.rng != rng || len(after.ReleasedDrops) != boolInt(endType == 1) {
-				t.Fatal("result recovery changed settlement, drops, or RNG", err)
+			if (endType != 2) != (err == nil) || !reflect.DeepEqual(before, after) || !reflect.DeepEqual(engine.StateView(), state) || len(after.ReleasedDrops) != wantRewards {
+				t.Fatal("result recovery changed settlement, drops, or battle state", err)
 			}
 			if endType == 2 {
 				hub.mu.Lock()
 				retained := hub.completed[123]
-				if retained == nil || len(retained.claimed) != 0 || retained.expiresAt.After(time.Now().Add(comebackLifetime)) {
+				if retained == nil || len(retained.OnlineUserIDs) != 0 || retained.expiresAt.After(time.Now().Add(comebackLifetime)) {
 					t.Error("defeat retained reward eligibility or an unbounded recovery window")
 				}
 				hub.pruneCompletedLocked(time.Now().Add(comebackLifetime + time.Second))
@@ -153,10 +168,7 @@ func TestComebackRestoresPriorWaveRewardsWithoutDuplicatingCurrentDrops(t *testi
 			name = "completed-room"
 		}
 		t.Run(name, func(t *testing.T) {
-			engine, members := nextBattleFixture(t)
-			engine.phase, engine.endType, engine.turn = battlePhaseEnded, 1, 1
-			engine.enemies[0].HP, engine.enemies[0].DropReleased = 0, true
-			engine.enemies[0].Drops = []BattleDrop{{RewardType: 4, Num: 99}}
+			engine, members := wonRoomBattle(t, BattleDrop{RewardType: 4, Num: 99})
 			ledger := []gamestate.TeamBattleEnemyDrop{
 				{BattleIndex: 0, Reward: gamestate.Reward{Type: 6, Num: 1, RewardTypeID: 101001}},
 				{BattleIndex: 1, Reward: gamestate.Reward{Type: 4, Num: 10}},
@@ -164,7 +176,7 @@ func TestComebackRestoresPriorWaveRewardsWithoutDuplicatingCurrentDrops(t *testi
 				{BattleIndex: 2, Reward: gamestate.Reward{Type: 4, Num: 99}},
 			}
 			before := cloneDropPlan(ledger)
-			rng := engine.rng
+			state := engine.StateView()
 			hub := NewHub()
 			server := &Server{hub: hub, logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
 			left, right := net.Pipe()
@@ -191,8 +203,8 @@ func TestComebackRestoresPriorWaveRewardsWithoutDuplicatingCurrentDrops(t *testi
 				strings.Count(wire, "108,5,0,4,99,0") != 1 {
 				t.Fatalf("incorrect reward restoration: %s", wire)
 			}
-			if !reflect.DeepEqual(ledger, before) || engine.rng != rng {
-				t.Fatal("comeback changed the settlement ledger or RNG")
+			if !reflect.DeepEqual(ledger, before) || !reflect.DeepEqual(engine.StateView(), state) {
+				t.Fatal("comeback changed the settlement ledger or battle state")
 			}
 		})
 	}

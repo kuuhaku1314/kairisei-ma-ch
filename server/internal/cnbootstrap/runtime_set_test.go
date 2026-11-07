@@ -1,6 +1,7 @@
 package cnbootstrap
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,10 +15,12 @@ import (
 	"strings"
 	"testing"
 
+	"kairisei.local/server/battlemodel"
 	"kairisei.local/server/internal/accountstore"
 	adminapi "kairisei.local/server/internal/admin"
 	"kairisei.local/server/internal/masterdata"
 	"kairisei.local/server/internal/multiplayer"
+	"kairisei.local/server/internal/netstats"
 	"kairisei.local/server/internal/testfixture"
 )
 
@@ -76,22 +79,43 @@ func TestCompleteRuntimeSetConstruction(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "requests.jsonl"), nil, 0600); err != nil {
 		t.Fatal(err)
 	}
+	resources := ResourcesConfig{
+		AssetMap:    p("cn-asset-map"),
+		GachaBanner: p("cn-gacha-banner"), FiveStarGachaBanner: p("cn-five-star-gacha-banner"), HomeBanner: p("cn-home-banner"),
+		CPKRoot: p("cn-cpk-root"), ImageRoot: p("cn-image-root"), CPKAliases: p("cn-cpk-aliases"),
+	}
+	profiles := os.Getenv("CN602_PLATFORM_CONTENT")
+	if profiles == "" {
+		t.Fatal("CN602_PLATFORM_CONTENT must select built target profiles")
+	}
+	resources.PlatformDeliveries = filepath.SplitList(profiles)
+	primaryDelivery, err := loadPlatformDelivery(resources.PlatformDeliveries[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	combat, err := multiplayer.LoadCombatCatalog(p("cn-combat-card-master"), p("cn-combat-master-root"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var diagnostics bytes.Buffer
+	t.Cleanup(func() {
+		if t.Failed() {
+			for _, line := range strings.Split(diagnostics.String(), "\n") {
+				if strings.Contains(line, "level=ERROR") {
+					t.Log(line)
+				}
+			}
+		}
+	})
 	handler, err := New(Config{
+		NetworkMetrics:    &netstats.Counters{},
+		CombatDefinitions: (*battlemodel.Definitions)(combat),
 		Persistence: PersistenceConfig{
 			RequestLog: filepath.Join(dir, "requests.jsonl"),
 			SavePath:   filepath.Join(dir, "save.json"),
 			SeedPath:   p("cn-save-seed"),
 		},
-		Resources: ResourcesConfig{
-			AssetMap:            p("cn-asset-map"),
-			GachaBanner:         p("cn-gacha-banner"),
-			FiveStarGachaBanner: p("cn-five-star-gacha-banner"),
-			HomeBanner:          p("cn-home-banner"),
-			CPKRoot:             p("cn-cpk-root"),
-			ImageRoot:           p("cn-image-root"),
-			CPKAliases:          p("cn-cpk-aliases"),
-			PatchRoots:          []string{p("cn-patch-root")},
-		},
+		Resources: resources,
 		Masters: MastersConfig{
 			Cards:             p("cn-card-master"),
 			Explore:           p("cn-explore-master"),
@@ -113,18 +137,54 @@ func TestCompleteRuntimeSetConstruction(t *testing.T) {
 		},
 		Multiplayer: multiplayer.NewHub(),
 		CDN:         CDNConfig{},
-		Logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Logger:      slog.New(slog.NewTextHandler(&diagnostics, nil)),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if err := handler.(io.Closer).Close(); err != nil {
+		if err := handler.Close(); err != nil {
 			t.Error(err)
 		}
 	})
+	if len(resources.PlatformDeliveries) != 0 {
+		// Same production New()/router/account path, temporary DB and no sockets.
+		for _, profile := range resources.PlatformDeliveries {
+			delivery, err := loadPlatformDelivery(profile)
+			if err != nil {
+				t.Fatal(err)
+			}
+			body, _ := json.Marshal(localLoginPayload{UUID: "f1000000-0000-4000-8000-000000000001", ClientVersion: cnMinimumClientVersion, ResourcePlatform: delivery.platform, UnityVersion: delivery.unityVersion})
+			for _, loginPath := range []string{"/local/client/login"} {
+				reply := httptest.NewRecorder()
+				handler.ServeHTTP(reply, httptest.NewRequest(http.MethodPost, loginPath, strings.NewReader(string(body))))
+				var login struct {
+					Session string `json:"sess_key"`
+					Version string `json:"version_url"`
+				}
+				if reply.Code != 200 || json.Unmarshal(reply.Body.Bytes(), &login) != nil || login.Session == "" || !strings.Contains(login.Version, "/local/content/"+delivery.platform+"/") {
+					t.Fatalf("modern login %s: %d %s", loginPath, reply.Code, reply.Body.String())
+				}
+				catalog := httptest.NewRecorder()
+				handler.ServeHTTP(catalog, httptest.NewRequest(http.MethodGet, login.Version+"patch/catalog.dat", nil))
+				if catalog.Code != 200 || string(catalog.Body.Bytes()) != string(delivery.objects["patch/catalog.dat"].data) {
+					t.Fatal("modern login/version chain did not serve its pinned platform catalog")
+				}
+			}
+			retired := httptest.NewRecorder()
+			handler.ServeHTTP(retired, httptest.NewRequest(http.MethodPost, "/loginSDK.php", strings.NewReader(string(body))))
+			if retired.Code != http.StatusNotImplemented {
+				t.Fatal("modern-only mode still exposes an unused legacy login alias")
+			}
+		}
+		manifest, err := BuildCDNManifest(filepath.Join(root, "resource-set.json"), resources.PlatformDeliveries...)
+		if err != nil || manifest.SchemaVersion != 2 {
+			t.Fatalf("complete modern CDN export: %v", err)
+		}
+		t.Logf("Complete modern startup/login/catalog/CDN: %d profiles, %d public objects; no legacy patch roots/carrier loading, listeners or player DB", len(resources.PlatformDeliveries), len(manifest.Files))
+	}
 	if legacyFixture != "" {
-		admin := handler.(interface{ AdminHandler() http.Handler }).AdminHandler()
+		admin := handler.AdminHandler()
 		for _, path := range []string{"/api/status", "/api/gacha-editor", "/api/settings", "/api/evolution-policy", "/api/activity-rewards", "/api/player-policy", "/api/maintenance"} {
 			testfixture.CallContentAdmin(t, admin, "GET", path, nil, 200)
 		}
@@ -141,7 +201,7 @@ func TestCompleteRuntimeSetConstruction(t *testing.T) {
 		}
 		// Admin reads alone do not apply live pool profiles to account snapshots.
 		// Exercise the real login/Home persistence boundary on this disposable DB.
-		db, err := handler.(*cnDeploymentHandler).database.OpenRead()
+		db, err := handler.database.OpenRead()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -164,9 +224,9 @@ func TestCompleteRuntimeSetConstruction(t *testing.T) {
 			t.Fatalf("read offline fixture logins: %v", readErr)
 		}
 		for _, uuid := range uuids {
-			body, _ := json.Marshal(map[string]string{"uuid": uuid, "clver": cnMinimumClientVersion})
+			body, _ := json.Marshal(localLoginPayload{UUID: uuid, ClientVersion: cnMinimumClientVersion, ResourcePlatform: primaryDelivery.platform, UnityVersion: primaryDelivery.unityVersion})
 			login := httptest.NewRecorder()
-			handler.ServeHTTP(login, httptest.NewRequest("POST", "/loginSDK.php", strings.NewReader(string(body))))
+			handler.ServeHTTP(login, httptest.NewRequest("POST", "/local/client/login", strings.NewReader(string(body))))
 			var identity struct {
 				Session string `json:"sess_key"`
 			}
@@ -186,6 +246,11 @@ func TestCompleteRuntimeSetConstruction(t *testing.T) {
 		t.Logf("existing database: all configuration pages, %d account snapshots, %d player logins with repeated Home/dungeon requests; disposable copy, no listeners", len(page.Accounts), len(uuids))
 		return
 	}
+	if !t.Run("AlchemistSoloHTTP", func(t *testing.T) {
+		auditAlchemistSoloHTTP(t, handler, p("cn-battle-master"))
+	}) {
+		return
+	}
 	cards, err := masterdata.LoadCardRuntimeMaster(p("cn-card-master"))
 	if err != nil {
 		t.Fatal(err)
@@ -198,7 +263,21 @@ func TestCompleteRuntimeSetConstruction(t *testing.T) {
 	var costumes struct {
 		Entries []adminapi.AdminCatalogEntry `json:"entries"`
 	}
-	admin := handler.(interface{ AdminHandler() http.Handler }).AdminHandler()
+	admin := handler.AdminHandler()
+	var metrics struct {
+		Database *accountstore.DatabaseStatistics `json:"database"`
+		Network  *netstats.Snapshot               `json:"network"`
+		Runtime  struct {
+			CPUSeconds *float64 `json:"process_cpu_seconds_total"`
+			Started    int64    `json:"process_started_unix_ms"`
+		} `json:"go_runtime"`
+	}
+	if err := json.Unmarshal(testfixture.CallContentAdmin(t, admin, "GET", "/api/status", nil, 200), &metrics); err != nil {
+		t.Fatal(err)
+	}
+	if metrics.Database == nil || metrics.Database.Writer.MaxOpenConnections != 1 || metrics.Network == nil || metrics.Runtime.Started <= 0 {
+		t.Fatal("Admin status did not expose the wired database/process/socket metrics")
+	}
 	if err := json.Unmarshal(testfixture.CallContentAdmin(t, admin, "GET", "/api/catalog?kind=costume&limit=200", nil, 200), &costumes); err != nil {
 		t.Fatal(err)
 	}
@@ -257,7 +336,7 @@ func TestCompleteRuntimeSetConstruction(t *testing.T) {
 	auditCompleteBusinessRecovery(t, handler, filepath.Join(dir, "save.json"), p("cn-save-seed"), cards)
 	auditCompleteCollectionRewards(t, handler, filepath.Join(dir, "save.json"), p("cn-save-seed"), p("cn-stamp-master"), p("cn-honor-master"), cards)
 	if profile := os.Getenv("CN602_ACCOUNT_HEAP_PROFILE"); profile != "" {
-		profileCompleteRuntimeAccounts(t, handler, profile)
+		profileCompleteRuntimeAccounts(t, handler, profile, primaryDelivery)
 	}
 	if output := os.Getenv("CN602_GACHA_PROBE"); output != "" {
 		probeCompleteRuntimeGacha(t, handler, filepath.Join(dir, "save.json"), p("cn-save-seed"), cards, output)
@@ -347,7 +426,7 @@ func probeCompleteRuntimeGacha(t *testing.T, handler http.Handler, savePath, see
 	testfixture.AttachProbeCardCatalog(t, storage, cards)
 	accounts := testfixture.TestAccountRepository(t, storage)
 	// Reserve the prebuilt primary handler; cases use fresh uncached accounts.
-	if _, err := accounts.ResolveLogin("00000000-0000-0000-0001-000000000000"); err != nil {
+	if _, err := accounts.ResolveInternalLogin("00000000-0000-0000-0001-000000000000"); err != nil {
 		t.Fatal(err)
 	}
 	for caseID, scenario := range []struct{ paid, free, cards int }{
@@ -355,7 +434,7 @@ func probeCompleteRuntimeGacha(t *testing.T, handler http.Handler, savePath, see
 		{0, 10000000, 700}, {0, 10000000, 701}, {0, 10000000, 2000},
 		{0, 10000000, 5995}, {0, 10000000, 6000},
 	} {
-		identity, err := accounts.ResolveLogin(fmt.Sprintf("00000000-0000-0000-0001-%012d", caseID+1))
+		identity, err := accounts.ResolveInternalLogin(fmt.Sprintf("00000000-0000-0000-0001-%012d", caseID+1))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -481,14 +560,15 @@ func probeCompleteRuntimeGacha(t *testing.T, handler http.Handler, savePath, see
 }
 
 // Opt-in profiling uses only this test's disposable accounts; no listener or player DB.
-func profileCompleteRuntimeAccounts(t *testing.T, handler http.Handler, profile string) {
+func profileCompleteRuntimeAccounts(t *testing.T, handler http.Handler, profile string, delivery *platformDelivery) {
 	t.Helper()
 	// Cross the 32-entry idle-cache boundary so the profile also exercises
 	// eviction, rather than only measuring its expected initial growth.
 	for count := 0; count <= 48; count++ {
 		if count > 0 {
 			response := httptest.NewRecorder()
-			handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/loginSDK.php", strings.NewReader(fmt.Sprintf(`{"uuid":"00000000-0000-0000-0000-%012d","clver":"%s"}`, count, cnMinimumClientVersion))))
+			body, _ := json.Marshal(localLoginPayload{UUID: fmt.Sprintf("00000000-0000-0000-0000-%012d", count), ClientVersion: cnMinimumClientVersion, ResourcePlatform: delivery.platform, UnityVersion: delivery.unityVersion})
+			handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/local/client/login", strings.NewReader(string(body))))
 			var login struct {
 				Session string `json:"sess_key"`
 			}

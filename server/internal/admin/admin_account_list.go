@@ -55,6 +55,11 @@ func (admin *API) accountList(w http.ResponseWriter, r *http.Request) {
 	}
 	q := r.URL.Query()
 	filter := accountstore.AccountFilter{Search: q.Get("q"), IncludeSystem: q.Get("include_system") == "1", Binding: q.Get("binding"), Sort: q.Get("sort"), ActiveOnly: q.Get("active") == "1"}
+	filter.LoginBlock = q.Get("login_block")
+	if filter.LoginBlock != "" && filter.LoginBlock != "blocked" && filter.LoginBlock != "unblocked" {
+		WriteAdminError(w, 400, "未知封禁状态")
+		return
+	}
 	if filter.Binding != "" && filter.Binding != "bound" && filter.Binding != "guest" && filter.Binding != "system" {
 		WriteAdminError(w, 400, "未知账号类型")
 		return

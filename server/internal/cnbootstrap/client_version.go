@@ -5,46 +5,22 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
-	"strings"
 )
 
 // LOCAL_POLICY: installation versions are separate from catalog/CPK revisions.
-// Keep the release name in sync with CNLocalClientRecipe.psd1 when publishing.
-const cnMinimumClientVersion = "6.0.7"
+// Publish this exact modern client version in the server list and login gate.
+const cnMinimumClientVersion = "2.0.0"
 
 const cnClientReleaseURL = "https://github.com/kuuhaku1314/kairisei-ma-ch/releases"
 
 func cnClientVersionAllowed(version string) bool {
-	parse := func(value string) ([3]uint64, bool) {
-		var result [3]uint64
-		parts := strings.Split(value, ".")
-		if len(parts) != len(result) {
-			return result, false
-		}
-		for i, part := range parts {
-			n, err := strconv.ParseUint(part, 10, 16)
-			if err != nil || strconv.FormatUint(n, 10) != part {
-				return result, false
-			}
-			result[i] = n
-		}
-		return result, true
-	}
-	actual, ok := parse(version)
-	minimum, _ := parse(cnMinimumClientVersion)
-	if !ok {
-		return false
-	}
-	for i := range actual {
-		if actual[i] != minimum[i] {
-			return actual[i] > minimum[i]
-		}
-	}
-	return true
+	// The server list publishes exact installation versions. A numerically
+	// greater legacy track (such as 6.0.7) is not a compatible modern release.
+	return version == cnMinimumClientVersion
 }
 
 func cnClientUpdateTips() string {
-	return "请安装 " + cnMinimumClientVersion + " 或更新的客户端。更新内容和客户端下载均在 GitHub Releases；请覆盖安装以保留数据。"
+	return "请安装与本服务端配套的 " + cnMinimumClientVersion + " 客户端。更新内容和客户端下载均在 GitHub Releases；请覆盖安装以保留数据。"
 }
 
 func cnBootstrapServerList(host string, port int) http.HandlerFunc {

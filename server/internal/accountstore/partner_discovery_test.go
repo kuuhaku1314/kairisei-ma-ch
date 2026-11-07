@@ -32,7 +32,7 @@ func TestPartnerRecommendationsBoundReadsAndPreserveFriends(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := db.Exec(`INSERT INTO cn_local_account VALUES (?, ?, ?, ?, ?)`, id,
+		if _, err := db.Exec(`INSERT INTO cn_local_account (user_id,login_uuid,session_key,created_utc,last_login_utc) VALUES (?, ?, ?, ?, ?)`, id,
 			fmt.Sprintf("probe-%d", id), fmt.Sprintf("session-%d", id), base.Format(time.RFC3339Nano), login.Format(time.RFC3339Nano)); err != nil {
 			t.Fatal(err)
 		}
@@ -127,5 +127,112 @@ func TestPartnerRecommendationsBoundReadsAndPreserveFriends(t *testing.T) {
 		if !strings.Contains(strings.Join(details, "\n"), index) {
 			t.Fatalf("recent selection misses %s: %v", index, details)
 		}
+	}
+}
+
+func TestFollowerWindowBoundsReadsWithoutDeletingRelationships(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "save.json")
+	storage, err := OpenDatabase(path, "unused", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer storage.Close()
+	if err := storage.EnsureSchema(); err != nil {
+		t.Fatal(err)
+	}
+	db, err := storage.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i <= 241; i++ {
+		id := PrimaryUserID + i
+		payload, digest, err := EncodeAccountProjection(gamestate.State{User: gamestate.User{UserID: id, InviteID: InviteID(id), Name: "candidate"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i >= 240 {
+			payload = []byte("excluded malformed projection")
+		}
+		stamp := base.Format(time.RFC3339Nano)
+		if _, err := tx.Exec(`INSERT INTO cn_local_account (user_id,login_uuid,session_key,created_utc,last_login_utc) VALUES (?, ?, ?, ?, ?)`, id, fmt.Sprint("uuid-", id), fmt.Sprint("session-", id), stamp, stamp); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tx.Exec(`INSERT INTO cn_account_projection VALUES (?, 2, 1, ?, ?, ?)`, id, stamp, payload, digest); err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 || i == 241 {
+			continue
+		}
+		followedAt := base.Add(time.Duration(241-i) * time.Second)
+		if i <= 2 {
+			followedAt = base.Add(1000*time.Second + time.Duration(i-1)*500*time.Millisecond)
+		}
+		if _, err := tx.Exec(`INSERT INTO cn_local_account_follow VALUES (?, ?, ?)`, id, PrimaryUserID, followedAt.Format(time.RFC3339Nano)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := tx.Exec(`INSERT INTO cn_local_account_follow VALUES (?, ?, ?)`, PrimaryUserID, PrimaryUserID+2, base.Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	accounts := &Accounts{storage: storage}
+	rows, total, err := accounts.ListFollowerFriendPointAccounts(PrimaryUserID, 200)
+	if err != nil || total != 240 || len(rows) != 200 {
+		t.Fatalf("follower window: %d/%d %v", len(rows), total, err)
+	}
+	if rows[0].State.User.UserID != PrimaryUserID+2 || rows[1].State.User.UserID != PrimaryUserID+1 || rows[199].State.User.UserID != PrimaryUserID+200 || rows[0].FriendState != game.FriendStateFriend {
+		t.Fatal("recent ordering, fractional seconds or mutual state lost")
+	}
+	if _, err := accounts.FollowFriendPointAccounts(PrimaryUserID, []int{PrimaryUserID + 220}, 2); err != nil {
+		t.Fatalf("targeted follow scanned unrelated accounts: %v", err)
+	}
+	found, err := accounts.FindFriendPointAccountByInviteID(PrimaryUserID, InviteID(PrimaryUserID+220))
+	if err != nil || len(found) != 1 || found[0].FriendState != game.FriendStateFriend {
+		t.Fatalf("targeted search returned %d accounts: %v", len(found), err)
+	}
+	plan, err := db.Query(`EXPLAIN QUERY PLAN SELECT follower_user_id FROM cn_local_account_follow WHERE followed_user_id = ? ORDER BY julianday(created_utc) DESC, follower_user_id DESC LIMIT 200`, PrimaryUserID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var details []string
+	for plan.Next() {
+		var id, parent, unused int
+		var detail string
+		if err := plan.Scan(&id, &parent, &unused, &detail); err != nil {
+			t.Fatal(err)
+		}
+		details = append(details, detail)
+	}
+	if err := plan.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if joined := strings.Join(details, "\n"); !strings.Contains(joined, "cn_local_account_follow_recent") || strings.Contains(joined, "TEMP B-TREE") {
+		t.Fatalf("unbounded follower sort: %s", joined)
+	}
+	// Existing schema-4 saves acquire only the missing index at startup.
+	if _, err := db.Exec(`DROP INDEX cn_local_account_follow_recent`); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := OpenDatabase(path, "unused", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	if err := reopened.EnsureSchema(); err != nil {
+		t.Fatal(err)
+	}
+	rows, total, err = (&Accounts{storage: reopened}).ListFollowerFriendPointAccounts(PrimaryUserID, 200)
+	if err != nil || total != 240 || len(rows) != 200 {
+		t.Fatalf("restart changed stored followers: %d/%d %v", len(rows), total, err)
 	}
 }

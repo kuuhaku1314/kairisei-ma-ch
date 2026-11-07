@@ -17,6 +17,17 @@ func (a *API) bossCatalog(r *http.Request) (string, []AdminBattleGroup, map[int]
 			known[g.GroupID] = struct{}{}
 		}
 		return PastBattlePublicationKey, a.pastGroups, known, nil
+	case "tower":
+		// Whole towers, not Boss groups: the publication's group IDs are tower IDs.
+		a.operations.configMu.RLock()
+		defer a.operations.configMu.RUnlock()
+		known := make(map[int]struct{})
+		if a.operations.content != nil {
+			for _, tower := range a.operations.content.base.TowerQuestProfiles {
+				known[tower.TowerID] = struct{}{}
+			}
+		}
+		return towerPublicationKey, []AdminBattleGroup{}, known, nil
 	default:
 		return "", nil, nil, errors.New("未知副本目录")
 	}

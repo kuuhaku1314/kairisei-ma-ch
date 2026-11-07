@@ -3,15 +3,15 @@ package cnbootstrap
 import (
 	"net/http"
 
-	adminapi "kairisei.local/server/internal/admin"
 	"kairisei.local/server/internal/httpapi"
+	operationservice "kairisei.local/server/internal/operations"
 )
 
-func cnBootstrapHowToGetCardShow(business http.Handler, operations *adminapi.Operations) http.HandlerFunc {
+func cnBootstrapHowToGetCardShow(business http.Handler, operations *operationservice.Runtime) http.HandlerFunc {
 	return cnBootstrapExactBusiness(cnCardAcquisitionPublication(business, operations), "HowToGetCardShow", "/HowToGetCardShow", "cardids")
 }
 
-func cnCardAcquisitionPublication(business http.Handler, operations *adminapi.Operations) http.Handler {
+func cnCardAcquisitionPublication(business http.Handler, operations *operationservice.Runtime) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		groups, err := operations.TeamBattleGroupAllowlist()
 		if err != nil {

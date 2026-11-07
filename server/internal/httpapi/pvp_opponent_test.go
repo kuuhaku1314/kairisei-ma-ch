@@ -80,7 +80,7 @@ func TestPVPStartSkipsUnusableDefenseBeforeCharging(t *testing.T) {
 			})
 			before := game.ClonePVPState(s.Snapshot(gamestate.State{}).PVP)
 			api := &API{account: s, initialState: gamestate.State{}, pvpAccounts: scenario.states,
-				pvpConfig: game.PVPConfig{EngineMode: game.PvpEngineClientNativeLocal, Fields: []game.PVPFieldConfig{{FieldID: 1}}, ReplayResult: 1, RankWinPoint: 10},
+				pvpConfig: game.PVPConfig{ResultSource: game.PVPResultFixedPolicy, EngineMode: game.PvpEngineClientNativeLocal, Fields: []game.PVPFieldConfig{{FieldID: 1}}, ReplayResult: 1, RankWinPoint: 10},
 			}
 			body, err := json.Marshal(map[string]any{"type": 1, "select_arthur_type": 1, "pvp_my_deck": ownDecks})
 			if err != nil {

@@ -5,44 +5,54 @@ import (
 	"maps"
 )
 
+// Managed CPU callers skip KO members; a room still acknowledges their empty
+// input. Living automatic inputs all use the catalog's original NPC program.
+func npcCardSubmission(batch *CardSelectionBatch, member, enemyType int) (cardPlaySubmission, error) {
+	if !batch.IsAlive(member) {
+		return cardPlaySubmission{Automatic: true}, nil
+	}
+	return batch.NPCSubmission(member, enemyType)
+}
+
 // CPU and KO members submit as soon as input opens. Living connected humans
 // retain manual/timeout selection. KO Submit intentionally emits no native
 // rows; their transport acknowledgement must still release the input barrier.
 func automaticRoomCardSubmissionFrames(current *room) ([]battleFrame, error) {
-	engine := roomCardPlayPreview(current.engine)
 	submissions := maps.Clone(current.cardPlaySubmissions)
 	if submissions == nil {
 		submissions = make(map[int]cardPlaySubmission)
 	}
 	var results []BattleResult
-	for memberType := 1; memberType <= maxRoomMembers; memberType++ {
-		submission, submitted := current.cardPlaySubmissions[memberType]
-		if _, committed := engine.selectedPlays[memberType]; committed {
-			continue
+	var payload string
+	err := current.engine.WithCardSelections(func(engine *CardSelectionBatch) error {
+		for memberType := 1; memberType <= maxRoomMembers; memberType++ {
+			_, submitted := current.cardPlaySubmissions[memberType]
+			if engine.HasSubmission(memberType) {
+				continue
+			}
+			// Accepted selections are final. Empty timeout packets are already
+			// converted to automatic choices at the transport ingress.
+			if submitted || current.connections[memberType] != nil && engine.IsAlive(memberType) {
+				continue
+			}
+			selection, err := npcCardSubmission(engine, memberType, current.enemyType)
+			if err != nil {
+				return fmt.Errorf("select automatic cards for member %d: %w", memberType, err)
+			}
+			rows, err := submitRoomCardPlay(engine, memberType, selection)
+			if err != nil {
+				return fmt.Errorf("submit automatic cards for member %d: %w", memberType, err)
+			}
+			submissions[memberType] = selection
+			results = append(results, rows...)
 		}
-		if (!submitted && current.connections[memberType] != nil && engine.players[memberType-1].HP > 0) ||
-			(submitted && (submission.Automatic || !submission.TimedOut || selectedActionCount(submission) != 0)) {
-			continue
-		}
-		selection, err := engine.AutoSubmission(memberType)
-		if err != nil {
-			return nil, fmt.Errorf("select automatic cards for member %d: %w", memberType, err)
-		}
-		rows, err := submitRoomCardPlay(&engine, memberType, selection)
-		if err != nil {
-			return nil, fmt.Errorf("submit automatic cards for member %d: %w", memberType, err)
-		}
-		submissions[memberType] = selection
-		results = append(results, rows...)
-	}
-	payload, err := encodeOptionalBattleResults(results)
+		var err error
+		payload, err = encodeOptionalBattleResults(results)
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
-	current.engine.players = engine.players
-	current.engine.rng = engine.rng
-	current.engine.selectedPlays = engine.selectedPlays
-	current.engine.turnActions = engine.turnActions
 	current.cardPlaySubmissions = submissions
 	if len(results) == 0 {
 		return nil, nil

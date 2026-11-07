@@ -4,13 +4,13 @@ import (
 	"kairisei.local/server/internal/gamestate"
 )
 
-func (s *Account) BurstStoryID() int {
+func (s *Account) QuestStoryID() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.storyTeamBattleSession.StoryID
 }
 
-func (s *Account) SetBurstStoryResponse(response []byte) {
+func (s *Account) SetQuestStoryResponse(response []byte) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.storyTeamBattleSession.Response = append([]byte(nil), response...)

@@ -81,7 +81,7 @@ func (a *API) itemExchange(writer http.ResponseWriter, request *http.Request) {
 	a.writeProtocol(writer, map[string]any{
 		"result_rewards":           rewards,
 		"user":                     a.userPayload(),
-		"new_cards":                toWireCards(result.Reward.Cards),
+		"new_cards":                a.toWireCards(result.Reward.Cards),
 		"new_stack_cards":          toWireStackCards(result.Reward.StackCards),
 		"new_items":                a.itemInfosWire(result.Reward.Items),
 		"new_sphrs":                toWireSpheres(result.Reward.Spheres),

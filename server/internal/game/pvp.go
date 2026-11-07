@@ -9,6 +9,8 @@ const pvpHistoryLimit = 50
 const (
 	PvpEngineServerReplay      = "server_replay"
 	PvpEngineClientNativeLocal = "client_native_local"
+	PVPResultFixedPolicy       = "fixed_local_policy"
+	PVPResultRecordedReplay    = "recorded_replay"
 )
 
 type PVPFieldConfig struct {
@@ -36,6 +38,7 @@ type PVPConfig struct {
 	SchemaVersion  int                `json:"schema_version"`
 	ClientProfile  string             `json:"client_profile"`
 	ConfigVersion  int                `json:"config_version"`
+	ResultSource   string             `json:"result_source"`
 	EngineMode     string             `json:"engine_mode"`
 	ChallengeMax   int                `json:"challenge_max"`
 	CostInitial    int                `json:"cost_initial"`

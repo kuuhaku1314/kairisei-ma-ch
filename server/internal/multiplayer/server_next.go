@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"kairisei.local/server/battlecore"
 	"kairisei.local/server/internal/gamestate"
 )
 
@@ -59,14 +60,7 @@ func roomCountdownPayload(current *room) string {
 // BattleFunctionBase.calcNextBattleIndex skips optional AWAKE encounters on
 // an ordinary win. Awakening does not advance the displayed progress counter.
 func roomNextBattle(current *room) (int, bool) {
-	if current.engineBattleEnd != 1 && current.engineBattleEnd != 4 {
-		return 0, false
-	}
-	index := current.battleIndex + 1
-	for index < len(current.battles) && current.battles[index].EnemyType == 4 && current.engineBattleEnd != 4 {
-		index++
-	}
-	return index, index < len(current.battles)
+	return battlecore.NextWaveIndex(roomBattleEnemyTypes(current.battles), current.battleIndex, current.engineBattleEnd)
 }
 
 func roomBattleProgress(current *room, index int) int {
@@ -76,22 +70,23 @@ func roomBattleProgress(current *room, index int) int {
 			progress--
 		}
 	}
-	return maxInt(0, progress)
+	return max(0, progress)
 }
 
 func recordRoomWaveDrops(current *room) {
-	if current.engine == nil || current.waveDropsRecorded[current.battleIndex] {
+	if current.engine == nil {
 		return
 	}
-	if current.waveDropsRecorded == nil {
-		current.waveDropsRecorded = make(map[int]bool)
+	if _, recorded := current.waveOutcomes[current.battleIndex]; recorded {
+		return
 	}
-	for index := 0; index < current.engine.enemyCount; index++ {
-		enemy := current.engine.enemies[index]
-		if enemy.HP <= 0 || enemy.Broken {
-			current.destroyedEnemyBits |= 1 << index
-		}
-		if enemy.DropReleased {
+	if current.waveOutcomes == nil {
+		current.waveOutcomes = make(map[int]battlecore.WaveOutcome)
+	}
+	outcome := current.engine.WaveOutcome()
+	current.destroyedEnemyBits |= outcome.DestroyedEnemyBits
+	for index := 0; index < maxRoomMembers; index++ {
+		if outcome.ReleasedDropBits&(1<<index) != 0 {
 			if index == 0 && roomBodyRewardAlreadyReleased(current, current.battleIndex) {
 				continue
 			}
@@ -102,7 +97,7 @@ func recordRoomWaveDrops(current *room) {
 			}
 		}
 	}
-	current.waveDropsRecorded[current.battleIndex] = true
+	current.waveOutcomes[current.battleIndex] = outcome
 }
 
 // The original resume API takes prior segments' rewards as caller input.

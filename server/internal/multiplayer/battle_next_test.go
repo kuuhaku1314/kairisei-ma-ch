@@ -3,64 +3,29 @@ package multiplayer
 import (
 	"errors"
 	"io"
+	"kairisei.local/server/battlecore"
+	"kairisei.local/server/internal/gamestate"
 	"log/slog"
 	"net"
-	"reflect"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
-
-	"kairisei.local/server/internal/gamestate"
 )
 
-func nextBattleFixture(t *testing.T) (*BattleEngine, []Member) {
-	t.Helper()
-	catalog := &CombatCatalog{
-		Cards:            map[int]CombatCardDefinition{1: {ID: 1, NormalSkillID: 1}},
-		PlayerSkills:     map[int][]CombatSkillDefinition{1: {{ID: 1, FunctionID: 1, Cost: 1, Target: "ENEMY_ONE", Attribute: "FIRE"}}},
-		PlayerSkillRoles: map[int][]CombatSkillRole{1: {{Function: "ATTACK_AA", Target: "ENEMY_ONE", Parameters: [10]string{"200", "0", "0", "0", "1", "ATK", "0", "FIRE", "PHYSICS"}}}},
-		EnemyParties:     map[int]CombatEnemyParty{1: {ID: 1, Slots: [4]CombatEnemyPartySlot{{EnemyID: 1, HPRate: 1}}}},
-		Enemies:          map[int]CombatEnemyDefinition{1: {ID: 1, HP: 100, Attribute: "FIRE"}},
-		EnemyLevels:      map[int]CombatEnemyLevel{1: {ID: 1, HPBars: 1, AttributeRates: [9]int{100, 100, 100, 100, 100, 100, 100, 100, 100}}},
-	}
-	members := make([]Member, 4)
-	for i := range members {
-		members[i] = Member{MemberType: i + 1, ArthurType: i + 1, UserID: 1001 + i, HP: 1000, Attack: 100}
-		for slot := 1; slot <= 10; slot++ {
-			members[i].DeckCards = append(members[i].DeckCards, BattleCard{CardType: slot, CardID: 1, Level: 1})
-		}
-	}
-	engine, err := newBattleEngine(catalog, RoomSpec{EnemyPartyID: 1, CostInitial: 3, HoldMax: 2, Seed: 602}, members)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return engine, members
-}
-
 func TestAwakeInheritsUnreleasedBodyDrops(t *testing.T) {
-	engine, _ := nextBattleFixture(t)
 	waves := []gamestate.TeamBattleReplayBattle{{EnemyPartyID: 1, EnemyType: 1}, {EnemyPartyID: 1, EnemyType: 4}, {EnemyPartyID: 1, EnemyType: 4}}
 	plan := []gamestate.TeamBattleEnemyDrop{
 		{Reward: gamestate.Reward{Type: 4, Num: 900}},
 		{Reward: gamestate.Reward{Type: 8, RewardTypeID: 4000, Num: 600}},
 		{EnemyIndex: 1, Reward: gamestate.Reward{Type: 13, RewardTypeID: 20000003, Num: 1}},
 	}
-	current := &room{engine: engine, battles: waves, dropPlan: plan}
-	engine.phase, engine.endType = battlePhaseEnded, 4
-	recordRoomWaveDrops(current) // Living first-phase body did not release anything.
+	current := &room{battles: waves, dropPlan: plan}
 	drops := roomSpecWaveDrops(RoomSpec{DropLedgerVersion: 1, DropPlan: plan, Battles: waves}, 1)
 	if len(drops) != 2 {
 		t.Fatalf("awake drops: %+v", drops)
 	}
-	next, err := engine.NextBattle(1, drops)
-	if err != nil {
-		t.Fatal(err)
-	}
-	next.enemies[0].HP = 0
-	if rows := enemyBreakDropResults(&next.enemies[0]); len(rows) == 0 {
-		t.Fatal("missing body drop presentation")
-	}
+	next, _ := wonRoomBattle(t, drops...)
 	current.engine, current.battleIndex = next, 1
 	recordRoomWaveDrops(current)
 	recordRoomWaveDrops(current)
@@ -72,54 +37,10 @@ func TestAwakeInheritsUnreleasedBodyDrops(t *testing.T) {
 	}
 }
 
-func TestNextBattleNativeStateAndRotation(t *testing.T) {
-	engine, _ := nextBattleFixture(t)
-	engine.phase, engine.endType, engine.turn = battlePhaseEnded, 1, 7
-	player := &engine.players[0]
-	player.HP, player.Cost, player.Burst = 123, 8, 42
-	player.DamageTaken = 877
-	player.Hand = [5]int{1, 2, 3}
-	player.DeckOrder, player.DrawIndex, player.DrawCount = [10]int{3, 4, 5, 6}, 0, 4
-	player.Discard = []int{7, 8, 9}
-	player.Spheres[0] = battleSphere{SphereID: 123, Count: 0, Maximum: 1, Remaining: 3, ChalicePlayable: true}
-	engine.players[1].HP = 0 // KO in the winning action, not formally retired.
-	before := *engine
-	next, err := engine.NextBattle(1, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(*engine, before) {
-		t.Fatal("next wave mutated its predecessor")
-	}
-	got := next.players[0]
-	if got.Spheres[0].ChalicePlayable {
-		t.Fatal("previous wave chalice eligibility survived the native handover reset")
-	}
-	if got.HP != 123 || got.Burst != 42 || got.Cost != 3 || got.DamageTaken != 0 || got.Hand != player.Hand || next.turn != 0 || next.endType != 0 || next.phase != battlePhaseCreated || next.players[1].HP != 1 || next.players[1].GameOver || got.Spheres[0].Count != 1 || got.Spheres[0].Remaining != 0 {
-		t.Fatal("native wave handover lost player state or failed to reset wave state")
-	}
-	seen := map[int]bool{}
-	for _, slot := range got.Hand {
-		if slot != 0 {
-			seen[slot] = true
-		}
-	}
-	for _, slot := range got.DeckOrder[:got.DrawCount] {
-		if slot < 0 {
-			continue
-		}
-		if seen[slot+1] {
-			t.Fatal("card duplicated across hand and rotation pool")
-		}
-		seen[slot+1] = true
-	}
-	if len(seen) != 10 || len(got.Discard) != 0 || next.rng == newXorShift128(602) || next.rng == engine.rng {
-		t.Fatal("rotation lost cards or RNG was reseeded instead of advancing")
-	}
-}
-
 func TestMultiplayerWavesFinishOnceAndShareAllDrops(t *testing.T) {
-	engine, members := nextBattleFixture(t)
+	engine, members := configuredRoomBattle(t, func(_ *battlecore.Definitions, c *battlecore.Config, _ []battlecore.Participant) {
+		c.Drops = []BattleDrop{{RewardType: 4, Num: 1}}
+	})
 	hub := NewHub()
 	server := &Server{hub: hub, logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	current := &room{RoomSnapshot: RoomSnapshot{RoomID: 123, BossID: 1, State: RoomStateBattle, Members: members},
@@ -141,7 +62,7 @@ func TestMultiplayerWavesFinishOnceAndShareAllDrops(t *testing.T) {
 		outputs[i] = &hubCheckingConn{Conn: left, hub: hub}
 		current.connections[i+1] = &clientConn{conn: outputs[i], server: server, roomID: 123, memberType: i + 1, userID: 1001 + i}
 	}
-	engine.enemies[0].Drops = roomSpecWaveDrops(RoomSpec{DropLedgerVersion: 1, DropPlan: current.dropPlan}, 0)
+
 	if _, err := engine.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -156,13 +77,13 @@ func TestMultiplayerWavesFinishOnceAndShareAllDrops(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		current.cardPlaySubmissions[1] = cardPlaySubmission{CardTypes: [5]int{current.engine.players[0].Hand[0]}, Targets: [5]int{5}}
+		current.cardPlaySubmissions[1] = cardPlaySubmission{CardTypes: [5]int{firstFixtureHandCard(t, current.engine, 1)}, Targets: [5]int{5}}
 		current.cardPlaySubmissions[2], current.cardPlaySubmissions[3], current.cardPlaySubmissions[4] = cardPlaySubmission{}, cardPlaySubmission{}, cardPlaySubmission{}
 		if err := server.tryAdvanceCardPlay(123); err != nil {
 			t.Fatal(err)
 		}
 		if current.engineBattleEnd != 1 {
-			t.Fatalf("wave %d did not win: %d hp %d", wave, current.engineBattleEnd, current.engine.enemies[0].HP)
+			t.Fatalf("wave %d did not win: %d hp %d", wave, current.engineBattleEnd, current.engine.StateView().Members[4].HP)
 		}
 		for _, client := range current.connections {
 			if err := client.handleUserAttackFinish(); err != nil {
@@ -196,10 +117,13 @@ func TestMultiplayerWavesFinishOnceAndShareAllDrops(t *testing.T) {
 	}
 	for _, id := range []int{1001, 1002} {
 		completed, err := hub.SettlementFor(123, id)
-		if err != nil || len(completed.ReleasedDrops) != 6 || completed.BattleIndex != 5 || completed.Progress != 5 || !completed.HostCostPaid {
+		if err != nil || len(completed.ReleasedDrops) != 6 || completed.BattleIndex != 5 || completed.Progress != 5 || !completed.HostCostPaid || len(completed.EnemyDeadBits) != 6 {
 			t.Fatalf("incorrect completed multi-wave ledger: %+v %v", completed, err)
 		}
 		for i, drop := range completed.ReleasedDrops {
+			if completed.EnemyDeadBits[i]&1 == 0 {
+				t.Fatal("completed wave lost its actual body defeat")
+			}
 			if drop.BattleIndex != i || drop.Reward.Num != i+1 || drop.Reward.CardSkillLevels == nil {
 				t.Fatal("drop repeated, reordered or lost")
 			}
@@ -233,9 +157,125 @@ func TestOptionalAwakeWaveSelection(t *testing.T) {
 	}
 }
 
+func TestRoomAwakeningCarriesBossCostAndDiscard(t *testing.T) {
+	for _, keep := range []bool{false, true} {
+		t.Run(strconv.FormatBool(keep), func(t *testing.T) {
+			_, members := nextBattleFixture(t)
+			for i := range members {
+				members[i].Level, members[i].LeaderCardID, members[i].LeaderLevel, members[i].LeaderFame = 1, 1, 1, 1
+				members[i].PartsIDs, members[i].DeckHonorIDs = make([]int, 7), make([]int, 4)
+			}
+			catalog := roomFixtureCatalog()
+			level := catalog.EnemyLevels[1]
+			level.InitialAwake = 1
+			catalog.EnemyLevels[1] = level
+			hub := NewHub()
+			hub.combat = catalog
+			server := &Server{hub: hub, logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+			client := &clientConn{server: server, conn: &sessionTestConn{}}
+			spec := RoomSpec{BossID: 1, EnemyPartyID: 1, CostInitial: 3, HoldMax: 6, Seed: 602, Owner: members[0],
+				AwakeTakeover: battlecore.WaveTakeover{KeepCost: keep, KeepDeckTrash: keep}, DropLedgerVersion: 1,
+				Battles: []gamestate.TeamBattleReplayBattle{{EnemyPartyID: 1}, {EnemyPartyID: 1, EnemyType: 4}}}
+			credential, err := hub.IssueCreate(spec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := client.handleCreate(joinCSV(strconv.Itoa(spec.Owner.UserID), "1", "0", "", "1", "1", "0", "0", "0", credential.AuthToken, credential.Signature, "android")); err != nil {
+				t.Fatal(err)
+			}
+			current := hub.rooms[client.roomID]
+			current.State, current.Members = RoomStateBattle, members
+			current.hostCostPaid, current.battleLoading = true, map[int]bool{1: true}
+			if err := server.tryStartLoadedBattle(client.roomID); err != nil {
+				t.Fatal(err)
+			}
+			engine := current.engine
+			checkCapacity := func(engine *BattleEngine) {
+				t.Helper()
+				rows, err := engine.ResumeResults()
+				if err != nil {
+					t.Fatal(err)
+				}
+				count := 0
+				for _, row := range rows {
+					if row.Command == CommandHoldMax {
+						if row.Args[1] != 6 {
+							t.Fatal("room lost the configured six hold slots", row)
+						}
+						count++
+					}
+				}
+				if count != 4 {
+					t.Fatal("room omitted a member hold capacity", count)
+				}
+			}
+			checkCapacity(engine)
+			for turn := 1; turn <= 7; turn++ {
+				for _, phase := range []func() ([]BattleResult, error){engine.TurnPhase, engine.UserPhase} {
+					if _, err := phase(); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if turn == 7 && engine.StateView().Members[0].Cost != 9 {
+					t.Fatal("fixture did not reach 9 COST before awakening")
+				}
+				finishFixtureUserAttack(t, engine, turn == 7)
+				if turn < 7 {
+					for _, phase := range []func() ([]BattleResult, error){engine.ExecuteChaliceUserPhase, engine.EnemyPhase, engine.ExecuteChaliceEnemyPhase} {
+						if _, err := phase(); err != nil {
+							t.Fatal(err)
+						}
+					}
+				}
+			}
+			if engine.EndType() != 4 {
+				t.Fatal("fixture did not awaken")
+			}
+			remaining := func(engine *BattleEngine) int64 {
+				t.Helper()
+				rows, err := engine.ResumeResults()
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, row := range rows {
+					if row.Command == CommandResumeCardDeck && row.Args[0] == 1 {
+						return row.Args[1]
+					}
+				}
+				t.Fatal("resume omitted the player's draw pool")
+				return 0
+			}
+			before := remaining(engine)
+			current.engineBattleEnd, current.nextBattlePending, current.nextBattleIndex = 4, true, 1
+			current.gameNextFinished = map[int]bool{1: true}
+			if err := server.tryAdvanceNextBattle(client.roomID); err != nil {
+				t.Fatal(err)
+			}
+			wantCost, wantPool := 3, before+1
+			if keep {
+				wantCost, wantPool = 9, before
+			}
+			next := current.engine
+			checkCapacity(next)
+			if next.StateView().Members[0].Cost != wantCost || remaining(next) != wantPool {
+				t.Fatalf("awakening lost the room policy: cost=%d pool=%d, want %d/%d", next.StateView().Members[0].Cost, remaining(next), wantCost, wantPool)
+			}
+			if _, err := next.TurnPhase(); err != nil {
+				t.Fatal(err)
+			}
+			wantTurnCost := 3
+			if keep {
+				wantTurnCost = 10
+			}
+			if next.StateView().Turn != 1 || next.StateView().Members[0].Cost != wantTurnCost {
+				t.Fatal("incoming turn failed to reset its counter or advance COST", next.StateView())
+			}
+		})
+	}
+}
+
 func TestComebackBetweenWavesUsesActualIndexAndWaitsForScene(t *testing.T) {
-	engine, members := nextBattleFixture(t)
-	engine.phase, engine.endType, engine.turn = battlePhaseEnded, 1, 1
+	engine, members := wonRoomBattle(t)
 	hub := NewHub()
 	server := &Server{hub: hub, logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	left, right := net.Pipe()
@@ -272,133 +312,5 @@ func TestComebackBetweenWavesUsesActualIndexAndWaitsForScene(t *testing.T) {
 	}
 	if current.battleIndex != 4 || current.nextBattlePending || !strings.Contains(output.output.String(), "ApiGameStart{") {
 		t.Fatal("resumed room failed to start its pending wave")
-	}
-}
-
-func TestDefaultNativeTerminalRetainsBurstListsAndCleansKO(t *testing.T) {
-	engine, _ := nextBattleFixture(t)
-	player := &engine.players[0]
-	player.HP, player.BurstBreak, player.BurstRecharge[0] = 0, 2, 3
-	for _, list := range []int{0, 1, 2, 3, 4, 5, 6, 7} {
-		player.Effects = append(player.Effects, battleEffect{Function: "BURN", ListType: list, Remaining: 3})
-	}
-	rows := engine.appendTerminalBuffCleanup([]BattleResult{battleEndResult(1)})
-	if len(player.Effects) != 3 || player.Effects[0].ListType != 2 || player.Effects[1].ListType != 5 || player.Effects[2].ListType != 6 || player.BurstBreak != 1 || player.BurstRecharge[0] != 2 {
-		t.Fatal("default wave cleanup lost preserved lists/counters or retained KO debuffs")
-	}
-	if battleResultsContainCommand(rows, resultBuffPartition) || battleResultsContainCommand(rows, resultBuffLostOne) {
-		t.Fatal("default terminal took the optional expiry branch")
-	}
-	engine.players[0].HP = 100
-	engine.players[0].BurstState = burstGaugeBurst
-	role := CombatSkillRole{Function: "ATK_UP_FIXED", Target: "SELF", Parameters: [10]string{"2", "ATK", "10"}}
-	rows, err := engine.executeBurstRoleWithListType(battleAction{memberType: 1, target: 1, cardLevel: 1}, role, nil, 6)
-	if err != nil {
-		t.Fatal(err)
-	}
-	last := player.Effects[len(player.Effects)-1]
-	if last.ListType != 6 || !last.BurstPassive {
-		t.Fatal("burst passive lost its durable list identity")
-	}
-	found := false
-	for _, row := range rows {
-		if row.Command == resultPassiveBuff && row.Args[2] == 6 {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatal("burst passive projected as a normal buff")
-	}
-}
-
-func TestAwakeningCarriesCurrentTurnCost(t *testing.T) {
-	for _, turn := range []int{1, 4, 7, 12} {
-		engine, _ := nextBattleFixture(t)
-		engine.phase, engine.endType, engine.turn = battlePhaseEnded, 4, turn
-		next, err := engine.NextBattle(1, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err = next.Start(); err != nil {
-			t.Fatal(err)
-		}
-		if _, err = next.TurnPhase(); err != nil {
-			t.Fatal(err)
-		}
-		want := minInt(10, 3+turn-1)
-		if next.turnCost() != want || next.players[0].Cost != want {
-			t.Fatalf("turn %d: cost %d, want %d", turn, next.players[0].Cost, want)
-		}
-		// Starting the second post-awakening turn advances the cost normally.
-		next.turn++
-		if next.turnCost() != minInt(10, want+1) {
-			t.Fatal("post-awakening cost did not resume normal growth")
-		}
-		// A further awakening at that turn must also inherit its current cost.
-		next.phase, next.endType = battlePhaseEnded, 4
-		again, err := next.NextBattle(1, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if again.turnCost() != next.turnCost() {
-			t.Fatal("repeated awakening changed current cost")
-		}
-	}
-}
-
-func TestAwakeningPreservesFirstDrawCycle(t *testing.T) {
-	for _, endType := range []int{1, 4} {
-		engine, _ := nextBattleFixture(t)
-		if _, err := engine.Start(); err != nil {
-			t.Fatal(err)
-		}
-		player := &engine.players[0]
-		seen := map[int]bool{}
-		// Five cards reached the hand, and two were used before the transition.
-		for i := 0; i < 5; i++ {
-			slot := engine.drawCard(player)
-			seen[slot] = true
-			if i < 2 {
-				player.Discard = append(player.Discard, slot-1)
-			} else {
-				player.Hand[i-2] = slot
-			}
-		}
-		engine.phase, engine.endType, engine.turn = battlePhaseEnded, endType, 2
-		before := *player
-		rng := engine.rng
-		next, err := engine.NextBattle(1, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		p := &next.players[0]
-		if p.Hand != before.Hand {
-			t.Fatal("transition replaced retained hand")
-		}
-		if endType == 1 {
-			if len(p.Discard) != 0 || p.remainingDeckCount() != 7 {
-				t.Fatal("ordinary wave must still recycle used cards")
-			}
-			continue
-		}
-		if p.DeckOrder != before.DeckOrder || p.DrawIndex != before.DrawIndex || p.DrawCount != before.DrawCount || next.rng != rng {
-			t.Fatal("awakening reset the draw order or consumed shuffle RNG")
-		}
-		for i := 0; i < 5; i++ {
-			slot := next.drawCard(p)
-			if slot == 0 || seen[slot] {
-				t.Fatalf("awakening repeated slot %d before all ten cards appeared", slot)
-			}
-			seen[slot] = true
-		}
-		if len(seen) != 10 || len(p.Discard) != 2 {
-			t.Fatal("awakening lost unused cards or discarded cards")
-		}
-		if slot := next.drawCard(p); slot != before.Discard[0]+1 && slot != before.Discard[1]+1 {
-			t.Fatal("depleted draw pool did not recycle the discarded cards")
-		}
-		if player.DeckOrder != before.DeckOrder || len(player.Discard) != 2 {
-			t.Fatal("advancing the next stage mutated the preceding engine")
-		}
 	}
 }

@@ -1,7 +1,6 @@
 package cnbootstrap
 
 import (
-	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -51,8 +50,12 @@ func (gateway *cnAccountGateway) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	address, _, _ := net.SplitHostPort(r.RemoteAddr)
-	if !gateway.allow(address) {
+	source, err := accountSource(r)
+	if err != nil {
+		adminapi.WriteAdminError(w, 400, "账号请求来源无效")
+		return
+	}
+	if !gateway.allow(source.String()) {
 		adminapi.WriteAdminError(w, 429, "操作过于频繁，请稍后重试")
 		return
 	}
@@ -69,28 +72,35 @@ func (gateway *cnAccountGateway) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var payload struct {
-		UUID     string `json:"uuid"`
-		Username string `json:"username"`
-		Password string `json:"password"`
+		UUID          string                     `json:"uuid"`
+		Username      string                     `json:"username"`
+		Password      string                     `json:"password"`
+		NewPassword   string                     `json:"new_password"`
+		CreationProof accountstore.CreationProof `json:"creation_proof"`
 	}
 	if err := adminapi.DecodeAdminJSONLimit(r, &payload, 2048); err != nil {
 		adminapi.WriteAdminError(w, 400, "账号请求格式无效")
 		return
 	}
 	var result accountstore.AccountBinding
-	var err error
+	err = nil
 	switch r.URL.Path {
 	case "/local/account/status":
 		result, err = gateway.accounts.AccountBinding(payload.UUID)
 	case "/local/account/bind":
-		result, err = gateway.accounts.BindAccount(payload.UUID, payload.Username, payload.Password)
+		result, err = gateway.accounts.BindClientAccount(r.Context(), payload.UUID, payload.Username, payload.Password, source, payload.CreationProof)
 	case "/local/account/login":
 		result, err = gateway.accounts.LoginAccount(payload.Username, payload.Password)
+	case "/local/account/change-password":
+		result, err = gateway.accounts.ChangeAccountPassword(r.Context(), payload.UUID, payload.Username, payload.Password, payload.NewPassword)
 	default:
 		http.NotFound(w, r)
 		return
 	}
 	if err != nil {
+		if r.Context().Err() != nil || writeAccountAccessRejection(w, err, false) || writeCreationRejection(w, err, false) {
+			return
+		}
 		adminapi.WriteAdminError(w, 400, err.Error())
 		return
 	}

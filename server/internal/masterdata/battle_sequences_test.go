@@ -39,6 +39,7 @@ func TestNamelessPublishedSequences(t *testing.T) {
 	}
 	for _, replay := range view.Replays {
 		for index, wave := range replay.Battles {
+			awakeningProducer := false
 			party, ok := catalog.EnemyParties[wave.EnemyPartyID]
 			if !ok {
 				t.Fatalf("missing party %d", wave.EnemyPartyID)
@@ -70,14 +71,20 @@ func TestNamelessPublishedSequences(t *testing.T) {
 					skills = append(skills, action.SkillID)
 				}
 				for _, skillID := range skills {
-					for _, skill := range catalog.EnemySkills[skillID] {
-						for _, role := range catalog.EnemySkillRoles[skill.FunctionID] {
-							if role.Function == "ENEMY_AWAKE_FLAG_SET" && (index+1 >= len(replay.Battles) || replay.Battles[index+1].EnemyType != 4) {
-								t.Fatalf("boss %d party %d skill %d has unbound awakening", replay.BossID, wave.EnemyPartyID, skillID)
+					for _, skill := range catalog.Skills[skillID] {
+						for _, role := range catalog.SkillRoles[skill.FunctionID] {
+							if value, _ := strconv.Atoi(role.Parameters[0]); role.Function == "ENEMY_AWAKE_FLAG_SET" && value != 0 {
+								awakeningProducer = true
 							}
 						}
 					}
 				}
+			}
+			// A declared awake phase needs a real source producer. The
+			// converse is false: the original client can finish at the end
+			// of its declared list with end type AWAKE as well as WIN.
+			if index+1 < len(replay.Battles) && replay.Battles[index+1].EnemyType == 4 && !awakeningProducer {
+				t.Fatalf("boss %d party %d declares awakening without a source producer", replay.BossID, wave.EnemyPartyID)
 			}
 		}
 	}

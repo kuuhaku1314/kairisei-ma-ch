@@ -23,6 +23,18 @@ func (s *Account) PresentState() ([]gamestate.Present, []gamestate.Present) {
 	return clonePresents(s.presents), clonePresents(histories)
 }
 
+func (s *Account) UnreceivedPresentCount() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	count := 0
+	for index := range s.presents {
+		if s.presents[index].State == 0 {
+			count++
+		}
+	}
+	return count
+}
+
 type ReceivedReward struct {
 	Reward       gamestate.Reward
 	UniqueID     []int64
@@ -175,7 +187,8 @@ func (s *Account) ReceivePresent(presentID int64) (PresentReceiveResult, error) 
 		}
 	}
 	if index < 0 || s.presents[index].State != 0 {
-		return PresentReceiveResult{FailedID: []int64{presentID}}, nil
+		// No pending reward: keep retries distinct from capacity failures.
+		return PresentReceiveResult{}, nil
 	}
 	if err := s.validateRewardLocked(s.presents[index].Reward); err != nil {
 		return PresentReceiveResult{}, err
@@ -240,10 +253,8 @@ func (s *Account) ReceivePresents(receiveTypes []int, receiveCoin bool) (Present
 			break
 		}
 		candidates++
-		// The native list disables individual receipt for nonzero state, but
-		// its batch request still selects the first twenty filtered entries.
+		// Received entries stay visible until Delete, but are not failed grants.
 		if present.State != 0 {
-			result.FailedID = append(result.FailedID, present.PresentID)
 			continue
 		}
 		// The client takes twenty filtered entries before asking about crystals.
@@ -327,142 +338,8 @@ func (s *Account) DeletePresents(presentID int64) ([]int64, error) {
 		s.presentHistories = append(s.presentHistories, removed)
 	}
 	s.presents = remaining
+	s.presentHistories = gamestate.TrimPresentHistories(s.presentHistories)
 	return deleted, nil
-}
-
-func (s *Account) MissionState() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for _, mission := range s.missions {
-		if mission.Info.State == 1 {
-			return true
-		}
-	}
-	return false
-}
-
-func (s *Account) MissionInfos() []gamestate.MissionInfo {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	result := make([]gamestate.MissionInfo, len(s.missions))
-	for index, mission := range s.missions {
-		result[index] = cloneMissionInfo(mission.Info)
-	}
-	return result
-}
-
-func (s *Account) CheckMissionOpenURL(openURL string) ([]gamestate.MissionInfo, error) {
-	if openURL == "" {
-		return nil, errors.New("mission URL is empty")
-	}
-	if !isLocalMissionCommand(openURL) {
-		return nil, errors.New("mission URL is outside the local client boundary")
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for _, mission := range s.missions {
-		if mission.Info.OpenURL == openURL {
-			// The client opens the already-published command after this check.
-			// This route has no evidenced progress rule, so it returns no
-			// synthetic mission mutations.
-			return []gamestate.MissionInfo{}, nil
-		}
-	}
-	return nil, errors.New("mission URL is not published")
-}
-
-func isLocalMissionCommand(command string) bool {
-	if strings.Contains(command, "external") ||
-		strings.Contains(command, "http") ||
-		strings.Contains(command, "GetUrlToken") ||
-		strings.Contains(command, "netease_sprite") ||
-		strings.Contains(command, "eventpage") ||
-		strings.Contains(command, "trade") ||
-		strings.Contains(command, "review") ||
-		strings.Contains(command, "monthcard") ||
-		strings.Contains(command, "firstpay") ||
-		strings.Contains(command, "shop_crystal") {
-		return false
-	}
-	for _, marker := range []string{
-		"explore",
-		"teambattleone",
-		"teambattle_join",
-		"teambattle",
-		"gacha",
-		"arena",
-		"mainstory",
-		"substory",
-		"eventstory",
-		"exp_fusion",
-		"evo_fusion",
-		"card_collection",
-		"createroom",
-		"uplove",
-		"sellcard",
-		"enterroom",
-		"gotoscene",
-		"eventboss",
-		"pastboss",
-		"exchange",
-		"mission",
-		"towerquest",
-	} {
-		if strings.Contains(command, marker) {
-			return true
-		}
-	}
-	return false
-}
-
-func (s *Account) ReceiveMissionRewards(missionIDs []int) ([]gamestate.MissionInfo, []gamestate.MissionInfo, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if len(missionIDs) == 0 {
-		return nil, nil, errors.New("mission selection is empty")
-	}
-	indices := make([]int, len(missionIDs))
-	seen := make(map[int]struct{}, len(missionIDs))
-	for resultIndex, missionID := range missionIDs {
-		if _, duplicate := seen[missionID]; duplicate {
-			return nil, nil, errors.New("duplicate mission ID")
-		}
-		seen[missionID] = struct{}{}
-		index := -1
-		for current := range s.missions {
-			if s.missions[current].Info.MissionID == missionID {
-				index = current
-				break
-			}
-		}
-		if index < 0 || s.missions[index].Info.State != 1 {
-			return nil, nil, errors.New("mission is not claimable")
-		}
-		if err := s.validateRewardLocked(s.missions[index].RewardPresent.Reward); err != nil {
-			return nil, nil, err
-		}
-		for _, present := range s.presents {
-			if present.PresentID == s.missions[index].RewardPresent.PresentID {
-				return nil, nil, errors.New("mission reward present already exists")
-			}
-		}
-		indices[resultIndex] = index
-	}
-	rewardMissions := make([]gamestate.MissionInfo, 0, len(indices))
-	for _, index := range indices {
-		s.missions[index].Info.State = 2
-		rewardMissions = append(rewardMissions, cloneMissionInfo(s.missions[index].Info))
-		present := clonePresent(s.missions[index].RewardPresent)
-		present.IssuedAtUnix = time.Now().Unix()
-		s.presents = append(s.presents, present)
-	}
-	receiveMissions := make([]gamestate.MissionInfo, 0, len(s.missions)-len(indices))
-	for _, mission := range s.missions {
-		if mission.Info.State != 2 {
-			receiveMissions = append(receiveMissions, cloneMissionInfo(mission.Info))
-		}
-	}
-	return rewardMissions, receiveMissions, nil
 }
 
 func (s *Account) presentReceiveTypeLocked(present gamestate.Present) int {
@@ -478,7 +355,9 @@ func (s *Account) presentReceiveTypeLocked(present gamestate.Present) int {
 }
 
 func (s *Account) validateRewardLocked(reward gamestate.Reward) error {
-	if reward.Num <= 0 {
+	// NAVI_CHARACTER is an unlock, not a counted inventory entry. The native
+	// login mission uses Num=0; retain that value in mail and result payloads.
+	if reward.Num <= 0 && !(reward.Type == 11 && reward.Num == 0) {
 		return errors.New("reward quantity must be positive")
 	}
 	switch reward.Type {
@@ -490,6 +369,14 @@ func (s *Account) validateRewardLocked(reward gamestate.Reward) error {
 	case 4, 9, 10, 12:
 		if reward.RewardTypeID != 0 {
 			return errors.New("scalar reward has an unexpected ID")
+		}
+		return nil
+	case 11:
+		if reward.Num > 1 || reward.RewardTypeID < 0 || reward.RewardTypeID > math.MaxInt8 {
+			return errors.New("navigator reward must unlock one catalog identity")
+		}
+		if _, exists := s.naviCatalogIDs[int8(reward.RewardTypeID)]; !exists {
+			return errors.New("reward references an unknown navigator")
 		}
 		return nil
 	case 6:
@@ -526,8 +413,13 @@ func (s *Account) validateRewardLocked(reward gamestate.Reward) error {
 		}
 		return nil
 	case 19:
-		if _, exists := s.buddyDefinitions[reward.RewardTypeID]; !exists {
+		definition, exists := s.buddyDefinitions[reward.RewardTypeID]
+		if !exists {
 			return errors.New("reward references an unknown buddy")
+		}
+		if reward.CardLevel < 0 || int(reward.CardLevel) > definition.MaxLevel ||
+			reward.CardFame != 0 || reward.CardLove != 0 || len(reward.CardSkillLevels) != 0 {
+			return errors.New("buddy reward progression fields are invalid")
 		}
 		return nil
 	case 14, 16, 18:
@@ -615,22 +507,8 @@ func (s *Account) validateRewardBatchCapacityLocked(rewards []gamestate.Reward) 
 }
 
 func (s *Account) validateEngagementLocked() error {
-	missionIDs := make(map[int]struct{}, len(s.missions))
-	for _, mission := range s.missions {
-		if mission.Info.MissionID <= 0 || mission.Info.Title == "" ||
-			mission.Info.State < 0 || mission.Info.State > 2 ||
-			mission.RewardPresent.PresentID <= 0 {
-			return errors.New("mission configuration is incomplete")
-		}
-		if _, duplicate := missionIDs[mission.Info.MissionID]; duplicate {
-			return errors.New("mission IDs must be unique")
-		}
-		missionIDs[mission.Info.MissionID] = struct{}{}
-		if mission.Info.State == 1 {
-			if err := s.validateRewardLocked(mission.RewardPresent.Reward); err != nil {
-				return err
-			}
-		}
+	if err := s.validateMissionsLocked(); err != nil {
+		return err
 	}
 	presentIDs := make(map[int64]struct{}, len(s.presents)+len(s.presentHistories))
 	for _, group := range [][]gamestate.Present{s.presents, s.presentHistories} {
@@ -655,6 +533,8 @@ func (s *Account) validateEngagementLocked() error {
 func (s *Account) applyRewardLocked(reward gamestate.Reward, result *PresentReceiveResult) error {
 	received := ReceivedReward{Reward: cloneReward(reward), UniqueID: []int64{}}
 	switch reward.Type {
+	case 11:
+		s.unlockNaviLocked(int8(reward.RewardTypeID))
 	case 14, 16, 18:
 		owned := s.ownsCollectionRewardLocked(reward)
 		switch reward.Type {
@@ -679,36 +559,11 @@ func (s *Account) applyRewardLocked(reward gamestate.Reward, result *PresentRece
 		if !owned {
 			received.IsNew = 1
 		}
-		template := s.cardTemplates[reward.RewardTypeID]
-		prepared := make([]CardInfo, 0, reward.Num)
-		for count := 0; count < reward.Num; count++ {
-			card := cloneCard(template)
-			card.UniqueID = s.nextUniqueID + int64(count)
-			level := int(reward.CardLevel)
-			if level == 0 {
-				level = 1
-			}
-			card.Level = level
-			experience, err := gamestate.CardExperienceAtLevelStart(
-				level, card.LevelMax, s.cardExperience[s.cardDefinitions[card.CardID].ExperienceTableID],
-			)
-			if err != nil {
-				return err
-			}
-			card.Experience = experience
-			card.Love = reward.CardLove
-			card.Fame = int(reward.CardFame)
-			if card.Fame == 0 {
-				card.Fame = 1
-			}
-			if len(reward.CardSkillLevels) > 0 {
-				card.SkillLevels = append([]int16(nil), reward.CardSkillLevels...)
-			}
-			card, err = s.normalizeCardLocked(card)
-			if err != nil {
-				return err
-			}
-			prepared = append(prepared, card)
+		prepared, err := s.prepareRewardCardsLocked(reward, s.nextUniqueID, int(time.Now().Unix()))
+		if err != nil {
+			return err
+		}
+		for _, card := range prepared {
 			received.UniqueID = append(received.UniqueID, card.UniqueID)
 		}
 		s.nextUniqueID += int64(len(prepared))
@@ -798,12 +653,17 @@ func (s *Account) applyRewardLocked(reward gamestate.Reward, result *PresentRece
 			received.IsNew = 1
 		}
 		definition := s.buddyDefinitions[reward.RewardTypeID]
+		level := max(1, int(reward.CardLevel))
+		experience, err := s.buddyExperienceAtLevelLocked(definition, level)
+		if err != nil {
+			return err
+		}
 		prepared := make([]gamestate.Buddy, reward.Num)
 		now := int(time.Now().Unix())
 		for count := 0; count < reward.Num; count++ {
 			buddy, err := s.normalizeBuddyLocked(gamestate.Buddy{
 				UniqueID: s.nextBuddyUniqueID + int64(count), BuddyID: reward.RewardTypeID,
-				Level: 1, CreateTime: now,
+				Level: level, Experience: experience, CreateTime: now,
 			}, definition)
 			if err != nil {
 				return err
@@ -833,25 +693,6 @@ func clonePresents(presents []gamestate.Present) []gamestate.Present {
 	result := make([]gamestate.Present, len(presents))
 	for index, present := range presents {
 		result[index] = clonePresent(present)
-	}
-	return result
-}
-
-func cloneMissionInfo(info gamestate.MissionInfo) gamestate.MissionInfo {
-	info.Rewards = append([]gamestate.Reward(nil), info.Rewards...)
-	for index := range info.Rewards {
-		info.Rewards[index] = cloneReward(info.Rewards[index])
-	}
-	return info
-}
-
-func cloneMissions(missions []gamestate.Mission) []gamestate.Mission {
-	result := make([]gamestate.Mission, len(missions))
-	for index, mission := range missions {
-		result[index] = gamestate.Mission{
-			Info:          cloneMissionInfo(mission.Info),
-			RewardPresent: clonePresent(mission.RewardPresent),
-		}
 	}
 	return result
 }

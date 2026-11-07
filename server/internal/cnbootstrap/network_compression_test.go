@@ -55,7 +55,7 @@ func TestBusinessCompressionPreservesProtocol(t *testing.T) {
 			t.Fatal("corrupt body reached mutation handler")
 		}
 	}
-	for _, path := range []string{"/local/resources/file.dat", "/local/version/a", "/local/account/login", "/loginSDK.php"} {
+	for _, path := range []string{"/local/resources/file.dat", "/local/content/a", "/local/account/login", "/local/client/login"} {
 		if businessCompressionRoute(httptest.NewRequest("POST", path, nil)) {
 			t.Fatal("non-business route included", path)
 		}

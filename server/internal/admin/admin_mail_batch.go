@@ -17,14 +17,16 @@ import (
 	"kairisei.local/server/internal/gamestate"
 )
 
-const adminBatchPrefix = "mail-batch:"
+const adminBatchPrefix = accountstore.MailBatchPrefix
 
 type AdminMailBatch struct {
-	ID      string             `json:"batch_id"`
-	UserIDs []int              `json:"user_ids"`
-	Title   string             `json:"title"`
-	Message string             `json:"message"`
-	Rewards []AdminMailRequest `json:"rewards"`
+	ID             string              `json:"batch_id"`
+	UserIDs        []int               `json:"user_ids"`
+	Title          string              `json:"title"`
+	Message        string              `json:"message"`
+	Rewards        []AdminMailRequest  `json:"rewards"`
+	AllPlayers     bool                `json:"all_players,omitempty"`
+	RecipientRange *mailRecipientRange `json:"recipient_range,omitempty"`
 }
 
 func validBatchID(id string) bool {
@@ -40,9 +42,12 @@ func validBatchID(id string) bool {
 }
 
 func (admin *API) validateMailBatch(batch *AdminMailBatch) ([]AdminCatalogEntry, error) {
+	if batch.AllPlayers != (batch.RecipientRange != nil) || batch.RecipientRange != nil && !batch.RecipientRange.valid() {
+		return nil, errors.New("全员发放范围无效，请重新预览")
+	}
 	batch.Title, batch.Message = strings.TrimSpace(batch.Title), strings.TrimSpace(batch.Message)
-	if !validBatchID(batch.ID) || len(batch.UserIDs) < 1 || len(batch.UserIDs) > 500 || len(batch.Rewards) < 1 || len(batch.Rewards) > 120 || len([]rune(batch.Title)) < 1 || len([]rune(batch.Title)) > 40 || len([]rune(batch.Message)) < 1 || len([]rune(batch.Message)) > 200 {
-		return nil, errors.New("请填写标题、正文，选择1–500名玩家和1–120种奖励")
+	if !validBatchID(batch.ID) || len(batch.UserIDs) < 1 || (!batch.AllPlayers && len(batch.UserIDs) > 500) || len(batch.Rewards) < 1 || len(batch.Rewards) > 120 || len([]rune(batch.Title)) < 1 || len([]rune(batch.Title)) > 40 || len([]rune(batch.Message)) < 1 || len([]rune(batch.Message)) > 200 {
+		return nil, errors.New("请填写标题、正文和1–120种奖励；手动选择1–500名玩家，或选择全部玩家")
 	}
 	slices.Sort(batch.UserIDs)
 	batch.UserIDs = slices.Compact(batch.UserIDs)
@@ -51,12 +56,16 @@ func (admin *API) validateMailBatch(batch *AdminMailBatch) ([]AdminCatalogEntry,
 			return nil, fmt.Errorf("玩家 #%d 无效或属于系统伙伴", id)
 		}
 	}
-	count, err := admin.accounts.CountIDs(batch.UserIDs)
-	if err != nil {
-		return nil, err
-	}
-	if count != len(batch.UserIDs) {
-		return nil, errors.New("收件名单包含不存在的玩家，请重新选择")
+	// Keep SQLite bound-parameter counts independent of the audience size.
+	for offset := 0; offset < len(batch.UserIDs); offset += 500 {
+		ids := batch.UserIDs[offset:min(offset+500, len(batch.UserIDs))]
+		count, err := admin.accounts.CountIDs(ids)
+		if err != nil {
+			return nil, err
+		}
+		if count != len(ids) {
+			return nil, errors.New("收件名单包含不存在的玩家，请重新选择")
+		}
 	}
 	catalog := make([]AdminCatalogEntry, 0, len(batch.Rewards))
 	seen := make(map[string]bool)
@@ -91,12 +100,33 @@ func (admin *API) previewMailBatch(w http.ResponseWriter, r *http.Request) {
 		WriteAdminError(w, 400, err.Error())
 		return
 	}
+	if batch.AllPlayers {
+		if len(batch.UserIDs) != 0 || batch.RecipientRange != nil {
+			WriteAdminError(w, 400, "全部玩家与手动名单不能同时指定")
+			return
+		}
+		var err error
+		batch.UserIDs, err = admin.accounts.PlayerIDs(r.Context(), accountstore.PrimaryUserID, accountstore.SystemPartnerUserIDBase-1)
+		if err != nil {
+			WriteAdminError(w, 500, err.Error())
+			return
+		}
+		if len(batch.UserIDs) != 0 {
+			batch.RecipientRange = &mailRecipientRange{StartUID: batch.UserIDs[0], EndUID: batch.UserIDs[len(batch.UserIDs)-1], Count: len(batch.UserIDs)}
+		}
+	}
 	catalog, err := admin.validateMailBatch(&batch)
 	if err != nil {
 		WriteAdminError(w, 400, err.Error())
 		return
 	}
-	WriteAdminJSON(w, 200, map[string]any{"state": "PASS", "batch": batch, "catalog": catalog, "recipient_count": len(batch.UserIDs), "mail_count": len(batch.UserIDs) * len(batch.Rewards)})
+	count := len(batch.UserIDs)
+	if batch.AllPlayers {
+		// New registrations get a UID above this preview's upper bound.
+		// Keep only the range in the request, not an unbounded client-side list.
+		batch.UserIDs = nil
+	}
+	WriteAdminJSON(w, 200, map[string]any{"state": "PASS", "batch": batch, "confirmation": batch, "catalog": catalog, "recipient_count": count, "mail_count": count * len(batch.Rewards)})
 }
 
 func (admin *API) createMailBatch(w http.ResponseWriter, r *http.Request) {
@@ -109,8 +139,32 @@ func (admin *API) createMailBatch(w http.ResponseWriter, r *http.Request) {
 		WriteAdminError(w, 400, err.Error())
 		return
 	}
+	if batch.AllPlayers {
+		if batch.RecipientRange == nil || !batch.RecipientRange.valid() || len(batch.UserIDs) != 0 {
+			WriteAdminError(w, 400, "全员发放范围无效，请重新预览")
+			return
+		}
+		var err error
+		batch.UserIDs, err = admin.accounts.PlayerIDs(r.Context(), batch.RecipientRange.StartUID, batch.RecipientRange.EndUID)
+		if err != nil {
+			WriteAdminError(w, 500, err.Error())
+			return
+		}
+		if len(batch.UserIDs) != batch.RecipientRange.Count {
+			WriteAdminError(w, 409, "预览范围内的账号发生变化，请重新预览")
+			return
+		}
+	}
 	if _, err := admin.validateMailBatch(&batch); err != nil {
 		WriteAdminError(w, 400, err.Error())
+		return
+	}
+	// A cleaned batch keeps no receipts, so recreating it would resend every gift.
+	if retired, err := admin.operations.storage.MailBatchRetired(batch.ID); err != nil || retired {
+		if err == nil {
+			err = errors.New("该批次已完成并在维护中清理了历史，不能再次发放；如需补发请新建批次")
+		}
+		WriteAdminError(w, 409, err.Error())
 		return
 	}
 	content, _ := json.Marshal(batch)
@@ -274,7 +328,7 @@ func (admin *API) listMailBatches(w http.ResponseWriter, r *http.Request) {
 			WriteAdminError(w, 500, err.Error())
 			return
 		}
-		result = append(result, map[string]any{"batch_id": batch.ID, "title": batch.Title, "created_utc": doc.UpdatedUTC, "recipients": len(batch.UserIDs), "rewards": len(batch.Rewards), "done": doc.ReceiptCount})
+		result = append(result, map[string]any{"batch_id": batch.ID, "title": batch.Title, "created_utc": doc.UpdatedUTC, "recipients": len(batch.UserIDs), "all_players": batch.AllPlayers, "rewards": len(batch.Rewards), "done": doc.ReceiptCount})
 	}
 	WriteAdminJSON(w, 200, map[string]any{"state": "PASS", "batches": result, "total": total, "limit": limit, "offset": offset})
 }

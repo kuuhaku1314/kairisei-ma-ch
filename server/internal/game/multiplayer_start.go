@@ -5,14 +5,23 @@ import (
 	"time"
 
 	"kairisei.local/server/internal/gamestate"
-	"kairisei.local/server/internal/multiplayer"
 )
 
-func (s *Account) ChargeMultiplayerStart(start multiplayer.BattleStart, base gamestate.State, persist StatePersister) error {
+type MultiplayerAdmission struct {
+	RoomID    int64
+	BossID    int
+	BPUse     int
+	CheckOnly bool
+}
+
+var ErrMultiplayerBattlePoints = errors.New("房主体力不足，无法开始战斗。")
+var ErrMultiplayerMedals = errors.New("骑士徽章不足，每次参与他人的房间需要1枚。")
+
+func (s *Account) ChargeMultiplayerStart(start MultiplayerAdmission, base gamestate.State, persist StatePersister) error {
 	return s.chargeMultiplayerStart(start, start.BPUse, 0, 0, base, persist)
 }
 
-func (s *Account) ChargeMultiplayerEntry(start multiplayer.BattleStart, base gamestate.State, persist StatePersister) error {
+func (s *Account) ChargeMultiplayerEntry(start MultiplayerAdmission, base gamestate.State, persist StatePersister) error {
 	if base.TeamBattleMedalItemID <= 0 {
 		return errors.New("multiplayer entry medal is not configured")
 	}
@@ -20,7 +29,7 @@ func (s *Account) ChargeMultiplayerEntry(start multiplayer.BattleStart, base gam
 	return s.chargeMultiplayerStart(start, 0, base.TeamBattleMedalItemID, 1, base, persist)
 }
 
-func (s *Account) chargeMultiplayerStart(start multiplayer.BattleStart, bpUse, medalItemID, medalUse int, base gamestate.State, persist StatePersister) error {
+func (s *Account) chargeMultiplayerStart(start MultiplayerAdmission, bpUse, medalItemID, medalUse int, base gamestate.State, persist StatePersister) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, receipt := range s.teamBattleStartReceipts {
@@ -35,11 +44,11 @@ func (s *Account) chargeMultiplayerStart(start multiplayer.BattleStart, bpUse, m
 	now := time.Now()
 	s.refreshBattlePointsLocked(now)
 	if bpUse < 0 || s.bp < bpUse {
-		return &multiplayer.BattleStartDenied{UserID: base.User.UserID, Message: "房主体力不足，无法开始战斗。"}
+		return ErrMultiplayerBattlePoints
 	}
 	medal, hadMedal := s.items[medalItemID]
 	if medalUse > 0 && (!hadMedal || medal.Num < medalUse) {
-		return &multiplayer.BattleStartDenied{UserID: base.User.UserID, Message: "骑士徽章不足，每次参与他人的房间需要1枚。"}
+		return ErrMultiplayerMedals
 	}
 	if start.CheckOnly {
 		return nil

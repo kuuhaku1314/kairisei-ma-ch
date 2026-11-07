@@ -27,11 +27,11 @@ func (a *API) teamBattleClearDeckShow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Each multi participant may have a daily row for the same battle.
-	// Sample distinct recent clears, keeping all four actual professions together.
+	// Sample distinct recent clears, keeping each actual party together.
 	seen := map[string]bool{}
 	unique := records[:0]
 	for _, record := range records {
-		if !seen[record.EventKey] && len(record.Decks) == 4 {
+		if !seen[record.EventKey] && len(record.Decks) > 0 {
 			seen[record.EventKey] = true
 			unique = append(unique, record)
 		}
@@ -50,9 +50,9 @@ func (a *API) teamBattleClearDeckShow(w http.ResponseWriter, r *http.Request) {
 		a.writeStoreError(w, err)
 		return
 	}
-	wire := make([]json.RawMessage, 0, len(decks))
+	wire := make([]any, 0, len(decks))
 	for _, deck := range decks {
-		wire = append(wire, deck.Deck)
+		wire = append(wire, a.partnerDeckParameterView(deck.Deck))
 	}
 	a.writeProtocol(w, map[string]any{"partner_deck": wire, "how_to_list": how, "friend_state_list": states})
 }
@@ -89,9 +89,6 @@ func (a *API) dailyClearRankShow(w http.ResponseWriter, r *http.Request) {
 	var positions, counts, ranks [4]int
 	decks := []gamestate.BattleClearDeck{}
 	for _, record := range records {
-		if len(record.Decks) != 4 {
-			continue
-		}
 		bucket := 0
 		if payload.IsMulti == 1 {
 			bucket = record.ArthurType - 1
@@ -117,7 +114,7 @@ func (a *API) dailyClearRankShow(w http.ResponseWriter, r *http.Request) {
 				name = record.Decks[0].Name
 			}
 			buckets[rowIndex] = append(buckets[rowIndex], map[string]any{"userid": record.UserID, "name": name, "rank": ranks[bucket],
-				"partner_deck": deck.Deck, "deck_honorids": deck.HonorIDs})
+				"partner_deck": a.partnerDeckParameterView(deck.Deck), "deck_honorids": deck.HonorIDs})
 			decks = append(decks, deck)
 		}
 	}
@@ -192,7 +189,7 @@ func (a *API) clearDeckMetadata(r *http.Request, decks []gamestate.BattleClearDe
 	groups, _ := r.Context().Value(cardAcquisitionGroupsKey{}).(map[int]struct{})
 	how := []any{}
 	for start := 0; start < len(cardIDs); start += 64 {
-		lists, err := a.account.HowToGetCards(cardIDs[start:min(start+64, len(cardIDs))], a.initialState.TeamBattleRewards, groups)
+		lists, err := a.account.HowToGetMissingCards(cardIDs[start:min(start+64, len(cardIDs))], a.initialState.TeamBattleRewards, groups)
 		if err != nil {
 			return nil, nil, err
 		}

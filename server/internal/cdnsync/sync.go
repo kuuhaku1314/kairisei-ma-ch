@@ -13,28 +13,31 @@ import (
 	"time"
 
 	"kairisei.local/server/internal/cnbootstrap"
+	"kairisei.local/server/internal/objectstore"
 )
 
 type Options struct {
-	ConfigPath    string
-	ResourceSet   string
-	CDNConfigPath string
-	DryRun        bool
+	ConfigPath      string
+	ResourceSet     string
+	PlatformContent []string
+	CDNConfigPath   string
+	DryRun          bool
 }
 
 type receipt struct {
-	ResourceSetSHA256 string `json:"resource_set_sha256"`
-	Bucket            string `json:"bucket"`
-	Prefix            string `json:"prefix"`
-	BaseURL           string `json:"base_url"`
-	Objects           int    `json:"objects"`
-	Bytes             int64  `json:"bytes"`
-	Uploaded          int    `json:"uploaded"`
-	Skipped           int    `json:"skipped"`
-	UploadedBytes     int64  `json:"uploaded_bytes"`
-	PublicSamples     int    `json:"public_samples"`
-	Activated         bool   `json:"activated"`
-	Error             string `json:"error,omitempty"`
+	ResourceSetSHA256 string                           `json:"resource_set_sha256"`
+	PlatformContents  []cnbootstrap.CDNPlatformContent `json:"platform_contents,omitempty"`
+	Bucket            string                           `json:"bucket"`
+	Prefix            string                           `json:"prefix"`
+	BaseURL           string                           `json:"base_url"`
+	Objects           int                              `json:"objects"`
+	Bytes             int64                            `json:"bytes"`
+	Uploaded          int                              `json:"uploaded"`
+	Skipped           int                              `json:"skipped"`
+	UploadedBytes     int64                            `json:"uploaded_bytes"`
+	PublicSamples     int                              `json:"public_samples"`
+	Activated         bool                             `json:"activated"`
+	Error             string                           `json:"error,omitempty"`
 }
 
 func Run(ctx context.Context, options Options, out io.Writer) error {
@@ -46,7 +49,7 @@ func Run(ctx context.Context, options Options, out io.Writer) error {
 		out = io.Discard
 	}
 	fmt.Fprintln(out, "[1/3] 读取当前资源版本与别名映射……")
-	manifest, err := cnbootstrap.BuildCDNManifest(options.ResourceSet)
+	manifest, err := cnbootstrap.BuildCDNManifest(options.ResourceSet, options.PlatformContent...)
 	if err != nil {
 		return err
 	}
@@ -57,7 +60,7 @@ func syncManifest(ctx context.Context, options Options, c config, manifest cnboo
 	if len(manifest.Files) == 0 {
 		return errors.New("没有可同步的资源")
 	}
-	target, err := writableTarget(options.CDNConfigPath, manifest.Root)
+	target, err := writableTarget(options.CDNConfigPath, manifest.ReadOnlyRoots()...)
 	if err != nil {
 		return err
 	}
@@ -78,7 +81,7 @@ func syncManifest(ctx context.Context, options Options, c config, manifest cnboo
 			return errors.New("目标 cdn.json 不是有效的公开地址配置，已拒绝覆盖")
 		}
 	}
-	r := receipt{ResourceSetSHA256: manifest.ResourceSetSHA256, Bucket: c.Bucket, Prefix: c.Prefix, BaseURL: c.baseURL(), Objects: len(manifest.Files)}
+	r := receipt{ResourceSetSHA256: manifest.ResourceSetSHA256, PlatformContents: manifest.PlatformContents, Bucket: c.Bucket, Prefix: c.Prefix, BaseURL: c.baseURL(), Objects: len(manifest.Files)}
 	for _, object := range manifest.Files {
 		r.Bytes += object.Bytes
 	}
@@ -102,7 +105,7 @@ func syncManifest(ctx context.Context, options Options, c config, manifest cnboo
 	}
 	defer func() {
 		if err != nil {
-			r.Error = c.redact(err.Error())
+			r.Error = c.Redact(err.Error())
 			err = errors.New(r.Error)
 		}
 		encoder := json.NewEncoder(record)
@@ -112,7 +115,7 @@ func syncManifest(ctx context.Context, options Options, c config, manifest cnboo
 	}()
 	client := newHTTPClient()
 	defer client.CloseIdleConnections()
-	storage := newS3(c, client)
+	storage := objectstore.New(c.Credentials, client)
 	fmt.Fprintln(out, "[2/3] 增量同步；已存在且一致的文件自动跳过。Ctrl+C 可停止，重跑即可继续。")
 	workCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -181,7 +184,7 @@ collect:
 		return err
 	}
 	if ctx.Err() != nil {
-		return networkError(ctx.Err())
+		return objectstore.NetworkError(ctx.Err())
 	}
 	if r.Uploaded+r.Skipped != r.Objects {
 		return errors.New("同步未完成，未启用 CDN；请重新运行")
@@ -194,7 +197,7 @@ collect:
 		r.PublicSamples++
 	}
 	if ctx.Err() != nil {
-		return networkError(ctx.Err())
+		return objectstore.NetworkError(ctx.Err())
 	}
 	current, readErr := os.ReadFile(target)
 	if (existed && (readErr != nil || !bytes.Equal(previous, current))) || (!existed && !errors.Is(readErr, os.ErrNotExist)) {
@@ -209,7 +212,7 @@ collect:
 	return nil
 }
 
-func writableTarget(filename, resourceRoot string) (string, error) {
+func writableTarget(filename string, resourceRoots ...string) (string, error) {
 	abs, err := filepath.Abs(filename)
 	if err != nil {
 		return "", err
@@ -219,8 +222,10 @@ func writableTarget(filename, resourceRoot string) (string, error) {
 		return "", err
 	}
 	abs = filepath.Join(parent, filepath.Base(abs))
-	if relative, err := filepath.Rel(resourceRoot, abs); err == nil && filepath.IsLocal(relative) {
-		return "", errors.New("CDN 配置不能写入只读 resource-set 目录")
+	for _, root := range resourceRoots {
+		if relative, err := filepath.Rel(root, abs); err == nil && filepath.IsLocal(relative) {
+			return "", errors.New("CDN 配置不能写入只读资源输入目录")
+		}
 	}
 	if info, err := os.Lstat(abs); err == nil {
 		if !info.Mode().IsRegular() {

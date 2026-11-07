@@ -15,6 +15,26 @@ import (
 	"strings"
 )
 
+func findCNPatchFile(patchRoots []string, relative string) (os.FileInfo, error) {
+	for _, root := range patchRoots {
+		info, err := os.Stat(filepath.Join(root, filepath.FromSlash(relative)))
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if !info.Mode().IsRegular() || info.Size() <= 0 {
+			return nil, fmt.Errorf("official CN bundle %q is not a non-empty file", relative)
+		}
+		// Match select_bundle in the offline source catalog generator:
+		// earlier roots own duplicate paths, including different-sized official
+		// variants. A shadowed copy must not change the catalog's selected size.
+		return info, nil
+	}
+	return nil, os.ErrNotExist
+}
+
 func resolveCNPatchRoots(patchRoots []string) ([]string, error) {
 	if len(patchRoots) == 0 {
 		return nil, errors.New("at least one official CN patch root is required")
@@ -186,7 +206,7 @@ func buildCN602Catalog(patchRoots []string, assetMapPath string) ([]byte, error)
 		})
 		bundleCount++
 		availableBundles[bundleName] = struct{}{}
-		if bundleName == cn602MenuBundle {
+		if strings.EqualFold(bundleName, cn602MenuBundle) {
 			foundMenu = true
 		}
 	}

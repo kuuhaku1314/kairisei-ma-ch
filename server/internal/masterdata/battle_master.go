@@ -18,7 +18,7 @@ import (
 
 // Matches the generator's bounded JSON input/output budget. The complete CN
 // encounter registry exceeds 8 MiB after restoring omitted difficulties.
-const maxBattleRuntimeMasterBytes = 16 * 1024 * 1024
+const maxBattleRuntimeMasterBytes = 32 * 1024 * 1024
 
 const (
 	battleGeneratedGroupIDMin = 700000000
@@ -274,7 +274,7 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 		len(master.Rewards) == 0 || len(master.Replays) != len(master.Rewards) ||
 		len(master.Recommendations) == 0 || len(master.PastBossGroups) == 0 ||
 		len(master.ScheduleGroupIDs) == 0 || len(master.ScheduleGroupIDs) > 50 ||
-		master.TowerConfigVersion <= 0 || len(master.TowerProfiles) == 0 {
+		master.TowerConfigVersion != 2 || len(master.TowerProfiles) == 0 {
 		return errors.New("CN battle runtime master is incomplete")
 	}
 	importedEntries, err := battleImportedEntries(master)
@@ -284,6 +284,7 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 	seenImported := make(map[int]struct{}, len(importedEntries))
 	var localProfile struct {
 		Grouping                 string `json:"grouping"`
+		SourceCandidateCount     int    `json:"source_candidate_count"`
 		ScheduleGroupLimit       int    `json:"schedule_group_limit"`
 		ScheduleGroupRule        string `json:"schedule_group_rule"`
 		ScheduleGroupSourceState string `json:"schedule_group_source_state"`
@@ -320,14 +321,10 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 		MaterialDungeons battleMaterialDungeonPolicy `json:"material_dungeons"`
 		TowerQuest       struct {
 			ConfigVersion                  int    `json:"config_version"`
-			TowerID                        int    `json:"tower_id"`
+			TowerCount                     int    `json:"tower_count"`
 			FloorCount                     int    `json:"floor_count"`
-			RankSize                       int    `json:"rank_size"`
-			EntryItemID                    int    `json:"entry_item_id"`
-			EntryItemUse                   int    `json:"entry_item_use"`
-			LoseCountMax                   int    `json:"lose_count_max"`
-			ClientEntryPublished           *bool  `json:"client_entry_published"`
-			ClientEntrySourceState         string `json:"client_entry_source_state"`
+			RankCount                      int    `json:"rank_count"`
+			PolicyKind                     string `json:"policy_kind"`
 			OfficialServiceTopologyClaimed *bool  `json:"official_service_topology_claimed"`
 		} `json:"tower_quest"`
 	}
@@ -346,11 +343,10 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 		localProfile.DailyClearRank.PublicPopulationClaimed == nil ||
 		*localProfile.DailyClearRank.PublicPopulationClaimed ||
 		localProfile.TowerQuest.ConfigVersion != master.TowerConfigVersion ||
-		localProfile.TowerQuest.TowerID != 1 || localProfile.TowerQuest.FloorCount != 10 ||
-		localProfile.TowerQuest.RankSize != 5 || localProfile.TowerQuest.EntryItemID != 3990 ||
-		localProfile.TowerQuest.EntryItemUse != 1 || localProfile.TowerQuest.LoseCountMax != 3 ||
-		localProfile.TowerQuest.ClientEntryPublished == nil || *localProfile.TowerQuest.ClientEntryPublished ||
-		localProfile.TowerQuest.ClientEntrySourceState != "ABSENT_FROM_CN_OFFICIAL_BUILD_AND_ASSET_MAP" ||
+		localProfile.TowerQuest.TowerCount != len(master.TowerProfiles) ||
+		localProfile.TowerQuest.FloorCount != master.Summary.TowerFloors ||
+		localProfile.TowerQuest.RankCount != master.Summary.TowerRanks ||
+		localProfile.TowerQuest.PolicyKind != "LOCAL_POLICY" ||
 		localProfile.TowerQuest.OfficialServiceTopologyClaimed == nil ||
 		*localProfile.TowerQuest.OfficialServiceTopologyClaimed ||
 		localProfile.RepeatableRewardPolicy.SchemaVersion != 7 ||
@@ -631,8 +627,16 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 		if group.IconIndex != expectedIconIndex {
 			return fmt.Errorf("CN battle runtime group %d has icon %d, want %d", group.GroupID, group.IconIndex, expectedIconIndex)
 		}
-		if familyID <= 0 || group.GroupID != battleGeneratedGroupIDMin+familyID {
+		if familyID <= 0 || group.GroupID <= battleGeneratedGroupIDMin || group.GroupID >= battleGeneratedGroupIDMax {
 			return fmt.Errorf("CN battle runtime group %d differs from Boss family %d", group.GroupID, familyID)
+		}
+		if group.GroupID != battleGeneratedGroupIDMin+familyID {
+			for _, boss := range group.Bosses {
+				entry, imported := importedEntries[boss.BossID]
+				if !imported || entry.GroupID != group.GroupID {
+					return fmt.Errorf("Boss %d has no source metadata for group %d", boss.BossID, group.GroupID)
+				}
+			}
 		}
 		if _, duplicate := groupIDs[group.GroupID]; duplicate {
 			return fmt.Errorf("duplicate CN battle runtime group %d", group.GroupID)
@@ -642,25 +646,20 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 			if boss.BossID/100 != familyID {
 				return fmt.Errorf("CN battle runtime group %d mixes Boss families", group.GroupID)
 			}
-			tier := min(8, max(1, boss.BossID%100))
-			entry := localProfile.RepeatableRewardPolicy.Tiers[tier-1]
-			expectedBPUse := entry.BPUse
-			expectedBPUseHalf := entry.BPUseHalf
 			if boss.IsModel == 1 {
 				if override, exists := difficultyOverrideByName[boss.Difficulty]; exists {
-					expectedBPUse = override.BPUse
-					expectedBPUseHalf = override.BPUseHalf
 					difficultyOverrideCounts[override.DifficultyKey]++
 				}
 			}
 			_, validDifficulty := validDifficultyNames[boss.Difficulty]
 			if imported, ok := importedEntries[boss.BossID]; ok {
-				if imported.Name != boss.Description || imported.Difficulty != boss.Difficulty ||
+				if imported.GroupID != group.GroupID || imported.Name != boss.Description || imported.Difficulty != boss.Difficulty ||
 					(imported.RenderMode == "3d") != (boss.IsModel == 1) {
 					return fmt.Errorf("imported BOSS %d differs from its source identity", boss.BossID)
 				}
 				seenImported[boss.BossID] = struct{}{}
-				validDifficulty = validDifficulty || imported.DifficultyKind == "LOCAL_CHALLENGE"
+				validDifficulty = validDifficulty || imported.DifficultyKind == "LEVEL" ||
+					imported.DifficultyKind == "LOCAL_VARIANT" || imported.DifficultyKind == "SCORE"
 			}
 			rewardCardIDs := make([]int, len(boss.RewardCards))
 			seenRewardCardIDs := make(map[int]struct{}, len(boss.RewardCards))
@@ -688,7 +687,7 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 				(group.StageType == 13) != scorePolicies[boss.BossID] ||
 				boss.IsModel < 0 || boss.IsModel > 1 ||
 				boss.IsDailyRank != 1 || !boss.battleEntryRules.valid() ||
-				boss.BPUse != expectedBPUse || boss.BPUseHalf != expectedBPUseHalf ||
+				boss.BPUse <= 0 || boss.BPUseHalf != (boss.BPUse+1)/2 ||
 				boss.State < 0 || boss.State > 2 || !validRewardCards ||
 				len(boss.RewardSpheres) != 0 {
 				return fmt.Errorf("invalid CN battle runtime boss %d", boss.BossID)
@@ -726,10 +725,8 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 	towerRankCount := 0
 	seenTowerIDs := make(map[int]struct{}, len(master.TowerProfiles))
 	for _, profile := range master.TowerProfiles {
-		if profile.TowerID <= 0 || profile.Name == "" || profile.ItemID <= 0 ||
-			profile.ItemUse <= 0 || profile.LoseCountMax <= 0 || profile.AllClearText == "" ||
-			profile.ClientEntryPublished ||
-			profile.ClientEntrySourceState != "ABSENT_FROM_CN_OFFICIAL_BUILD_AND_ASSET_MAP" ||
+		if profile.TowerID <= 0 || profile.Name == "" ||
+			profile.LoseCountMax <= 0 || profile.AllClearText == "" ||
 			len(profile.Ranks) == 0 || len(profile.Floors) == 0 {
 			return fmt.Errorf("invalid CN tower profile %d", profile.TowerID)
 		}
@@ -745,17 +742,27 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 			ranks[rank.Rank] = struct{}{}
 		}
 		for index, floor := range profile.Floors {
-			if floor.Floor != index+1 || len(floor.ClearRewards) == 0 {
+			if floor.Floor != index+1 || !floor.ValidEntryCost() {
 				return fmt.Errorf("invalid CN tower floor %d:%d", profile.TowerID, floor.Floor)
 			}
 			if _, exists := ranks[floor.Rank]; !exists {
 				return fmt.Errorf("CN tower floor %d:%d has unknown rank", profile.TowerID, floor.Floor)
 			}
+			for _, reward := range floor.ClearRewards {
+				if !ValidPersistedRewardShape(reward) {
+					return fmt.Errorf("invalid tower first-clear reward at %d:%d", profile.TowerID, floor.Floor)
+				}
+			}
+			if floor.Story.TalkID != 0 {
+				if floor.Story.TalkID < 0 || floor.Story.Title == "" {
+					return fmt.Errorf("invalid tower story at %d:%d", profile.TowerID, floor.Floor)
+				}
+				continue
+			}
 			var boss battleBossIdentity
 			if json.Unmarshal(floor.Boss, &boss) != nil || boss.BossID <= 0 || boss.BPUse != 0 ||
 				boss.IsDailyRank != 0 || !boss.battleEntryRules.valid() ||
-				len(boss.RewardCards) != 1 || boss.RewardCards[0].CardID <= 0 ||
-				boss.RewardCards[0].IsNew != 0 || len(boss.RewardSpheres) != 0 {
+				len(boss.RewardSpheres) != 0 {
 				return fmt.Errorf("invalid CN tower boss at %d:%d", profile.TowerID, floor.Floor)
 			}
 			if _, duplicate := bossIDs[boss.BossID]; duplicate {
@@ -763,7 +770,12 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 			}
 			bossIDs[boss.BossID] = struct{}{}
 			bossEntryRules[boss.BossID] = boss.battleEntryRules
-			bossDropCardIDs[boss.BossID] = []int{boss.RewardCards[0].CardID}
+			for _, card := range boss.RewardCards {
+				if card.CardID <= 0 || card.IsNew != 0 {
+					return fmt.Errorf("invalid tower drop preview at %d:%d", profile.TowerID, floor.Floor)
+				}
+				bossDropCardIDs[boss.BossID] = append(bossDropCardIDs[boss.BossID], card.CardID)
+			}
 			towerBossFloors[boss.BossID] = [2]int{profile.TowerID, floor.Floor}
 		}
 		towerFloorCount += len(profile.Floors)
@@ -828,7 +840,7 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 		master.Summary.FallbackActivityDropBosses != dropSummary.AssignmentSourceCounts[fallbackDropSource] ||
 		master.Summary.MaterialDungeonBosses != len(materialPolicyByBoss) ||
 		master.Summary.MaterialDungeonSegments != materialSegmentCount ||
-		dropAssignmentCount != len(bossIDs) ||
+		dropAssignmentCount != localProfile.SourceCandidateCount ||
 		len(master.Summary.RepeatableRewardTierCounts) != 8 {
 		return errors.New("CN battle runtime master summary is inconsistent")
 	}
@@ -840,7 +852,7 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 		}
 		rewardTierTotal += count
 	}
-	if rewardTierTotal != len(bossIDs) {
+	if rewardTierTotal != localProfile.SourceCandidateCount {
 		return errors.New("CN battle repeatable-reward tier summary is inconsistent")
 	}
 	expectedScheduleGroupIDs := make([]int, 0, len(groupIDs))
@@ -1013,10 +1025,19 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 			}
 		}
 		if tower, exists := towerBossFloors[profile.BossID]; exists {
-			if profile.TowerID != tower[0] || profile.TowerFloor != tower[1] ||
-				len(profile.FirstClearRewards) == 0 {
+			if profile.TowerID != tower[0] || profile.TowerFloor != tower[1] {
 				return fmt.Errorf("invalid CN tower reward %d", profile.BossID)
 			}
+			// Tower material drops and first-clear grants belong to their own
+			// packaged policy and GM editor, not ordinary Boss card/medal rates.
+			for _, rewards := range [][]gamestate.Reward{profile.ResultRewards, profile.FirstClearRewards} {
+				for _, reward := range rewards {
+					if !ValidPersistedRewardShape(reward) {
+						return fmt.Errorf("invalid tower reward payload %d", profile.BossID)
+					}
+				}
+			}
+			continue
 		} else if profile.TowerID != 0 || profile.TowerFloor != 0 {
 			return fmt.Errorf("non-tower reward %d has tower context", profile.BossID)
 		}
@@ -1285,8 +1306,29 @@ func ApplyBattleRuntimeMaster(state *gamestate.State, master BattleRuntimeMaster
 		return err
 	}
 	state.TeamBattleScheduleGroupIDs = append([]int(nil), master.ScheduleGroupIDs...)
-	allowedScheduleGroups := make(map[int]struct{}, len(master.ScheduleGroupIDs))
-	for _, groupID := range master.ScheduleGroupIDs {
+	state.TowerQuestProfiles = make([]gamestate.TowerQuestProfile, len(master.TowerProfiles))
+	for index, profile := range master.TowerProfiles {
+		cloned := profile
+		cloned.Ranks = append([]gamestate.TowerQuestRankProfile(nil), profile.Ranks...)
+		cloned.Floors = make([]gamestate.TowerQuestFloorProfile, len(profile.Floors))
+		for floorIndex, floor := range profile.Floors {
+			floor.Boss = append(json.RawMessage(nil), floor.Boss...)
+			floor.ClearRewards = append([]gamestate.Reward(nil), floor.ClearRewards...)
+			cloned.Floors[floorIndex] = floor
+		}
+		state.TowerQuestProfiles[index] = cloned
+	}
+	state.TowerQuestConfigVersion = master.TowerConfigVersion
+	NormalizeBattleAccountProgress(state)
+	return nil
+}
+
+// NormalizeBattleAccountProgress keeps account-owned schedule subscriptions and
+// tower records valid against the already installed public battle catalog.
+// It never changes shared definitions or reuses another account's progress.
+func NormalizeBattleAccountProgress(state *gamestate.State) {
+	allowedScheduleGroups := make(map[int]struct{}, len(state.TeamBattleScheduleGroupIDs))
+	for _, groupID := range state.TeamBattleScheduleGroupIDs {
 		allowedScheduleGroups[groupID] = struct{}{}
 	}
 	filterSchedulePush := func(values []int) []int {
@@ -1311,25 +1353,16 @@ func ApplyBattleRuntimeMaster(state *gamestate.State, master BattleRuntimeMaster
 	state.TeamBattleSchedule.MultiPushGroupIDs = filterSchedulePush(
 		state.TeamBattleSchedule.MultiPushGroupIDs,
 	)
-	state.TowerQuestProfiles = make([]gamestate.TowerQuestProfile, len(master.TowerProfiles))
 	persistedTower := make(map[int]gamestate.TowerQuestProgress, len(state.TowerQuestProgress))
 	for _, progress := range state.TowerQuestProgress {
 		if _, duplicate := persistedTower[progress.TowerID]; !duplicate {
 			persistedTower[progress.TowerID] = progress
 		}
 	}
-	normalizedProgress := make([]gamestate.TowerQuestProgress, 0, len(master.TowerProfiles))
-	for index, profile := range master.TowerProfiles {
-		cloned := profile
-		cloned.Ranks = append([]gamestate.TowerQuestRankProfile(nil), profile.Ranks...)
-		cloned.Floors = make([]gamestate.TowerQuestFloorProfile, len(profile.Floors))
-		for floorIndex, floor := range profile.Floors {
-			floor.Boss = append(json.RawMessage(nil), floor.Boss...)
-			floor.ClearRewards = append([]gamestate.Reward(nil), floor.ClearRewards...)
-			cloned.Floors[floorIndex] = floor
-		}
-		state.TowerQuestProfiles[index] = cloned
-
+	normalizedProgress := make([]gamestate.TowerQuestProgress, 0, len(state.TowerQuestProfiles)+len(state.TowerQuestProgress))
+	activeTowerIDs := make(map[int]struct{}, len(state.TowerQuestProfiles))
+	for _, profile := range state.TowerQuestProfiles {
+		activeTowerIDs[profile.TowerID] = struct{}{}
 		progress, exists := persistedTower[profile.TowerID]
 		if !exists {
 			progress = gamestate.TowerQuestProgress{TowerID: profile.TowerID, Floor: 1}
@@ -1371,7 +1404,12 @@ func ApplyBattleRuntimeMaster(state *gamestate.State, master BattleRuntimeMaster
 		progress.ClearedFloors = cleared
 		normalizedProgress = append(normalizedProgress, progress)
 	}
+	// Retired definitions have no runtime entrance, but their private records
+	// remain in the account instead of being deleted by a content refresh.
+	for _, progress := range state.TowerQuestProgress {
+		if _, found := activeTowerIDs[progress.TowerID]; !found {
+			normalizedProgress = append(normalizedProgress, progress)
+		}
+	}
 	state.TowerQuestProgress = normalizedProgress
-	state.TowerQuestConfigVersion = master.TowerConfigVersion
-	return nil
 }

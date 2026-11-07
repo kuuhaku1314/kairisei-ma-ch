@@ -14,6 +14,11 @@ const (
 	cnGeneratedGroupMax  = 800000000
 )
 
+// IsMainQuestArea reports whether a team battle group is a 主线 stage area (MainQuestShow).
+func IsMainQuestArea(areaID int) bool {
+	return areaID >= cnNormalQuestAreaMin && areaID <= cnNormalQuestAreaMax
+}
+
 type stageQuestPublicationProgress struct {
 	StageQuest struct {
 		AreaID int `json:"areaid"`
@@ -122,6 +127,9 @@ func (catalog *TeamBattleCatalog) project(
 			if err := group.selectTutorialBoss(); err != nil {
 				return err
 			}
+			// Quest 1047 guides the first family and its first difficulty.
+			// Other published families return after this onboarding step.
+			groups[key] = groups[key][:1]
 		}
 	}
 	for index := range groups["9"] {
@@ -153,6 +161,7 @@ func (group teamBattleCatalogGroup) validateNormalProgress(progress stageQuestPu
 // open conquest/occupation UI. Regular TeamSlSt uses type 0 and per-boss locks.
 func (group *teamBattleCatalogGroup) applyNormalProgress(progress stageQuestPublicationProgress, tutorial bool) {
 	firstUncleared := len(group.bosses)
+	cleared := 0
 	for index, stage := range progress.StageQuest.Stages {
 		if stage.IsClearDone == 0 && firstUncleared == len(group.bosses) {
 			firstUncleared = index
@@ -160,6 +169,7 @@ func (group *teamBattleCatalogGroup) applyNormalProgress(progress stageQuestPubl
 		state, lock := json.Number("0"), json.Number("0")
 		if stage.IsClearDone != 0 {
 			state = json.Number("2")
+			cleared++
 		}
 		if index > firstUncleared {
 			lock = json.Number("1")
@@ -167,6 +177,8 @@ func (group *teamBattleCatalogGroup) applyNormalProgress(progress stageQuestPubl
 		group.bosses[index].fields["10"] = state
 		group.bosses[index].fields["26"] = lock
 	}
+	group.fields["main_quest_achievement_max"] = len(progress.StageQuest.Stages)
+	group.fields["main_quest_achievement_num"] = cleared
 	// The first onboarding guide targets row zero and cannot scroll.
 	if tutorial {
 		group.bosses = group.bosses[:1]

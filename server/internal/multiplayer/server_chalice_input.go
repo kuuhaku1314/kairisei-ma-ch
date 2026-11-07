@@ -7,17 +7,17 @@ import "errors"
 // Engine results are computed ahead of that direction. Keep the published
 // reservation window separate from the engine's future HP/end/cleanup state.
 type roomChaliceInput struct {
-	phase    battlePhase
+	phase    Phase
 	playable [maxRoomMembers][deckSphereSlots]bool
 	reserved [maxRoomMembers]int
 }
 
 func (current *room) openUserChaliceInput(results []BattleResult) {
-	current.chaliceInput = roomChaliceInput{phase: battlePhaseUserAttack}
+	current.chaliceInput = roomChaliceInput{phase: PhaseUserAttack}
 	// The client extracts 319 at the START of ApiUserAttack, even if that
 	// result stream ends in victory. Use those exact published slots.
 	for _, result := range results {
-		if result.Command == resultChaliceSpherePlayable && len(result.Args) == 2 {
+		if result.Command == CommandChaliceSpherePlayable && len(result.Args) == 2 {
 			member, slot := int(result.Args[0]), int(result.Args[1])
 			if member >= 1 && member <= maxRoomMembers && slot >= 1 && slot <= deckSphereSlots {
 				current.chaliceInput.playable[member-1][slot-1] = true
@@ -27,24 +27,19 @@ func (current *room) openUserChaliceInput(results []BattleResult) {
 }
 
 func (current *room) openEnemyChaliceInput() {
-	current.chaliceInput = roomChaliceInput{phase: battlePhaseEnemy}
+	current.chaliceInput = roomChaliceInput{phase: PhaseEnemy}
 	// Capture BEFORE EnemyPhase changes HP, usage or battle outcome.
-	for playerIndex, player := range current.engine.players {
-		for slot, sphere := range player.Spheres {
-			current.chaliceInput.playable[playerIndex][slot] = sphere.SphereID != 0 &&
-				sphere.Type == sphereTypeChalice && sphere.Count > 0 && sphere.ChalicePlayable
-		}
-	}
+	current.chaliceInput.playable = current.engine.ChaliceSlots()
 }
 
 func (current *room) reserveChaliceInput(memberType, slot int) BattleResult {
 	input := &current.chaliceInput
-	open := input.phase == battlePhaseUserAttack && !current.userAttackFinished[memberType] ||
-		input.phase == battlePhaseEnemy && !current.enemyPhaseFinished[memberType]
+	open := input.phase == PhaseUserAttack && !current.userAttackFinished[memberType] ||
+		input.phase == PhaseEnemy && !current.enemyPhaseFinished[memberType]
 	if open && (slot == 0 || input.playable[memberType-1][slot-1]) {
 		input.reserved[memberType-1] = slot
 	}
-	return BattleResult{Command: resultChaliceSphereReserve, Args: []int64{int64(memberType), int64(input.reserved[memberType-1])}}
+	return BattleResult{Command: CommandChaliceSphereReserve, Args: []int64{int64(memberType), int64(input.reserved[memberType-1])}}
 }
 
 func (current *room) commitChaliceInput() error {
@@ -55,7 +50,7 @@ func (current *room) commitChaliceInput() error {
 			continue
 		}
 		_, err := current.engine.ReserveChaliceSphere(index+1, slot)
-		if err != nil && !errors.Is(err, errChaliceSphereUnavailable) {
+		if err != nil && !errors.Is(err, ErrChaliceSphereUnavailable) {
 			return err
 		}
 	}
@@ -68,7 +63,7 @@ func (current *room) chaliceResumeResults(results []BattleResult) []BattleResult
 	// the room's separately broadcast intentions after that snapshot, too.
 	if current.chaliceInput.phase != 0 {
 		for index, slot := range current.chaliceInput.reserved {
-			results = append(results, BattleResult{Command: resultChaliceSphereReserve, Args: []int64{int64(index + 1), int64(slot)}})
+			results = append(results, BattleResult{Command: CommandChaliceSphereReserve, Args: []int64{int64(index + 1), int64(slot)}})
 		}
 	}
 	return results

@@ -29,7 +29,7 @@ func TestRoomUnlockPublishesRoomAndAdmitsWithoutPassword(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := owner.handleCreate(joinCSV(strconv.Itoa(spec.Owner.UserID), "1", "1", "1234", "1", "0", "0", "0", "0", credential.AuthToken, credential.Signature, "android")); err != nil {
+	if err := owner.handleCreate(joinCSV(strconv.Itoa(spec.Owner.UserID), "1", "1", "1234", "1", "1", "0", "0", "0", credential.AuthToken, credential.Signature, "android")); err != nil {
 		t.Fatal(err)
 	}
 	enter := func(c *clientConn, member Member, password string) {

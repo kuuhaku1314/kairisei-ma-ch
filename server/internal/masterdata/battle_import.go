@@ -8,6 +8,7 @@ import (
 type battleImportedEntry struct {
 	BossID         int    `json:"boss_id"`
 	EnemyPartyID   int    `json:"enemy_party_id"`
+	GroupID        int    `json:"group_id"`
 	Region         string `json:"region"`
 	Name           string `json:"name"`
 	Difficulty     string `json:"difficulty"`
@@ -16,8 +17,7 @@ type battleImportedEntry struct {
 }
 
 // A source party's numbered variant is not the native BEGINNER difficulty.
-// Only explicitly imported, complete parties may use the local challenge label.
-// Existing masters omit this optional metadata and retain the same validation.
+// Only explicitly imported, complete parties may use a numbered Lv label.
 func battleImportedEntries(master BattleRuntimeMaster) (map[int]battleImportedEntry, error) {
 	var profile struct {
 		Import struct {
@@ -33,10 +33,10 @@ func battleImportedEntries(master BattleRuntimeMaster) (map[int]battleImportedEn
 	}
 	entries := make(map[int]battleImportedEntry, len(profile.Import.Entries))
 	for _, entry := range profile.Import.Entries {
-		prefix := entry.BossID / 10000000
-		if (prefix != 3 && prefix != 4 && prefix != 7) || entry.BossID/1000000 == 37 ||
+		if entry.BossID <= 0 || entry.EnemyPartyID <= 0 ||
+			entry.GroupID <= battleGeneratedGroupIDMin || entry.GroupID >= battleGeneratedGroupIDMax ||
 			entry.Region != "JP" || entry.Name == "" || entry.Difficulty == "" ||
-			entry.EnemyPartyID != entry.BossID || parties[entry.BossID] != entry.EnemyPartyID ||
+			parties[entry.BossID] != entry.EnemyPartyID ||
 			(entry.RenderMode != "2d" && entry.RenderMode != "3d") {
 			return nil, fmt.Errorf("invalid imported BOSS identity %d", entry.BossID)
 		}
@@ -44,11 +44,11 @@ func battleImportedEntries(master BattleRuntimeMaster) (map[int]battleImportedEn
 			return nil, fmt.Errorf("duplicate imported BOSS identity %d", entry.BossID)
 		}
 		switch entry.DifficultyKind {
-		case "SOURCE_FAMILY_SEQUENCE":
-		case "LOCAL_CHALLENGE":
+		case "SOURCE_FAMILY_SEQUENCE", "LOCAL_VARIANT", "SCORE":
+		case "LEVEL":
 			suffix := entry.BossID % 100
-			if suffix < 11 || suffix%10 != 1 || entry.Difficulty != fmt.Sprintf("挑战 %d", suffix/10) {
-				return nil, fmt.Errorf("invalid imported BOSS challenge label %d", entry.BossID)
+			if suffix < 11 || suffix%10 != 1 || entry.Difficulty != fmt.Sprintf("Lv%d", suffix/10) {
+				return nil, fmt.Errorf("invalid imported BOSS level label %d", entry.BossID)
 			}
 		default:
 			return nil, fmt.Errorf("unsupported imported BOSS difficulty kind %d", entry.BossID)

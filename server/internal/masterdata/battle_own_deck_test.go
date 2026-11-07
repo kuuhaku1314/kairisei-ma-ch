@@ -34,12 +34,19 @@ func TestConfigurableOwnDeckReusesEncounterAndRetainsDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var group map[string]any
+	var group struct {
+		Bosses []game.TeamBattleEntryRules `json:"10"`
+	}
 	if err := json.Unmarshal(view.Groups[0], &group); err != nil {
 		t.Fatal(err)
 	}
-	rule, ok := game.TeamBattleGroupEntryRules(group, own)
-	if !ok || rule.OnlyMyDeck != 1 || !rule.AllowsSolo() || rule.AllowsMultiplayer() || rule.BPUse != 7 || rule.Continue != 1 {
+	var rule game.TeamBattleEntryRules
+	for _, entry := range group.Bosses {
+		if entry.BossID == own {
+			rule = entry
+		}
+	}
+	if rule.BossID != own || rule.OnlyMyDeck != 1 || !rule.AllowsSolo() || rule.AllowsMultiplayer() || rule.BPUse != 7 || rule.Continue != 1 {
 		t.Fatal("own-deck entry did not use the native solo rule")
 	}
 	replay := view.Replays[len(view.Replays)-1]

@@ -6,13 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
+
+	"kairisei.local/server/internal/gamestate"
 )
 
 var teamBattleCategoryKeys = [...]string{"9", "10", "11", "12"}
 
-// TeamBattleCatalog is owned by one request. Decode the wire document once, retain
-// fields outside the publication contract, then apply expiry, progression and
-// publication rules to this view. It never aliases the account's saved JSON.
+// TeamBattleCatalog is a request-owned protocol view of shared definitions and
+// private progress. Its maps never alias another request or the published base.
 type TeamBattleCatalog struct {
 	fields map[string]any
 	groups map[string][]teamBattleCatalogGroup
@@ -136,20 +138,133 @@ func (catalog *TeamBattleCatalog) Groups(key string) []any {
 	return groups
 }
 
+// MainQuestGroups presents the already projected normal progress in the modern
+// directory order. The UI's stage type and zero area slot do not change the
+// underlying entry rules or settlement context.
+func (catalog *TeamBattleCatalog) MainQuestGroups() []any {
+	groups := make([]any, 0, len(catalog.groups["9"]))
+	for index := len(catalog.groups["9"]) - 1; index >= 0; index-- {
+		group := catalog.groups["9"][index]
+		if group.areaID < cnNormalQuestAreaMin || group.areaID > cnNormalQuestAreaMax {
+			continue
+		}
+		bosses := make([]any, 0, len(group.bosses))
+		for index := len(group.bosses) - 1; index >= 0; index-- {
+			boss := group.bosses[index]
+			locked, _ := teamBattleCatalogInteger(boss.fields["26"])
+			if locked == 0 {
+				bosses = append(bosses, boss.fields)
+			}
+		}
+		fields := maps.Clone(group.fields)
+		fields["1"] = json.Number(fmt.Sprint(gamestate.BattleStageMainQuest))
+		fields["9"] = json.Number("0")
+		fields["10"] = bosses
+		groups = append(groups, fields)
+	}
+	return groups
+}
+
 func (catalog *TeamBattleCatalog) HasBoss(bossID int) bool {
-	if bossID <= 0 {
-		return false
+	_, _, found := catalog.findBoss(bossID)
+	return found
+}
+
+func (catalog *TeamBattleCatalog) findBoss(bossID int) (teamBattleCatalogGroup, teamBattleCatalogBoss, bool) {
+	if catalog == nil || bossID <= 0 {
+		return teamBattleCatalogGroup{}, teamBattleCatalogBoss{}, false
 	}
 	for _, key := range teamBattleCategoryKeys {
 		for _, group := range catalog.groups[key] {
 			for _, boss := range group.bosses {
 				if boss.id == bossID {
-					return true
+					return group, boss, true
 				}
 			}
 		}
 	}
-	return false
+	return teamBattleCatalogGroup{}, teamBattleCatalogBoss{}, false
+}
+
+// GroupForBoss reuses the request-owned DTO and its unmodeled protocol fields.
+func (catalog *TeamBattleCatalog) GroupForBoss(bossID int) (int, any, bool) {
+	group, _, found := catalog.findBoss(bossID)
+	if !found {
+		return 0, nil, false
+	}
+	return group.id, group.wire(), true
+}
+
+func (catalog *TeamBattleCatalog) EntryRules(bossID int) (TeamBattleEntryRules, bool) {
+	group, boss, found := catalog.findBoss(bossID)
+	if !found {
+		return TeamBattleEntryRules{}, false
+	}
+	return entryRulesForCatalogBoss(group, boss)
+}
+
+func entryRulesForCatalogBoss(group teamBattleCatalogGroup, boss teamBattleCatalogBoss) (TeamBattleEntryRules, bool) {
+	rules := TeamBattleEntryRules{BossID: boss.id}
+	fields := []struct {
+		key string
+		out *int
+	}{{"1", &rules.OnlyMyDeck}, {"5", &rules.BPUse}, {"6", &rules.BPUseHalf}, {"7", &rules.Continue}, {"24", &rules.StartRule}}
+	for _, field := range fields {
+		value, err := teamBattleCatalogInteger(boss.fields[field.key])
+		if err != nil {
+			return TeamBattleEntryRules{}, false
+		}
+		*field.out = int(value)
+	}
+	if value := boss.fields["18"]; value != nil {
+		awake, ok := value.(map[string]any)
+		if !ok {
+			return TeamBattleEntryRules{}, false
+		}
+		flags := []struct {
+			key string
+			out *bool
+		}{
+			{"0", &rules.AwakeTakeover.KeepTurn},
+			{"1", &rules.AwakeTakeover.KeepCost},
+			{"2", &rules.AwakeTakeover.KeepBuff},
+			{"3", &rules.AwakeTakeover.KeepSphereCount},
+			{"4", &rules.AwakeTakeover.KeepDeckTrash},
+			{"5", &rules.AwakeTakeover.KeepDeal},
+		}
+		for _, flag := range flags {
+			value, err := teamBattleCatalogInteger(awake[flag.key])
+			if err != nil {
+				return TeamBattleEntryRules{}, false
+			}
+			*flag.out = value != 0
+		}
+	}
+	// Project only the needed fields; do not reparse the whole boss.
+	if entries := boss.fields["entry_limit"]; entries != nil {
+		raw, err := json.Marshal(entries)
+		if err != nil || json.Unmarshal(raw, &rules.EntryLimit) != nil {
+			return TeamBattleEntryRules{}, false
+		}
+	}
+	stage, err := teamBattleCatalogInteger(group.fields["1"])
+	if err != nil {
+		return TeamBattleEntryRules{}, false
+	}
+	rules.StageType = gamestate.BattleStageType(stage)
+	return rules, true
+}
+
+func (catalog *TeamBattleCatalog) BossAccessible(bossID int, nowUnix int64) bool {
+	_, boss, found := catalog.findBoss(bossID)
+	if !found || nowUnix <= 0 {
+		return false
+	}
+	state, hasState := boss.fields["10"]
+	expiration, hasExpiration := boss.fields["16"]
+	value, stateErr := teamBattleCatalogInteger(state)
+	until, expirationErr := teamBattleCatalogInteger(expiration)
+	return hasState && hasExpiration && stateErr == nil && expirationErr == nil && value >= 0 && value <= 2 && (until == 0 || until > nowUnix)
 }
 
 func (catalog *TeamBattleCatalog) MarshalJSON() ([]byte, error) {
@@ -157,33 +272,6 @@ func (catalog *TeamBattleCatalog) MarshalJSON() ([]byte, error) {
 		catalog.fields[key] = catalog.Groups(key)
 	}
 	return json.Marshal(catalog.fields)
-}
-
-func (catalog *TeamBattleCatalog) expireUserBuffs(nowUnix int64) (bool, error) {
-	// Validate before changing anything, so malformed expiry data cannot cause
-	// a partial update of the saved account state.
-	var expired []map[string]any
-	for _, key := range teamBattleCategoryKeys {
-		for _, group := range catalog.groups[key] {
-			for _, boss := range group.bosses {
-				value, exists := boss.fields["16"]
-				if !exists {
-					return false, errors.New("team battle boss has no buff expiry")
-				}
-				expiration, err := teamBattleCatalogInteger(value)
-				if err != nil {
-					return false, err
-				}
-				if expiration > 0 && expiration <= nowUnix {
-					expired = append(expired, boss.fields)
-				}
-			}
-		}
-	}
-	for _, boss := range expired {
-		boss["10"], boss["16"] = json.Number("0"), json.Number("0")
-	}
-	return len(expired) > 0, nil
 }
 
 func (catalog *TeamBattleCatalog) filterDisabled(disabled map[int]bool) {

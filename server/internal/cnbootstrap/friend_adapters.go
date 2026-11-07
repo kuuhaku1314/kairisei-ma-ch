@@ -56,8 +56,7 @@ func cnBootstrapFollowShow(businessHandler http.Handler) http.HandlerFunc {
 						return nil, err
 					}
 					return map[string]any{
-						"follow_max": rawOrZero(method["follow_max"]),
-						"friends":    friends,
+						"friends": friends,
 					}, nil
 				})
 			},

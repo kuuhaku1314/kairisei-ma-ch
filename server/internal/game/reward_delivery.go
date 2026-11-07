@@ -45,16 +45,13 @@ func (s *Account) applyRewardOrPresentLocked(reward gamestate.Reward, result *Pr
 }
 
 func (s *Account) appendRewardPresentLocked(reward gamestate.Reward, title, comment string) gamestate.Reward {
-	// Account request serialization and the store lock keep allocation and the
-	// completion receipt in the same saved state. Include unclaimed mission IDs.
-	used := make(map[int64]bool, len(s.presents)+len(s.presentHistories)+len(s.missions))
+	// Account request serialization and the store lock keep allocated mail and
+	// the triggering business change in the same saved state.
+	used := make(map[int64]bool, len(s.presents)+len(s.presentHistories))
 	for _, group := range [][]gamestate.Present{s.presents, s.presentHistories} {
 		for _, present := range group {
 			used[present.PresentID] = true
 		}
-	}
-	for _, mission := range s.missions {
-		used[mission.RewardPresent.PresentID] = true
 	}
 	presentID := time.Now().UnixNano()
 	for used[presentID] {

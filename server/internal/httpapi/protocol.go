@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 
+	"kairisei.local/server/internal/clientbridge"
 	"kairisei.local/server/internal/game"
 	"kairisei.local/server/internal/gamestate"
 )
@@ -20,6 +21,7 @@ type pvpReset struct {
 
 type notification struct {
 	IsStoryMain         int8            `json:"is_story_main"`
+	IsStoryMainCN       int8            `json:"is_story_main_cn"`
 	IsStorySub          int8            `json:"is_story_sub"`
 	IsStoryEvent        int8            `json:"is_story_event"`
 	IsBossSolo          int8            `json:"is_boss_solo"`
@@ -34,6 +36,8 @@ type notification struct {
 	IsInviteCodeInput   int8            `json:"is_invitecode_input"`
 	MissionNewReceive   int8            `json:"mission_new_receive"`
 	MissionClearReceive int8            `json:"mission_clear_receive"`
+	MissionTotal        int             `json:"mission_total"`
+	MissionComplete     int             `json:"mission_complete"`
 	IsAvatarShopNew     int8            `json:"is_avatar_shop_new"`
 	IsGachaNew          int8            `json:"is_gacha_new"`
 	RaceGroupID         int             `json:"race_groupid"`
@@ -46,14 +50,14 @@ type notification struct {
 }
 
 type commonResponse struct {
-	ResultCode           int            `json:"res_code"`
-	ResultString         string         `json:"res_str"`
-	Notifications        []notification `json:"notification"`
-	Missions             []any          `json:"missions"`
-	Revision             int            `json:"revision"`
-	IsAppUpdate          int8           `json:"is_appupdate"`
-	ResultErrorAction    int            `json:"res_err_action"`
-	ResultDeleteSaveData int            `json:"res_is_del_savedata"`
+	ResultCode           int                     `json:"res_code"`
+	ResultString         string                  `json:"res_str"`
+	Notifications        []notification          `json:"notification"`
+	Missions             []gamestate.MissionInfo `json:"missions"`
+	Revision             int                     `json:"revision"`
+	IsAppUpdate          int8                    `json:"is_appupdate"`
+	ResultErrorAction    int                     `json:"res_err_action"`
+	ResultDeleteSaveData int                     `json:"res_is_del_savedata"`
 }
 
 type popupResponse struct {
@@ -75,7 +79,7 @@ func newCommonResponse(featureIDs []uint) commonResponse {
 			QuestProgress:     []questProgress{},
 			PVPReset:          pvpReset{},
 		}},
-		Missions: []any{},
+		Missions: []gamestate.MissionInfo{},
 	}
 }
 
@@ -124,28 +128,54 @@ func wirePopupProfiles(profiles []gamestate.PopupProfile) []any {
 }
 
 type wireCardInfo struct {
-	UniqueID       int64   `json:"0"`
-	CardID         int     `json:"1"`
-	Level          int     `json:"2"`
-	LevelMax       int     `json:"3"`
-	Experience     int     `json:"4"`
-	Love           int     `json:"5"`
-	SkillLevels    []int16 `json:"6"`
-	HP             int     `json:"7"`
-	Attack         int     `json:"8"`
-	Magic          int     `json:"9"`
-	Mind           int     `json:"10"`
-	AlchemistParam []any   `json:"11"`
-	SummonsParam   []any   `json:"12"`
-	NextLevelEXP   int     `json:"13"`
-	NowLevelEXP    int     `json:"14"`
-	AddEXP         int     `json:"15"`
-	BaseAddPrice   int     `json:"16"`
-	IsLock         int8    `json:"17"`
-	CreateTime     int     `json:"18"`
-	Fame           int     `json:"19"`
-	Slot           int     `json:"20"`
-	Passive        []any   `json:"21"`
+	UniqueID       int64                                `json:"0"`
+	CardID         int                                  `json:"1"`
+	Level          int                                  `json:"2"`
+	LevelMax       int                                  `json:"3"`
+	Experience     int                                  `json:"4"`
+	Love           int                                  `json:"5"`
+	SkillLevels    []int16                              `json:"6"`
+	HP             int                                  `json:"7"`
+	Attack         int                                  `json:"8"`
+	Magic          int                                  `json:"9"`
+	Mind           int                                  `json:"10"`
+	AlchemistParam []clientbridge.CardParameterResult   `json:"11"`
+	SummonsParam   []clientbridge.SummonParameterResult `json:"12"`
+	NextLevelEXP   int                                  `json:"13"`
+	NowLevelEXP    int                                  `json:"14"`
+	AddEXP         int                                  `json:"15"`
+	BaseAddPrice   int                                  `json:"16"`
+	IsLock         int8                                 `json:"17"`
+	CreateTime     int                                  `json:"18"`
+	Fame           int                                  `json:"19"`
+	Slot           int                                  `json:"20"`
+	Passive        []any                                `json:"21"`
+	parameters     *clientbridge.CardParameterCatalog
+}
+
+// Only the response view acquires modern derived parameters. The account's
+// mutable card record and its persisted ordinary attributes remain untouched.
+func (card wireCardInfo) WithParameters() (wireCardInfo, error) {
+	families, err := card.parameters.Resolve(card.CardID, card.Level, card.Love, card.Fame)
+	if err != nil {
+		return card, err
+	}
+	if families.Alchemist != nil {
+		card.AlchemistParam = families.Alchemist
+	}
+	if families.Summons != nil {
+		card.SummonsParam = families.Summons
+	}
+	return card, nil
+}
+
+func (card wireCardInfo) MarshalJSON() ([]byte, error) {
+	resolved, err := card.WithParameters()
+	if err != nil {
+		return nil, err
+	}
+	type fields wireCardInfo
+	return json.Marshal(fields(resolved))
 }
 
 type wireDeckInfo struct {
@@ -185,6 +215,10 @@ type wireBuddyInfo struct {
 	IsLock       int8  `json:"8"`
 	CreateTime   int   `json:"9"`
 }
+
+// CardShowView is the typed response boundary used by client protocol adapters.
+type CardShowView = wireCardShow
+type CardView = wireCardInfo
 
 type wireCardShow struct {
 	Cards             []wireCardInfo      `json:"0"`
@@ -308,9 +342,10 @@ func toWireBuddies(buddies []gamestate.Buddy) []wireBuddyInfo {
 	return result
 }
 
-func toWireCard(card game.CardInfo) wireCardInfo {
+func (a *API) toWireCard(card game.CardInfo) wireCardInfo {
 	return wireCardInfo{
 		UniqueID:       card.UniqueID,
+		CreateTime:     card.CreateTime,
 		CardID:         card.CardID,
 		Level:          card.Level,
 		LevelMax:       card.LevelMax,
@@ -321,8 +356,8 @@ func toWireCard(card game.CardInfo) wireCardInfo {
 		Attack:         card.Attack,
 		Magic:          card.Magic,
 		Mind:           card.Mind,
-		AlchemistParam: []any{},
-		SummonsParam:   []any{},
+		AlchemistParam: []clientbridge.CardParameterResult{},
+		SummonsParam:   []clientbridge.SummonParameterResult{},
 		NextLevelEXP:   card.NextLevelEXP,
 		NowLevelEXP:    card.NowLevelEXP,
 		AddEXP:         card.AddExperience,
@@ -331,6 +366,7 @@ func toWireCard(card game.CardInfo) wireCardInfo {
 		Fame:           card.Fame,
 		Slot:           card.Slot,
 		Passive:        []any{},
+		parameters:     a.cardParameters,
 	}
 }
 
@@ -373,10 +409,10 @@ func toWireStackCards(cards []gamestate.CardStack) []wireCardStackInfo {
 	return result
 }
 
-func toWireCards(cards []game.CardInfo) []wireCardInfo {
+func (a *API) toWireCards(cards []game.CardInfo) []wireCardInfo {
 	result := make([]wireCardInfo, len(cards))
 	for index, card := range cards {
-		result[index] = toWireCard(card)
+		result[index] = a.toWireCard(card)
 	}
 	return result
 }

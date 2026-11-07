@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,8 +10,45 @@ import (
 	"kairisei.local/server/internal/gamestate"
 )
 
+func TestAdminStampCatalogFiltersBeforePagination(t *testing.T) {
+	admin := &API{catalog: []AdminCatalogEntry{
+		{Kind: "stamp", StampKind: "dialog", RewardType: 16, RewardTypeID: 1, Name: "Hello"},
+		{Kind: "stamp", StampKind: "image", RewardType: 16, RewardTypeID: 2, Name: "Hello"},
+		{Kind: "stamp", StampKind: "voice", RewardType: 16, RewardTypeID: 3, Name: "Hello"},
+		{Kind: "stamp", StampKind: "voice", RewardType: 16, RewardTypeID: 4, Name: "Goodbye"},
+	}}
+	for _, test := range []struct {
+		query string
+		total int
+		id    int
+	}{
+		{"kind=stamp&stamp_kind=dialog", 1, 1},
+		{"kind=stamp&stamp_kind=image", 1, 2},
+		{"kind=stamp&stamp_kind=voice&q=hello", 1, 3},
+		{"kind=stamp&stamp_kind=voice&offset=1&limit=1", 2, 4},
+		{"kind=stamp", 4, 1},
+	} {
+		response := httptest.NewRecorder()
+		admin.catalogEntries(response, httptest.NewRequest(http.MethodGet, "/api/catalog?"+test.query, nil))
+		var page struct {
+			Total   int                 `json:"total"`
+			Entries []AdminCatalogEntry `json:"entries"`
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &page); err != nil || response.Code != 200 || page.Total != test.total || len(page.Entries) == 0 || page.Entries[0].RewardTypeID != test.id {
+			t.Fatalf("%s: status=%d body=%s err=%v", test.query, response.Code, response.Body.String(), err)
+		}
+	}
+	for _, query := range []string{"kind=item&stamp_kind=voice", "kind=stamp&stamp_kind=unknown"} {
+		response := httptest.NewRecorder()
+		admin.catalogEntries(response, httptest.NewRequest(http.MethodGet, "/api/catalog?"+query, nil))
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("invalid stamp filter accepted: %s", query)
+		}
+	}
+}
+
 func TestAdminJSONRejectsBodyBeyondLimit(t *testing.T) {
-	const limit = 64 * 1024
+	const limit = 1024 * 1024
 	prefix := `{}` + strings.Repeat(" ", limit-2)
 	for _, body := range []string{prefix + " ", prefix + `{}`} {
 		request := httptest.NewRequest(http.MethodPost, "http://localhost/api/accounts", strings.NewReader(body))

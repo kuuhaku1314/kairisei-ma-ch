@@ -3,7 +3,6 @@ package multiplayer
 import (
 	"errors"
 	"fmt"
-	"maps"
 )
 
 // roomBarrierReady checks the current live connection set rather than map
@@ -13,7 +12,10 @@ func roomBarrierReady[T any](connections map[int]*clientConn, acknowledgements m
 	if len(connections) == 0 {
 		return false
 	}
-	for memberType := range connections {
+	for memberType, connection := range connections {
+		if connection.waitingForRecoveryApplication() {
+			return false
+		}
 		if _, acknowledged := acknowledgements[memberType]; !acknowledged {
 			return false
 		}
@@ -213,68 +215,48 @@ func (e *roomCardPlayError) Error() string {
 
 func (e *roomCardPlayError) Unwrap() error { return e.err }
 
-func roomCardPlayPreview(engine *BattleEngine) BattleEngine {
-	preview := *engine
-	preview.selectedPlays = maps.Clone(engine.selectedPlays)
-	if preview.selectedPlays == nil {
-		preview.selectedPlays = make(map[int]cardPlaySubmission)
-	}
-	return preview
-}
-
-func submitRoomCardPlay(preview *BattleEngine, memberType int, submission cardPlaySubmission) ([]BattleResult, error) {
-	results, err := preview.Submit(memberType, submission)
-	if err != nil {
-		return nil, err
-	}
-	if submission.SphereSlot != 0 {
-		// Managed HandsData.getUseCost/isCostOver counts both kinds of
-		// selected hand slot. Native Submit retains its own accounting;
-		// enforce the client's input budget before committing the room.
-		sphere := preview.players[memberType-1].Spheres[submission.SphereSlot-1]
-		skill, _, err := preview.catalog.SphereSkill(sphere.SphereID)
-		if err != nil {
-			return nil, err
-		}
-		if skill.Cost > preview.players[memberType-1].Cost {
-			return nil, fmt.Errorf("member %d card and sphere cost exceeds remaining cost", memberType)
-		}
-	}
-	return results, nil
+func submitRoomCardPlay(preview *CardSelectionBatch, memberType int, submission cardPlaySubmission) ([]BattleResult, error) {
+	return preview.SubmitClientSelection(memberType, submission)
 }
 
 func commitRoomCardPlays(current *room) ([]BattleResult, error) {
 	// Accepted human and CPU submissions are already committed and broadcast.
 	// Fill only remaining inputs before starting the shared UserAttack.
-	preview := roomCardPlayPreview(current.engine)
 	cardPlayResults := make([]BattleResult, 0, 24)
-	for memberType := 1; memberType <= maxRoomMembers; memberType++ {
-		if _, committed := preview.selectedPlays[memberType]; committed {
-			continue
-		}
-		submission, submitted := current.cardPlaySubmissions[memberType]
-		automaticInput := !submitted || (submission.TimedOut && selectedActionCount(submission) == 0)
-		if automaticInput {
-			automatic, err := preview.AutoSubmission(memberType)
+	var submissions map[int]cardPlaySubmission
+	err := current.engine.WithCardSelections(func(preview *CardSelectionBatch) error {
+		for memberType := 1; memberType <= maxRoomMembers; memberType++ {
+			if preview.HasSubmission(memberType) {
+				continue
+			}
+			submission, submitted := current.cardPlaySubmissions[memberType]
+			// Timeout-to-auto is resolved before storing a submission. Retain
+			// re-selection for an uncommitted empty automatic input (e.g. KO),
+			// while an accepted empty manual choice remains a pass.
+			automaticInput := !submitted || (submission.Automatic && submission.ActionCount() == 0)
+			if automaticInput {
+				automatic, err := npcCardSubmission(preview, memberType, current.enemyType)
+				if err != nil {
+					return fmt.Errorf("select automatic cards for member %d: %w", memberType, err)
+				}
+				submission = automatic
+			}
+			cardResults, err := submitRoomCardPlay(preview, memberType, submission)
 			if err != nil {
-				return nil, fmt.Errorf("select automatic cards for member %d: %w", memberType, err)
+				if !automaticInput {
+					return &roomCardPlayError{memberType: memberType, err: err}
+				}
+				return fmt.Errorf("evaluate cards for member %d: %w", memberType, err)
 			}
-			submission = automatic
+			cardPlayResults = append(cardPlayResults, cardResults...)
 		}
-		cardResults, err := submitRoomCardPlay(&preview, memberType, submission)
-		if err != nil {
-			if !automaticInput {
-				return nil, &roomCardPlayError{memberType: memberType, err: err}
-			}
-			return nil, fmt.Errorf("evaluate cards for member %d: %w", memberType, err)
-		}
-		cardPlayResults = append(cardPlayResults, cardResults...)
+		submissions = preview.Submissions()
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	current.engine.players = preview.players
-	current.engine.rng = preview.rng
-	current.engine.selectedPlays = preview.selectedPlays
-	current.engine.turnActions = preview.turnActions
-	current.cardPlaySubmissions = maps.Clone(preview.selectedPlays)
+	current.cardPlaySubmissions = submissions
 	return cardPlayResults, nil
 }
 

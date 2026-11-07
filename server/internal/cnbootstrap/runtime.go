@@ -12,8 +12,20 @@ import (
 	"kairisei.local/server/internal/masterdata"
 )
 
+type cnRuntimeStatePreparer func(gamestate.State, bool) (gamestate.State, error)
+
+func (prepare cnRuntimeStatePreparer) prepareCatalog(state gamestate.State) (gamestate.State, error) {
+	return prepare(state, true)
+}
+
+// Account loading has already attached the current Database.CatalogState and
+// overlaid private progress. Do not rebuild those immutable battle definitions.
+func (prepare cnRuntimeStatePreparer) prepareAccount(state gamestate.State) (gamestate.State, error) {
+	return prepare(state, false)
+}
+
 // loadCNRuntimeStatePreparer reads immutable master data once per server.
-func loadCNRuntimeStatePreparer(masters MastersConfig, pvpConfig game.PVPConfig, playerProgression gamestate.PlayerProgressionPolicy, loginBonusPolicy gamestate.LoginBonusPolicy, availableBundles map[string]struct{}) (func(gamestate.State) (gamestate.State, error), error) {
+func loadCNRuntimeStatePreparer(masters MastersConfig, pvpConfig game.PVPConfig, playerProgression gamestate.PlayerProgressionPolicy, loginBonusPolicy gamestate.LoginBonusPolicy, availableBundles map[string]struct{}) (cnRuntimeStatePreparer, error) {
 	cardMaster, err := masterdata.LoadCardRuntimeMaster(masters.Cards)
 	if err != nil {
 		return nil, err
@@ -62,12 +74,13 @@ func loadCNRuntimeStatePreparer(masters MastersConfig, pvpConfig game.PVPConfig,
 			return nil, err
 		}
 	}
-	return func(runtimeState gamestate.State) (gamestate.State, error) {
+	return func(runtimeState gamestate.State, buildBattleDefinitions bool) (gamestate.State, error) {
 		var err error
 		if runtimeState.User.Comment == "LOCAL OFFLINE PROFILE" {
 			runtimeState.User.Comment = "请多关照！"
 		}
 		runtimeState.User.InviteID = accountstore.InviteID(runtimeState.User.UserID)
+		runtimeState.User.CardMax = gamestate.CardCapacityLimit
 		runtimeState.User.CardContainerMax = max(runtimeState.User.CardContainerMax, gamestate.CardContainerCapacityDefault)
 		runtimeState.User.SphereMax = max(runtimeState.User.SphereMax, gamestate.SphereCapacityDefault)
 		runtimeState.User.BuddyMax = max(runtimeState.User.BuddyMax, gamestate.BuddyCapacityDefault)
@@ -92,9 +105,15 @@ func loadCNRuntimeStatePreparer(masters MastersConfig, pvpConfig game.PVPConfig,
 		}
 		masterdata.ApplyStoryRuntimeMaster(&runtimeState, storyMaster)
 		if masters.Battle != "" {
-			if err := masterdata.ApplyBattleRuntimeMaster(&runtimeState, battleMaster); err != nil {
-				return gamestate.State{}, err
+			if buildBattleDefinitions {
+				if err := masterdata.ApplyBattleRuntimeMaster(&runtimeState, battleMaster); err != nil {
+					return gamestate.State{}, err
+				}
+			} else {
+				masterdata.NormalizeBattleAccountProgress(&runtimeState)
 			}
+			// Normal-quest clears also update their battle entrance progress.
+			// Keep that account-specific reconciliation on both paths.
 			if err := masterdata.ApplyNormalQuestRuntimeMaster(&runtimeState, normalQuestMaster); err != nil {
 				return gamestate.State{}, err
 			}
@@ -127,6 +146,7 @@ func loadCNRuntimeStatePreparer(masters MastersConfig, pvpConfig game.PVPConfig,
 }
 
 func newCNBusinessHandler(config httpapi.Config, prepareRuntimeState func(gamestate.State) (gamestate.State, error)) (http.Handler, error) {
+	config.CardShowProjection = projectCNCardShow
 	runtimeState := config.InitialState
 	stateBefore, err := fingerprintCNAccountState(runtimeState)
 	if err != nil {

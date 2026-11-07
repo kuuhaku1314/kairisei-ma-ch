@@ -21,7 +21,11 @@ func TestSoloResultPartnersExposeCurrentFriendState(t *testing.T) {
 	}
 	wantStates := []int8{game.FriendStateOther, game.FriendStateFollow, game.FriendStateFriend}
 	for index, partnerValue := range partners {
-		partner := partnerValue.(map[string]any)
+		wrapper := battleResultPartnerWire(partnerValue.MemberType, partnerValue.IsOnline, partnerValue.Member)
+		if wrapper["member_type"] != index+2 || wrapper["is_online"] != 0 {
+			t.Fatalf("partner %d lost its battle position or NPC flag: %+v", index, wrapper)
+		}
+		partner := wrapper["member"].(map[string]any)
 		if got := partner["state"].(int8); got != wantStates[index] {
 			t.Fatalf("partner %d state = %d, want %d", index, got, wantStates[index])
 		}

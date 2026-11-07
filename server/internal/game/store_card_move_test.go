@@ -131,6 +131,7 @@ func cardMoveTestStore() *Account {
 		},
 		decks: []DeckInfo{{
 			ArthurType:           1,
+			IsActive:             1,
 			Index:                0,
 			LeaderCardIndex:      0,
 			CardUniqueIDs:        []int64{101, 102},

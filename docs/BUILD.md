@@ -32,23 +32,21 @@ go vet ./...
 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -buildvcs=false -trimpath '-ldflags=-s -w' -o ../_local/bin/kairi-server-linux-arm64 ./cmd/kairi-server
 ```
 
-源码内的合成协议与领域测试不需要游戏资源。需要原始 master / 完整运行资源的检查会明确跳过；有完整资源时可设置 `CN602_RUNTIME_SET` 为含 `resource-set.json` 的目录再运行测试。这不会启动常驻服务。通过交叉编译不代表目标设备的动态验收已经完成。
+源码内的合成协议与领域测试不需要游戏资源。需要原始 master / 完整运行资源的检查会明确跳过；有完整资源时，将 `CN602_RUNTIME_SET` 设为含 `resource-set.json` 的绝对目录，并用 `CN602_PLATFORM_CONTENT` 指定配套的 `delivery.json` 绝对路径。多个路径在 Windows 用分号分隔，在 Linux 用冒号分隔。这不会启动常驻服务。通过交叉编译不代表目标设备的动态验收已经完成。
 
 ## Windows 图形启动器
 
 ```powershell
 .\tools\powershell\Build-Launcher.ps1
-# 可选：使用另行取得的发布包内图标
-.\tools\powershell\Build-Launcher.ps1 -IconPath .\_local\deployment\kairisei-ma-cn602-server\resource-set\launcher.ico
 ```
 
 使用 Windows 自带 .NET Framework 4 的 C# 编译器，输出 `_local/bin/Kairisei-Launcher.exe`。不传图标也能独立构建；图标和游戏资源不存入源码仓库。
 
 ## 使用构建结果
 
-**RAR 解压出来的整个文件夹就是运行目录，里面的 `resource-set/` 就是游戏资源。源码目录只用于编译。**
+**完整服务端 7z 分卷解压出的目录是运行目录。保留其中的 `resource-set/` 和 `platform/`，在源码目录完成编译。**
 
-1. 选择与源码版本配套的完整服务端资源包，将所有 RAR 分卷放在一起，从 `part1.rar` 解压。
+1. 选择与源码版本配套的完整服务端资源包，将所有 7z 分卷放在一起，从 `.7z.001` 解压。
 2. 保留解压出来的整个 `kairisei-ma-cn602-server/` 文件夹，放在哪里都可以，例如 Windows 的 `D:\Games\kairisei-ma-cn602-server\`。
 3. 正常停止服务，将源码编译得到的 `_local/bin/` 中对应程序复制到这个文件夹，替换同名程序，再从这个文件夹启动。
 
@@ -68,28 +66,22 @@ kairisei-ma-cn602-server/       ← 运行目录，也是 -PackageRoot 指向的
 ├── resource-set/               ← 保留解压出来的整个资源目录
 │   ├── resource-set.json
 │   └── ...                    ← 其余资源及配置，保持原来的内部路径
+├── platform/                  ← PC／Android 资源清单与资源
 ├── cdn.json                    ← 可选 CDN 下载配置
 └── _local/data/                ← 首次启动后生成的数据库与存档
 ```
 
 例如，Windows 将 **源码目录的 `_local/bin/kairi-server.exe`** 复制到 **`D:\Games\kairisei-ma-cn602-server\kairi-server.exe`**，然后双击同目录的 `Kairisei-Launcher.exe` 即可。
 
-**`resource-set/` 与 `deployment.json`、服务端程序放在同一层。** 不需要把资源复制进源码的 `server/` 或 `_local/bin/`，也不需要单独拆开资源目录。发布版本升级时一起更新配套服务端、资源包和客户端，保留 `_local/data/` 中的数据库与自己的部署配置。
+**`resource-set/`、`platform/`、`deployment.json` 与服务端程序放在同一层。** 不需要把资源复制进源码的 `server/` 或 `_local/bin/`，也不需要单独拆开资源目录。发布版本升级时一起更新配套服务端、资源包和客户端，保留 `_local/data/` 中的数据库与自己的部署配置。
 
 Linux 同样替换自己系统对应的程序，再使用包内对应的 Linux 启动脚本；保留配套的 `Start-Server-linux.sh` 与 `server-arguments.sh`。
 
-### 可选：从源码目录调用 Windows 启停脚本
+### 启动已组装的服务端
 
-如果使用图形启动器，无需执行这一节。命令在**源码仓库根目录**运行，`-PackageRoot` 填上面整个运行目录，不能填它里面的 `resource-set/`：
+请在完整服务端目录使用配套启动器或脚本。Windows 使用 `Kairisei-Launcher.exe`，Linux x64 可运行 `sh Start-Server-linux-amd64.sh 服务器IPv4 26040`，ARM64 使用对应的 `Start-Server-linux-arm64.sh`。将地址和端口换成自己的配置。
 
-```powershell
-.\tools\powershell\Start-Server.ps1 -PackageRoot 'D:\Games\kairisei-ma-cn602-server' -AdvertiseHost 192.168.1.100 -ValidationOnly
-.\tools\powershell\Stop-Server.ps1 -PackageRoot 'D:\Games\kairisei-ma-cn602-server'
-```
-
-上例适用于当前测试包，`-ValidationOnly` 是测试包启动所需参数。省略 `-PackageRoot` 时，脚本默认查找源码仓库下的 `_local/deployment/kairisei-ma-cn602-server/`；这只是默认位置，不要求把已有服务端搬过去。
-
-源码仓库不附带 APK 和游戏资源，构建脚本只生成服务端程序；资源直接使用完整发布包解压得到的 `resource-set/`。
+在 `server/` 目录运行 `go run ./cmd/kairi-server -h` 可查看参数。服务模式使用 `-client-profile cn602-bootstrap`，平台资源清单可通过 `-platform-content-config` 从完整包的 `deployment.json` 读取。
 
 ## 配置与持久化
 

@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"slices"
 
+	"kairisei.local/server/internal/game"
 	"kairisei.local/server/internal/gamestate"
 )
 
@@ -104,47 +105,34 @@ type storySubSectionMapping struct {
 	Evidence          string `json:"evidence"`
 }
 
-type storySubCharacterContainerContract struct {
-	Evidence                     string                  `json:"evidence"`
-	Reason                       string                  `json:"reason"`
-	OfficialRowCount             int                     `json:"official_row_count"`
-	ObservedRowWidths            []int                   `json:"observed_row_widths"`
-	MeaningfulColumnIndexes      []int                   `json:"meaningful_column_indexes"`
-	NonemptyAdditionalValueCount int                     `json:"nonempty_additional_value_count"`
-	ManagedConsumedFields        []string                `json:"managed_consumed_fields"`
-	ManagedUnusedFields          []string                `json:"managed_unused_fields"`
-	PublishedContainerCount      int                     `json:"published_container_count"`
-	PublishedContainer           storyMasterSubCharacter `json:"published_container"`
-}
-
 type storyRuntimeMaster struct {
-	SchemaVersion                 int                                `json:"schema_version"`
-	ClientProfile                 string                             `json:"client_profile"`
-	Source                        json.RawMessage                    `json:"source"`
-	NormalParts                   []storyMasterPart                  `json:"normal_parts"`
-	CNParts                       []storyMasterPart                  `json:"cn_parts"`
-	SubCharacters                 []storyMasterSubCharacter          `json:"sub_characters"`
-	SubCharacterContainerContract storySubCharacterContainerContract `json:"sub_character_container_contract"`
-	SubSectionMappings            []storySubSectionMapping           `json:"sub_section_mappings"`
-	Events                        []storyMasterEvent                 `json:"events"`
-	EventMappings                 []storyEventMapping                `json:"event_mappings"`
-	RewardPolicy                  gamestate.StoryRewardPolicy        `json:"reward_policy"`
-	EventPageProfile              gamestate.EventPageProfile         `json:"event_page_profile"`
-	PopupProfile                  gamestate.PopupProfile             `json:"popup_profile"`
-	StoryBattles                  storyBattleCatalog                 `json:"story_battles"`
-	NormalStoryCount              int                                `json:"normal_story_count"`
-	CNStoryCount                  int                                `json:"cn_story_count"`
-	SubStoryCount                 int                                `json:"sub_story_count"`
-	EventStoryCount               int                                `json:"event_story_count"`
-	NormalMissingTalkIDs          []int                              `json:"normal_missing_talk_ids"`
-	CNMissingTalkIDs              []int                              `json:"cn_missing_talk_ids"`
-	NormalOrphanScriptIDs         []int                              `json:"normal_orphan_script_ids"`
-	CNOrphanScriptIDs             []int                              `json:"cn_orphan_script_ids"`
-	SubOrphanScriptIDs            []int                              `json:"sub_orphan_script_ids"`
-	SubMissingTalkIDs             []int                              `json:"sub_missing_talk_ids"`
-	SubMissingPictSectionIDs      []int                              `json:"sub_missing_pict_section_ids"`
-	ExcludedTestScriptIDs         []int                              `json:"excluded_test_script_ids"`
-	ScriptLabelFallbackIDs        []int                              `json:"script_label_fallback_ids"`
+	SchemaVersion            int                         `json:"schema_version"`
+	ClientProfile            string                      `json:"client_profile"`
+	Source                   json.RawMessage             `json:"source"`
+	NormalParts              []storyMasterPart           `json:"normal_parts"`
+	CNParts                  []storyMasterPart           `json:"cn_parts"`
+	SubCharacters            []storyMasterSubCharacter   `json:"sub_characters"`
+	SubSectionMappings       []storySubSectionMapping    `json:"sub_section_mappings"`
+	Events                   []storyMasterEvent          `json:"events"`
+	EventMappings            []storyEventMapping         `json:"event_mappings"`
+	RewardPolicy             gamestate.StoryRewardPolicy `json:"reward_policy"`
+	EventPageProfile         gamestate.EventPageProfile  `json:"event_page_profile"`
+	PopupProfile             gamestate.PopupProfile      `json:"popup_profile"`
+	StoryBattles             storyBattleCatalog          `json:"story_battles"`
+	NormalStoryCount         int                         `json:"normal_story_count"`
+	CNStoryCount             int                         `json:"cn_story_count"`
+	SubStoryCount            int                         `json:"sub_story_count"`
+	EventStoryCount          int                         `json:"event_story_count"`
+	NormalMissingTalkIDs     []int                       `json:"normal_missing_talk_ids"`
+	CNMissingTalkIDs         []int                       `json:"cn_missing_talk_ids"`
+	NormalOrphanScriptIDs    []int                       `json:"normal_orphan_script_ids"`
+	CNOrphanScriptIDs        []int                       `json:"cn_orphan_script_ids"`
+	SubOrphanScriptIDs       []int                       `json:"sub_orphan_script_ids"`
+	SubMissingTalkIDs        []int                       `json:"sub_missing_talk_ids"`
+	SubMissingPictSectionIDs []int                       `json:"sub_missing_pict_section_ids"`
+	UnmappedSubSectionIDs    []int                       `json:"unmapped_sub_section_ids"`
+	ExcludedTestScriptIDs    []int                       `json:"excluded_test_script_ids"`
+	ScriptLabelFallbackIDs   []int                       `json:"script_label_fallback_ids"`
 }
 
 func LoadStoryRuntimeMaster(masterPath string) (storyRuntimeMaster, error) {
@@ -200,7 +188,6 @@ func validateStoryRuntimeMaster(master storyRuntimeMaster) error {
 	subCount, err := validateStoryMasterSubCharacters(
 		master.SubCharacters,
 		master.SubSectionMappings,
-		master.SubCharacterContainerContract,
 	)
 	if err != nil {
 		return fmt.Errorf("validate sub story catalog: %w", err)
@@ -257,9 +244,23 @@ func validateStoryRuntimeMaster(master storyRuntimeMaster) error {
 		}
 		seenMissingPictSections[sectionID] = struct{}{}
 	}
-	if master.SubCharacterContainerContract.OfficialRowCount !=
-		len(master.SubSectionMappings)+len(master.SubMissingPictSectionIDs) {
-		return errors.New("sub story outer container source rows do not close published and missing-picture sections")
+	seenUnmappedSections := make(map[int]struct{}, len(master.UnmappedSubSectionIDs))
+	for _, sectionID := range master.UnmappedSubSectionIDs {
+		if sectionID <= 0 {
+			return errors.New("story unmapped section ID is invalid")
+		}
+		if _, duplicate := seenUnmappedSections[sectionID]; duplicate {
+			return fmt.Errorf("duplicate story unmapped section ID %d", sectionID)
+		}
+		if _, overlap := seenMissingPictSections[sectionID]; overlap {
+			return fmt.Errorf("story section %d is both unmapped and missing a picture", sectionID)
+		}
+		for _, mapping := range master.SubSectionMappings {
+			if mapping.StorySubSectionID == sectionID {
+				return fmt.Errorf("story section %d is both published and unmapped", sectionID)
+			}
+		}
+		seenUnmappedSections[sectionID] = struct{}{}
 	}
 	return nil
 }
@@ -320,11 +321,12 @@ func validateStoryMasterEvents(
 			len(mapping.PictCandidates) == 0 ||
 			mapping.TopologyEvidence != "CONFIRMED_STORY_ID_PREFIX" ||
 			(mapping.PictIDEvidence != "INFERRED_FIRST_SCRIPT_CARD_PICT" &&
-				mapping.PictIDEvidence != "INFERRED_SCRIPT_CHARACTER_SELECTION") {
+				mapping.PictIDEvidence != "INFERRED_SCRIPT_CHARACTER_SELECTION" &&
+				mapping.PictIDEvidence != "CONFIRMED_OFFLINE_DIRECTORY") {
 			return 0, fmt.Errorf("event story %d mapping is incomplete", event.StoryEventID)
 		}
 		if !slices.Contains(mapping.PictCandidates, event.PictID) {
-			return 0, fmt.Errorf("event story %d portrait is outside its script candidates", event.StoryEventID)
+			return 0, fmt.Errorf("event story %d portrait is outside its source candidates", event.StoryEventID)
 		}
 		if _, duplicate := eventIDs[event.StoryEventID]; duplicate {
 			return 0, fmt.Errorf("duplicate event story %d", event.StoryEventID)
@@ -504,29 +506,9 @@ func validateStoryMasterParts(parts []storyMasterPart, storyIDs map[int]struct{}
 func validateStoryMasterSubCharacters(
 	characters []storyMasterSubCharacter,
 	mappings []storySubSectionMapping,
-	contract storySubCharacterContainerContract,
 ) (int, error) {
 	if len(characters) == 0 || len(mappings) == 0 {
 		return 0, errors.New("sub story catalog is empty")
-	}
-	if contract.Evidence != "PLACEHOLDER" ||
-		contract.Reason != "NO_OFFICIAL_OUTER_GROUPING_FIELDS" ||
-		contract.OfficialRowCount <= 0 ||
-		!reflect.DeepEqual(contract.ObservedRowWidths, []int{3}) ||
-		!reflect.DeepEqual(contract.MeaningfulColumnIndexes, []int{0, 1}) ||
-		contract.NonemptyAdditionalValueCount != 0 ||
-		!reflect.DeepEqual(contract.ManagedConsumedFields, []string{"name", "pictid", "sections"}) ||
-		!reflect.DeepEqual(contract.ManagedUnusedFields, []string{"story_main_charaid"}) ||
-		contract.PublishedContainerCount != 1 ||
-		len(characters) != contract.PublishedContainerCount {
-		return 0, errors.New("sub story outer container contract is incomplete")
-	}
-	container := contract.PublishedContainer
-	if container.StoryMainCharacterID != 1 || container.Name != "角色剧情" ||
-		container.PictID != 0 || container.Sections != nil ||
-		characters[0].StoryMainCharacterID != container.StoryMainCharacterID ||
-		characters[0].Name != container.Name || characters[0].PictID != container.PictID {
-		return 0, errors.New("sub story outer container differs from its local placeholder contract")
 	}
 	mappingBySectionID := make(map[int]storySubSectionMapping, len(mappings))
 	for _, mapping := range mappings {
@@ -635,8 +617,9 @@ func materializeStoryParts(source []storyMasterPart, persisted []gamestate.Story
 }
 
 func NormalizeStoryProgress(parts []gamestate.StoryMainPart) {
-	firstUncleared := true
+	opened := map[int]bool{}
 	for partIndex := range parts {
+		chain := game.MainStoryProgressionChain(parts[partIndex].StoryMainPartID)
 		for sectionIndex := range parts[partIndex].Sections {
 			for storyIndex := range parts[partIndex].Sections[sectionIndex].Stories {
 				story := &parts[partIndex].Sections[sectionIndex].Stories[storyIndex]
@@ -646,10 +629,10 @@ func NormalizeStoryProgress(parts []gamestate.StoryMainPart) {
 					story.UnlockText = ""
 					continue
 				}
-				if firstUncleared {
+				if !opened[chain] {
 					story.StateFlag = static | 1
 					story.UnlockText = ""
-					firstUncleared = false
+					opened[chain] = true
 					continue
 				}
 				story.StateFlag = static | 4

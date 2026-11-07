@@ -21,10 +21,10 @@ import (
 
 func TestAdminAccountMutationAndAuditCommitTogether(t *testing.T) {
 	accounts := testfixture.NewFriendCapacityTestAccounts(t)
-	if _, err := accounts.ResolveLogin("00000000-0000-4000-8000-00000000a445"); err != nil {
+	if _, err := accounts.ResolveInternalLogin("00000000-0000-4000-8000-00000000a445"); err != nil {
 		t.Fatal(err)
 	}
-	other, err := accounts.ResolveLogin("00000000-0000-4000-8000-00000000a446")
+	other, err := accounts.ResolveInternalLogin("00000000-0000-4000-8000-00000000a446")
 	if err != nil {
 		t.Fatal(err)
 	}

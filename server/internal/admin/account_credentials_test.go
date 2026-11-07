@@ -17,7 +17,7 @@ import (
 func TestAccountBindingRecoveryAndAdminReset(t *testing.T) {
 	accounts := testfixture.NewFriendCapacityTestAccounts(t)
 	uuid := "d4640000-0000-4000-8000-000000000001"
-	identity, err := accounts.ResolveLogin(uuid)
+	identity, err := accounts.ResolveInternalLogin(uuid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +29,7 @@ func TestAccountBindingRecoveryAndAdminReset(t *testing.T) {
 	if err := accounts.PersistState(identity.UserID, state); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := accounts.BindAccount(uuid, " Arthur_1 ", "correct-password"); err != nil {
+	if _, err := accounts.BindInternalAccount(uuid, " Arthur_1 ", "correct-password"); err != nil {
 		t.Fatal(err)
 	}
 	if id, err := accounts.ResolveSession(identity.SessionKey); err != nil || id != identity.UserID {
@@ -52,11 +52,11 @@ func TestAccountBindingRecoveryAndAdminReset(t *testing.T) {
 	if _, err := reopened.LoginAccount("arthur_1", "wrong-password"); err == nil {
 		t.Fatal("accepted incorrect password")
 	}
-	if _, err := reopened.BindAccount(uuid, "someone_else", "correct-password"); err == nil {
+	if _, err := reopened.BindInternalAccount(uuid, "someone_else", "correct-password"); err == nil {
 		t.Fatal("rebound an existing account")
 	}
 	otherUUID := "d4640000-0000-4000-8000-000000000002"
-	if _, err := reopened.BindAccount(otherUUID, "arthur_1", "different-password"); err == nil {
+	if _, err := reopened.BindInternalAccount(otherUUID, "arthur_1", "different-password"); err == nil {
 		t.Fatal("stole a registered name")
 	}
 	if binding, err := reopened.AccountBinding(otherUUID); err != nil || binding.UserID != 0 {

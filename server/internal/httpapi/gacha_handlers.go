@@ -84,7 +84,7 @@ func (a *API) gachaPlay(writer http.ResponseWriter, request *http.Request) {
 		}
 	}
 	a.writeProtocol(writer, map[string]any{
-		"cards":              toWireCards(result.Reward.Cards),
+		"cards":              a.toWireCards(result.Reward.Cards),
 		"stack_cards":        toWireStackCards(result.Reward.StackCards),
 		"sphrs":              toWireSpheres(result.Reward.Spheres),
 		"new_items":          a.itemInfosWire(gachaItemDeltas(result.Reward)),
@@ -92,7 +92,7 @@ func (a *API) gachaPlay(writer http.ResponseWriter, request *http.Request) {
 		"user":               a.userPayload(),
 		"item":               a.itemInfosWire([]gamestate.Item{result.Item})[0],
 		"gacha_list":         a.gachaInfos(result.Gachas),
-		"gift_direct":        result.Gifts,
+		"gift_direct":        []gamestate.Reward{},
 		"gift_present":       result.PresentGifts,
 		"rewards":            rewards,
 		"reward_adds":        rewardAdds,
@@ -146,7 +146,7 @@ func (a *API) gachaItemPlay(writer http.ResponseWriter, request *http.Request) {
 		}
 	}
 	a.writeProtocol(writer, map[string]any{
-		"cards":             toWireCards(result.Reward.Cards),
+		"cards":             a.toWireCards(result.Reward.Cards),
 		"stack_cards":       toWireStackCards(result.Reward.StackCards),
 		"sphrs":             toWireSpheres(result.Reward.Spheres),
 		"new_items":         a.itemInfosWire(gachaItemDeltas(result.Reward)),
@@ -312,11 +312,7 @@ func (a *API) gachaOddsShow(writer http.ResponseWriter, request *http.Request) {
 		}
 		lineups = append(lineups, map[string]any{"lineup_name": stage.Name, "select_num": stage.DrawCount, "prize_list": prizes})
 	}
-	message := "当前概率按本地配置权重计算。"
-	if selected.UserSelectMax > 0 {
-		message += "自选后的实际概率按选中卡牌权重重新归一化。"
-	}
-	a.writeProtocol(writer, map[string]any{"odds_msg": message, "lineup_infos": lineups})
+	a.writeProtocol(writer, map[string]any{"odds_msg": selected.OddsMessage, "lineup_infos": lineups})
 }
 
 func gachaCategories(gachas []gamestate.GachaProfile) []any {
@@ -346,6 +342,9 @@ func (a *API) gachaInfos(gachas []gamestate.GachaProfile) []any {
 			bannerPath = "/local/gacha/" + gacha.BannerKey + ".png"
 		}
 		bannerURL := a.baseURL + bannerPath
+		if version := a.gachaBannerVersions[gacha.BannerKey]; version != "" {
+			bannerURL += "?v=" + version
+		}
 		if gacha.CoverPath != "" {
 			bannerURL = a.baseURL + "/local/" + gacha.CoverPath
 			if base := a.account.GachaCoverBaseURL(); base != "" {
@@ -362,6 +361,9 @@ func (a *API) gachaInfos(gachas []gamestate.GachaProfile) []any {
 			dailyFirst = 1
 		} else if gacha.DailyFirstFree {
 			playCountOneDay = 1
+		}
+		if gacha.DailyPlayMax > 0 {
+			playCountOneDay = min(gacha.DailyGroupPlays, gacha.DailyPlayMax)
 		}
 		stepCount, isStep, isLast := 0, 0, 0
 		playCount := gacha.PlayCount
@@ -400,7 +402,7 @@ func (a *API) gachaInfos(gachas []gamestate.GachaProfile) []any {
 			"play_count_priority_price": 0,
 			"play_count_1day":           playCountOneDay,
 			"play_count_max":            playCountMax,
-			"play_count_1day_max":       0,
+			"play_count_1day_max":       gacha.DailyPlayMax,
 			"user_select_max":           gacha.UserSelectMax,
 			"is_stepup_price":           isStep,
 			"is_daily_first":            dailyFirst,

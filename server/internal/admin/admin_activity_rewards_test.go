@@ -38,7 +38,7 @@ func TestActivityRewardsAtomicSaveRestartAndNativeSlots(t *testing.T) {
 	}
 	config.Cups[11].EndTurn, config.Cups[11].Rate = 0, 150
 	config.Cups[11].TeamCostInitial = 6
-	config.Cups[11].MemberDeadEnd = false // Older saved configuration has no encounter flag.
+	config.Cups[11].MemberDeadEnd = false
 	config.Explore[0].Rewards[0].Num = 200
 	config.Explore[0].Chances = []int{250000}
 	call := func(revision int, status int) {
@@ -68,7 +68,7 @@ func TestActivityRewardsAtomicSaveRestartAndNativeSlots(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := restarted.content.configuration.State
-	if restarted.content.activityRevision != 1 || s.TeamBattleReplays[0].EndTurn != 0 || s.TeamBattleReplays[1].EndTurn != 0 || s.TeamBattleRewards[1].ScorePolicy.Rate != 150 || !s.TeamBattleRewards[1].ScorePolicy.MemberDeadEnd {
+	if restarted.content.activityRevision != 1 || s.TeamBattleReplays[0].EndTurn != 0 || s.TeamBattleReplays[1].EndTurn != 0 || s.TeamBattleRewards[1].ScorePolicy.Rate != 150 || s.TeamBattleRewards[1].ScorePolicy.MemberDeadEnd {
 		t.Fatal("accepted rules did not survive restart or reach both entry modes")
 	}
 	if s.TeamBattleRewards[0].ScorePolicy.TeamCostInitial != 6 || s.TeamBattleReplays[0].CostInitial != 3 || s.TeamBattleReplays[1].CostInitial != 3 || p.TeamCostInitial != 0 {

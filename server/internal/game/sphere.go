@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 
 	"kairisei.local/server/internal/gamestate"
@@ -38,6 +39,12 @@ func cloneSphereEvolutionPrices(source map[string][]int) map[string][]int {
 	return result
 }
 
+func (s *Account) SphereCount() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.spheres)
+}
+
 func (s *Account) SphereState() []gamestate.Sphere {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -55,19 +62,6 @@ func (s *Account) sphereIndexByUniqueIDLocked(uniqueID int64) int {
 		}
 	}
 	return -1
-}
-
-func (s *Account) clearSphereIDsFromDecksLocked(remove map[int64]struct{}) {
-	if len(remove) == 0 {
-		return
-	}
-	for deckIndex := range s.decks {
-		for slot, uniqueID := range s.decks[deckIndex].SphereUniqueIDs {
-			if _, exists := remove[uniqueID]; exists {
-				s.decks[deckIndex].SphereUniqueIDs[slot] = 0
-			}
-		}
-	}
 }
 
 func (s *Account) normalizeSphereLocked(sphere gamestate.Sphere, definition gamestate.SphereDefinition) (gamestate.Sphere, error) {
@@ -127,6 +121,18 @@ func (s *Account) addSphereExperienceLocked(sphere gamestate.Sphere, definition 
 	return sphere, nil
 }
 
+func (s *Account) checkSphereConsumptionLocked(material gamestate.Sphere) error {
+	if material.IsLock != 0 {
+		return errSphereLocked
+	}
+	for _, deck := range s.decks {
+		if slices.Contains(deck.SphereUniqueIDs, material.UniqueID) {
+			return errSphereInDeck
+		}
+	}
+	return nil
+}
+
 func (s *Account) FuseSphere(baseUniqueID int64, inputs []SphereFusionInput) (gamestate.Sphere, int, int, int, []DeckInfo, error) {
 	if baseUniqueID <= 0 || len(inputs) == 0 {
 		return gamestate.Sphere{}, 0, 0, 0, nil, errors.New("sphere fusion selection is empty")
@@ -161,8 +167,8 @@ func (s *Account) FuseSphere(baseUniqueID int64, inputs []SphereFusionInput) (ga
 			if index < 0 {
 				return gamestate.Sphere{}, 0, 0, 0, nil, errSphereUnavailable
 			}
-			if s.spheres[index].IsLock != 0 {
-				return gamestate.Sphere{}, 0, 0, 0, nil, errSphereLocked
+			if err := s.checkSphereConsumptionLocked(s.spheres[index]); err != nil {
+				return gamestate.Sphere{}, 0, 0, 0, nil, err
 			}
 			if _, duplicate := remove[input.ID]; duplicate {
 				return gamestate.Sphere{}, 0, 0, 0, nil, errors.New("duplicate sphere fusion material")
@@ -231,8 +237,7 @@ func (s *Account) FuseSphere(baseUniqueID int64, inputs []SphereFusionInput) (ga
 		}
 	}
 	s.spheres = kept
-	consumeStackUses(s.stackCards, stackUses)
-	s.clearSphereIDsFromDecksLocked(remove)
+	s.consumeStackUsesLocked(stackUses)
 	s.gold -= int(cost)
 	return updated, success.SuccessType, s.gold, len(s.spheres), s.rankedDecksLocked(s.decks), nil
 }
@@ -275,8 +280,8 @@ func (s *Account) EvolveSphere(baseUniqueID int64, materialUniqueID int64, mater
 		if materialIndex < 0 {
 			return gamestate.Sphere{}, 0, 0, nil, errSphereUnavailable
 		}
-		if s.spheres[materialIndex].IsLock != 0 {
-			return gamestate.Sphere{}, 0, 0, nil, errSphereLocked
+		if err := s.checkSphereConsumptionLocked(s.spheres[materialIndex]); err != nil {
+			return gamestate.Sphere{}, 0, 0, nil, err
 		}
 		materialDefinition := s.sphereDefinitions[s.spheres[materialIndex].SphereID]
 		if materialDefinition.SameSphereID != definition.SameSphereID {
@@ -305,7 +310,7 @@ func (s *Account) EvolveSphere(baseUniqueID int64, materialUniqueID int64, mater
 	}
 	s.spheres[baseIndex] = result
 	if stackIndex >= 0 {
-		s.stackCards[stackIndex].Num--
+		s.consumeStackCardLocked(stackIndex, 1)
 	}
 	if len(remove) != 0 {
 		kept := make([]gamestate.Sphere, 0, len(s.spheres)-1)
@@ -315,7 +320,6 @@ func (s *Account) EvolveSphere(baseUniqueID int64, materialUniqueID int64, mater
 			}
 		}
 		s.spheres = kept
-		s.clearSphereIDsFromDecksLocked(remove)
 	}
 	s.gold -= prices[priceIndex]
 	return result, s.gold, len(s.spheres), s.rankedDecksLocked(s.decks), nil
@@ -334,8 +338,8 @@ func (s *Account) SellSpheres(uniqueIDs []int64) (int, int, int, []DeckInfo, err
 		if index < 0 {
 			return 0, 0, 0, nil, errSphereUnavailable
 		}
-		if s.spheres[index].IsLock != 0 {
-			return 0, 0, 0, nil, errSphereLocked
+		if err := s.checkSphereConsumptionLocked(s.spheres[index]); err != nil {
+			return 0, 0, 0, nil, err
 		}
 		if _, duplicate := remove[uniqueID]; duplicate {
 			return 0, 0, 0, nil, errors.New("duplicate sphere sell selection")
@@ -354,7 +358,6 @@ func (s *Account) SellSpheres(uniqueIDs []int64) (int, int, int, []DeckInfo, err
 		}
 	}
 	s.spheres = kept
-	s.clearSphereIDsFromDecksLocked(remove)
 	s.gold += int(getGold)
 	return int(getGold), s.gold, len(s.spheres), s.rankedDecksLocked(s.decks), nil
 }

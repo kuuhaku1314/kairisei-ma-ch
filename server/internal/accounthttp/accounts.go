@@ -23,6 +23,10 @@ type multiplayerBattleStarter interface {
 	ChargeMultiplayerStart(multiplayer.BattleStart, func(gamestate.State) error) error
 }
 
+type multiplayerBattleSettler interface {
+	SettleMultiplayerBattle(multiplayer.CompletedBattle) (*gamestate.State, error)
+}
+
 type multiplayerBattleContinuer interface {
 	ChargeMultiplayerContinue(multiplayer.BattleContinue) (multiplayer.ContinueBalance, error)
 }
@@ -60,22 +64,24 @@ type Router struct {
 	sequence  uint64
 	idleLimit int
 	// Stable bounded locks also serialize Admin and BattleSv against HTTP.
-	locks         [256]sync.Mutex
-	build         func(int) (http.Handler, error)
-	prepare       func(http.Handler)
-	persistStates func([]gamestate.State) error
+	locks            [256]sync.Mutex
+	build            func(int) (http.Handler, error)
+	prepare          func(http.Handler)
+	persistStates    func([]gamestate.State) error
+	persistCompleted func(multiplayer.CompletedBattle, time.Time, []gamestate.State) error
 }
 
 type Config struct {
-	Primary       http.Handler
-	Build         func(int) (http.Handler, error)
-	Prepare       func(http.Handler)
-	IdleLimit     int
-	PersistStates func([]gamestate.State) error
+	Primary          http.Handler
+	Build            func(int) (http.Handler, error)
+	Prepare          func(http.Handler)
+	IdleLimit        int
+	PersistStates    func([]gamestate.State) error
+	PersistCompleted func(multiplayer.CompletedBattle, time.Time, []gamestate.State) error
 }
 
 func New(config Config) *Router {
-	router := &Router{handlers: make(map[int]*handlerEntry), build: config.Build, prepare: config.Prepare, idleLimit: config.IdleLimit, persistStates: config.PersistStates}
+	router := &Router{handlers: make(map[int]*handlerEntry), build: config.Build, prepare: config.Prepare, idleLimit: config.IdleLimit, persistStates: config.PersistStates, persistCompleted: config.PersistCompleted}
 	if config.Primary != nil {
 		entry := &handlerEntry{handler: config.Primary, active: true}
 		router.handlers[accountstore.PrimaryUserID] = entry
@@ -207,17 +213,18 @@ func (router *Router) expireHandler(userID int, entry *handlerEntry) {
 
 func (router *Router) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	started := time.Now()
-	userID := accountstore.PrimaryUserID
-	if text := request.Header.Get(AccountUserHeader); text != "" {
-		parsed, err := strconv.Atoi(text)
-		if err != nil || parsed < accountstore.PrimaryUserID {
-			http.Error(writer, "invalid CN local account context", http.StatusUnauthorized)
-			return
-		}
-		userID = parsed
+	// Only the authenticated adapter may provide an account identity. Missing
+	// context must never turn an otherwise unscoped request into a primary-account write.
+	userID, err := strconv.Atoi(request.Header.Get(AccountUserHeader))
+	if err != nil || userID < accountstore.PrimaryUserID {
+		http.Error(writer, "invalid CN local account context", http.StatusUnauthorized)
+		return
 	}
 	accountLock := router.AccountLock(userID)
-	accountLock.Lock()
+	if err := lockAccountRequest(request.Context(), accountLock); err != nil {
+		http.Error(writer, "account request cancelled while waiting", http.StatusRequestTimeout)
+		return
+	}
 	defer accountLock.Unlock()
 
 	entry, err := router.acquireHandler(userID)
@@ -232,14 +239,21 @@ func (router *Router) ServeHTTP(writer http.ResponseWriter, request *http.Reques
 	response := &responseWriter{ResponseWriter: writer}
 	completed := false
 	defer func() {
+		httpFailed := !completed || response.status >= http.StatusBadRequest
+		rejected := httpFailed
+		if outcome, ok := handler.(interface{ RetainAccountCache() bool }); ok && !outcome.RetainAccountCache() {
+			rejected = true
+		}
 		solo := false
-		if completed && response.status < http.StatusBadRequest {
+		if !rejected {
 			if source, ok := handler.(interface{ HasUnsettledSoloBattle() bool }); ok {
 				solo = source.HasUnsettledSoloBattle()
 			}
 		}
-		router.recordActivity(userID, started, !completed || response.status >= http.StatusBadRequest, solo)
-		router.releaseHandler(userID, entry, !completed || response.status >= http.StatusBadRequest)
+		// Business rejections still discard mutable account state, but an
+		// HTTP-200 protocol result is not an HTTP transport failure.
+		router.recordActivity(userID, started, httpFailed, !rejected, solo)
+		router.releaseHandler(userID, entry, rejected)
 	}()
 	if router.prepare != nil {
 		router.prepare(handler)
@@ -276,15 +290,14 @@ func (writer *responseWriter) Write(body []byte) (int, error) {
 
 // BattleSv calls without registry/room locks. All participating account stripes
 // stay locked until the single database commit, just as for HTTP/Admin writes.
-func (router *Router) ChargeMultiplayerStart(start multiplayer.BattleStart) error {
-	users := append([]int{start.OwnerUserID}, start.GuestUserIDs...)
-	if len(users) > 4 || router.persistStates == nil {
-		return errors.New("invalid multiplayer start transaction")
+func (router *Router) withAccountGroup(users []int, action func([]*handlerEntry) error) error {
+	if len(users) == 0 || len(users) > 4 {
+		return errors.New("account group requires one to four participants")
 	}
 	stripes := make([]int, 0, len(users))
 	for i, userID := range users {
 		if userID < accountstore.PrimaryUserID || userID >= accountstore.SystemPartnerUserIDBase || slices.Contains(users[:i], userID) {
-			return errors.New("invalid multiplayer start account")
+			return errors.New("invalid multiplayer account group")
 		}
 		stripes = append(stripes, int(uint(userID)%uint(len(router.locks))))
 	}
@@ -303,37 +316,75 @@ func (router *Router) ChargeMultiplayerStart(start multiplayer.BattleStart) erro
 	entries := make([]*handlerEntry, 0, len(users))
 	committed := false
 	defer func() {
-		// An uncommitted in-memory debit is discarded for every participant.
+		// Discard every participant cache after an uncommitted account mutation.
 		// Their next request reloads the unchanged durable snapshot.
 		for i, entry := range entries {
 			router.releaseHandler(users[i], entry, !committed)
 		}
 	}()
-	states := make([]gamestate.State, 0, len(users))
 	for _, userID := range users {
 		entry, err := router.acquireHandler(userID)
 		if err != nil {
 			return err
 		}
 		entries = append(entries, entry)
-		starter, ok := entry.handler.(multiplayerBattleStarter)
-		if !ok {
-			return errors.New("CN account handler has no multiplayer start transaction")
-		}
-		if err := starter.ChargeMultiplayerStart(start, func(next gamestate.State) error {
-			states = append(states, next)
-			return nil
-		}); err != nil {
-			return err
+		if router.prepare != nil {
+			router.prepare(entry.handler)
 		}
 	}
-	if len(states) > 0 {
-		if err := router.persistStates(states); err != nil {
-			return err
-		}
+	if err := action(entries); err != nil {
+		return err
 	}
 	committed = true
 	return nil
+}
+
+func (router *Router) ChargeMultiplayerStart(start multiplayer.BattleStart) error {
+	if router.persistStates == nil {
+		return errors.New("multiplayer account persistence is unavailable")
+	}
+	users := append([]int{start.OwnerUserID}, start.GuestUserIDs...)
+	return router.withAccountGroup(users, func(entries []*handlerEntry) error {
+		states := make([]gamestate.State, 0, len(entries))
+		for _, entry := range entries {
+			starter, ok := entry.handler.(multiplayerBattleStarter)
+			if !ok {
+				return errors.New("CN account handler has no multiplayer start transaction")
+			}
+			if err := starter.ChargeMultiplayerStart(start, func(next gamestate.State) error { states = append(states, next); return nil }); err != nil {
+				return err
+			}
+		}
+		if len(states) == 0 {
+			return nil
+		}
+		return router.persistStates(states)
+	})
+}
+
+// Called after the terminal room projection is frozen and its lock released.
+// All account caches stay locked until the single completion/inventory commit.
+func (router *Router) CompleteMultiplayerBattle(completed multiplayer.CompletedBattle, expiresAt time.Time) error {
+	if router.persistCompleted == nil {
+		return errors.New("multiplayer completion persistence is unavailable")
+	}
+	return router.withAccountGroup(completed.OnlineUserIDs, func(entries []*handlerEntry) error {
+		states := make([]gamestate.State, 0, len(entries))
+		for _, entry := range entries {
+			settler, ok := entry.handler.(multiplayerBattleSettler)
+			if !ok {
+				return errors.New("CN account handler has no multiplayer settlement")
+			}
+			state, err := settler.SettleMultiplayerBattle(completed)
+			if err != nil {
+				return err
+			}
+			if state != nil {
+				states = append(states, *state)
+			}
+		}
+		return router.persistCompleted(completed, expiresAt, states)
+	})
 }
 
 // Called outside hub.mu, under the same per-account transaction lock as HTTP.
@@ -355,4 +406,30 @@ func (router *Router) ChargeMultiplayerContinue(request multiplayer.BattleContin
 	balance, err := starter.ChargeMultiplayerContinue(request)
 	completed = err == nil
 	return balance, err
+}
+
+// Cancellation only governs admission. Once accepted, a write still finishes
+// its existing synchronous transaction rather than following socket lifetime.
+func lockAccountRequest(ctx context.Context, lock *sync.Mutex) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if lock.TryLock() {
+		return nil
+	}
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if lock.TryLock() {
+				return nil
+			}
+		}
+	}
 }

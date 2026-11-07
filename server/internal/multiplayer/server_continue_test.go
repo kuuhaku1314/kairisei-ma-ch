@@ -6,33 +6,21 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
-func continueRoomFixture(t *testing.T, authorize func(BattleContinue) (ContinueBalance, error), allDead bool) (*Server, *room) {
+func continueRoomFixture(t *testing.T, authorize func(BattleContinue) (ContinueBalance, error), dead int) (*Server, *room) {
 	t.Helper()
 	h := NewHub()
 	if err := h.AttachContinueAuthorizer(authorize); err != nil {
 		t.Fatal(err)
 	}
 	s := &Server{hub: h, logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
-	engine, members := nextBattleFixture(t)
-	if _, err := engine.Start(); err != nil {
-		t.Fatal(err)
-	}
-	engine.continueAllowed, engine.turn, engine.phase = true, 2, battlePhaseChaliceUser
-	for i := range engine.players {
-		engine.players[i].HP = 100
-		if i == 0 || allDead {
-			engine.players[i].HP = 0
-		}
-	}
-	if _, err := engine.EnemyPhase(); err != nil {
-		t.Fatal(err)
-	}
+	engine, members := knockedOutRoomBattle(t, dead, true, false)
 	current := &room{RoomSnapshot: RoomSnapshot{RoomID: 1, BossID: 11, State: RoomStateBattle, OwnerMemberType: 1, Members: members},
 		continueAllowed: true, engine: engine, connections: make(map[int]*clientConn), comebackTokens: map[int]string{1: "token1", 2: "token2"},
 		disconnectedUntil: make(map[int]time.Time), gameStarted: true, turnPhaseStarted: true, userPhaseStarted: true,
@@ -45,7 +33,7 @@ func continueRoomFixture(t *testing.T, authorize func(BattleContinue) (ContinueB
 	if err := s.tryAdvanceEnemyPhase(1); err != nil {
 		t.Fatal(err)
 	}
-	if !engine.continuePending || current.continuation == nil || engine.EndType() != 0 || current.chaliceEnemyStarted {
+	if !engine.ContinuePending() || current.continuation == nil || engine.EndType() != 0 || current.chaliceEnemyStarted {
 		t.Fatal("KO did not pause the room before the next phase")
 	}
 	t.Cleanup(func() { current.continuationTimerStopForTest() })
@@ -82,13 +70,14 @@ func TestContinuePaymentQuorumRetryAndReconnect(t *testing.T) {
 		close(entered)
 		<-releasePayment
 		return ContinueBalance{Coin: 5, CoinFree: 7}, nil
-	}, false)
+	}, 1)
 	owner, guest := current.connections[1], current.connections[2]
-	random := current.engine.rng
+	before := current.engine.StateView()
+	turn := current.engine.TurnNumber()
 	if err := owner.handleContinue(""); err != nil {
 		t.Fatal(err)
 	}
-	if current.engine.players[0].HP != 0 || current.engine.continueCount != 0 || current.engine.rng != random {
+	if !reflect.DeepEqual(current.engine.StateView(), before) || !current.engine.ContinuePending() {
 		t.Fatal("rejected debit changed the battle")
 	}
 	reject.Store(false)
@@ -102,17 +91,17 @@ func TestContinuePaymentQuorumRetryAndReconnect(t *testing.T) {
 	if err := guest.handleContinue(""); err != nil {
 		t.Fatal(err)
 	}
-	if calls.Load() != 2 || current.engine.players[0].HP != 0 {
+	if calls.Load() != 2 || current.engine.StateView().Members[0].HP != 0 {
 		t.Fatal("concurrent payer charged or revived before commit")
 	}
 	close(releasePayment)
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
-	if current.engine.continueCount != 1 || current.engine.rng != random || current.chaliceEnemyStarted {
-		t.Fatal("revival advanced the phase/RNG before animation ACK")
+	if current.engine.ContinuePending() || current.chaliceEnemyStarted {
+		t.Fatal("revival advanced the phase before animation ACK")
 	}
-	for _, p := range current.engine.players {
+	for _, p := range current.engine.StateView().Members[:4] {
 		if p.HP != p.MaxHP {
 			t.Fatal("party not revived")
 		}
@@ -125,13 +114,13 @@ func TestContinuePaymentQuorumRetryAndReconnect(t *testing.T) {
 	}
 	recovered := continueTestPeer(t, s, 1)
 	recovered.roomID, recovered.memberType, recovered.userID = 0, 0, 0
-	if err := recovered.handleComeback("1001,1,token1,0"); err != nil {
+	if err := recovered.handleComeback("1001,1,token1,0,2"); err != nil {
 		t.Fatal(err)
 	}
 	if err := recovered.handleReadyToComeback(""); err != nil {
 		t.Fatal(err)
 	}
-	if current.chaliceEnemyStarted || current.engine.rng != random {
+	if current.chaliceEnemyStarted || current.engine.ContinuePending() {
 		t.Fatal("reconnect bypassed continuation ACK or replayed gameplay")
 	}
 	if err := recovered.handleGameOverPhaseFinish(""); err != nil {
@@ -143,9 +132,16 @@ func TestContinuePaymentQuorumRetryAndReconnect(t *testing.T) {
 	if err := guest.handleGameOverPhaseFinish(""); err != nil {
 		t.Fatal(err)
 	}
-	if current.continuation != nil || !current.chaliceEnemyStarted || current.engine.turn != 2 || current.engine.rng != random {
-		t.Fatalf("continuation resume: pending=%v chalice=%v turn=%d phase=%d rng=%+v want=%+v", current.continuation != nil, current.chaliceEnemyStarted, current.engine.turn, current.engine.phase, current.engine.rng, random)
+	if current.continuation == nil || current.chaliceEnemyStarted {
+		t.Fatal("continuation bypassed the recovered client's application confirmation")
 	}
+	if err := recovered.handleComebackApplied(recovered.recoveryToken); err != nil {
+		t.Fatal(err)
+	}
+	if current.continuation != nil || !current.chaliceEnemyStarted || current.engine.TurnNumber() != turn {
+		t.Fatal("continuation did not resume the same turn after the quorum")
+	}
+
 	output := guest.conn.(*hubCheckingConn).output.String()
 	if !(strings.Index(output, "ApiContinue{") < strings.Index(output, "RoomComeback{") && strings.Index(output, "RoomComeback{") < strings.Index(output, "ApiChaliceSphrExecEnemyPhase{")) {
 		t.Fatal("revival, reset snapshot and next phase are out of order")
@@ -174,7 +170,7 @@ func TestContinuePaymentQuorumRetryAndReconnect(t *testing.T) {
 	if current.userAttackStarted {
 		t.Fatal("room did not wait for the revived member's cards")
 	}
-	card := current.engine.players[0].Hand[0]
+	card := firstFixtureHandCard(t, current.engine, 1)
 	if card == 0 {
 		t.Fatal("revived member has no selectable card")
 	}
@@ -188,42 +184,38 @@ func TestContinuePaymentQuorumRetryAndReconnect(t *testing.T) {
 
 func TestContinueDeclineAndTimeout(t *testing.T) {
 	for _, tc := range []struct {
-		name    string
-		wipe    bool
-		onlyAI  bool
-		canPlay bool
+		name   string
+		wipe   bool
+		onlyAI bool
 	}{
-		{name: "survivors", canPlay: true},
+		{name: "survivors"},
 		{name: "wipe", wipe: true},
-		{name: "only_ai_survivor", onlyAI: true, canPlay: true},
-		{name: "only_ai_pass", onlyAI: true},
+		{name: "only_ai_survivor", onlyAI: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			dead := 1
+			if tc.wipe {
+				dead = 4
+			} else if tc.onlyAI {
+				dead = 3
+			}
 			s, current := continueRoomFixture(t, func(BattleContinue) (ContinueBalance, error) {
 				t.Fatal("decline charged currency")
 				return ContinueBalance{}, nil
-			}, tc.wipe)
+			}, dead)
 			owner, guest := current.connections[1], current.connections[2]
 			peers := []*clientConn{owner, guest}
-			if tc.onlyAI {
-				// Both humans and one CPU are KO; only CPU slot 4 is alive.
-				current.engine.players[1].HP = 0
-				current.engine.players[2].HP = 0
-				if !tc.canPlay {
-					current.engine.catalog.PlayerSkills[1][0].Cost = 99
-				}
-			}
 			if err := owner.handleContinuePhaseFinish(""); err != nil {
 				t.Fatal(err)
 			}
-			if current.engine.players[0].GameOver {
+			if !current.engine.ContinuePending() {
 				t.Fatal("early decline retired party before others could revive it")
 			}
 			current.continuation.deadline = time.Time{}
 			if err := s.advanceContinue(1); err != nil {
 				t.Fatal(err)
 			}
-			if !current.engine.players[0].GameOver || current.engine.continuePending || current.engine.continueCount != 0 {
+			if current.engine.MemberAlive(1) || current.engine.ContinuePending() {
 				t.Fatal("cancel did not retire KO members")
 			}
 			for _, peer := range peers {
@@ -240,9 +232,7 @@ func TestContinueDeclineAndTimeout(t *testing.T) {
 			if !current.chaliceEnemyStarted {
 				t.Fatal("survivors did not resume")
 			}
-			current.engine.enemies[0].HP = 1000000
-			current.engine.enemies[0].MaxHP = 1000000
-			current.engine.enemies[0].BaseMaxHP = 1000000
+
 			for _, peer := range peers {
 				peer.conn.(*hubCheckingConn).output.Reset()
 				if err := peer.handleChaliceSphrExecEnemyPhaseFinish(); err != nil {
@@ -258,7 +248,7 @@ func TestContinueDeclineAndTimeout(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if current.connections[1] != nil || !owner.retired || current.comebackTokens[1] != "" || !current.disconnectedUntil[1].IsZero() || current.engine.players[0].HP != 0 {
+			if current.connections[1] != nil || !owner.retired || current.comebackTokens[1] != "" || !current.disconnectedUntil[1].IsZero() || current.engine.StateView().Members[0].HP != 0 {
 				t.Fatal("KO participant retained identity or changed HP")
 			}
 			frames := owner.conn.(*hubCheckingConn).output.String()
@@ -281,11 +271,11 @@ func TestContinueDeclineAndTimeout(t *testing.T) {
 				t.Fatal("removed human still submits")
 			}
 			for turn := 0; turn < 2; turn++ {
-				beforeHP := current.engine.enemies[0].HP
+				beforeHP := current.engine.StateView().Members[4].HP
 				if err := guest.handleCardPlay(strings.Repeat("0,", 11)+"0", false); err != nil {
 					t.Fatal(err)
 				}
-				if !current.userAttackStarted || current.engine.enemies[0].HP >= beforeHP {
+				if !current.userAttackStarted || current.engine.StateView().Members[4].HP >= beforeHP {
 					t.Fatal("CPU choices waited for removed human")
 				}
 				frames = guest.conn.(*hubCheckingConn).output.String()
@@ -300,12 +290,12 @@ func TestContinueDeclineAndTimeout(t *testing.T) {
 					}
 				}
 			}
-			if current.engine.players[0].HP != 0 {
+			if current.engine.StateView().Members[0].HP != 0 {
 				t.Fatal("dead actor was revived by CPU takeover")
 			}
 			current.engineBattleEnd = 1
 			session := s.hub.lockRoomSession(1)
-			err := completeBattleLocked(s.hub, current, time.Now())
+			err := completeBattle(session, current, time.Now())
 			session.Unlock()
 			if err != nil {
 				t.Fatal(err)

@@ -31,7 +31,7 @@ func auditCompleteCollectionRewards(t *testing.T, h http.Handler, savePath, seed
 	})
 	testfixture.AttachProbeCardCatalog(t, storage, cards)
 	accounts := testfixture.TestAccountRepository(t, storage)
-	identity, err := accounts.ResolveLogin("00000000-0000-4000-8491-000000000001")
+	identity, err := accounts.ResolveInternalLogin("00000000-0000-4000-8491-000000000001")
 	if err != nil {
 		t.Fatal(err)
 	}

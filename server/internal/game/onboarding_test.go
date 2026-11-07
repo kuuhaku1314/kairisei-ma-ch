@@ -7,6 +7,17 @@ import (
 	"kairisei.local/server/internal/gamestate"
 )
 
+func TestTutorialRouteFlagPreservesExistingProgress(t *testing.T) {
+	s := onboardingTestStore()
+	const oldFlags = int64(1)<<26 - 1
+	if !s.MergeTutorialFlag(oldFlags) || !s.MergeTutorialFlag(1<<26) || s.TutorialState() != oldFlags|1<<26 {
+		t.Fatal("main-quest route guide did not merge with existing tutorial progress")
+	}
+	if s.MergeTutorialFlag(1<<27) || s.MergeTutorialFlag(-1) || s.Snapshot(gamestate.State{}).User.TutorialFlag != oldFlags|1<<26 {
+		t.Fatal("invalid guide bits changed saved tutorial progress")
+	}
+}
+
 func onboardingTestStore() *Account {
 	return &Account{
 		currentActiveArthur: 1,

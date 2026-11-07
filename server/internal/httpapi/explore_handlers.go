@@ -99,8 +99,8 @@ func (a *API) exploreEnd(writer http.ResponseWriter, request *http.Request) {
 	response := map[string]any{
 		"user":                            a.userPayload(),
 		"result_rewards":                  resultRewards,
-		"deck_cards":                      toWireCards(deckCards),
-		"new_cards":                       toWireCards(result.Cards),
+		"deck_cards":                      a.toWireCards(deckCards),
+		"new_cards":                       a.toWireCards(result.Cards),
 		"new_stack_cards":                 toWireStackCards(result.StackCards),
 		"new_items":                       a.itemInfosWire(result.Items),
 		"new_sphrs":                       toWireSpheres(result.Spheres),

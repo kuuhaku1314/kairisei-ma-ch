@@ -50,6 +50,9 @@ func (s *Account) ApplyGachaConfiguration(revision uint64, configs []GachaConfig
 			profile.PublicationKey = "operator"
 			profile.PlayCount = s.operatorGachaPlays[profile.GachaID]
 			delete(s.operatorGachaPlays, profile.GachaID)
+			if validateGachaSelection(profile, s.gachaSelections[profile.GachaID]) != nil {
+				delete(s.gachaSelections, profile.GachaID)
+			}
 			s.gachas = append(s.gachas, profile)
 			continue
 		}

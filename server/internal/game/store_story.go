@@ -3,6 +3,7 @@ package game
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"time"
 
@@ -68,10 +69,39 @@ func cloneStoryEvents(events []gamestate.StoryEvent) []gamestate.StoryEvent {
 func (s *Account) StoryMainState(cnStory bool) []gamestate.StoryMainPart {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if cnStory {
-		return cloneStoryMainParts(s.cnStoryMainParts)
+	if !cnStory {
+		return cloneStoryMainParts(s.storyMainParts)
 	}
-	return cloneStoryMainParts(s.storyMainParts)
+	// The theater uses the last returned episode as the current story and
+	// removes it from recollection until it is cleared.
+	parts := cloneStoryMainParts(s.cnStoryMainParts)
+	for i := range parts {
+		sections := parts[i].Sections
+		for j := range sections {
+			sections[j].Stories = slices.DeleteFunc(sections[j].Stories, func(story gamestate.StoryMain) bool {
+				return story.StateFlag&4 != 0
+			})
+		}
+		parts[i].Sections = slices.DeleteFunc(sections, func(section gamestate.StoryMainSection) bool {
+			return len(section.Stories) == 0
+		})
+	}
+	return slices.DeleteFunc(parts, func(part gamestate.StoryMainPart) bool {
+		return len(part.Sections) == 0
+	})
+}
+
+func (s *Account) CNMainStoryAvailable() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, part := range s.cnStoryMainParts {
+		for _, section := range part.Sections {
+			if len(section.Stories) > 0 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (s *Account) BeginMainStory(storyMainID int) bool {
@@ -88,7 +118,7 @@ func (s *Account) BeginMainStory(storyMainID int) bool {
 						s.activeMainStoryID = storyMainID
 						s.storyTeamBattleSession = gamestate.StoryTeamBattleSession{}
 						s.activeMainStoryCN = cnStory
-						s.activeSubStoryID = 0
+						s.clearSubStoryContextLocked()
 						return true
 					}
 				}
@@ -125,7 +155,12 @@ func (s *Account) EndMainStory(isClear bool) (PresentReceiveResult, error) {
 	}
 	result := PresentReceiveResult{}
 	found := false
+	activeChain := 0
 	for partIndex := range *parts {
+		chain := MainStoryProgressionChain((*parts)[partIndex].StoryMainPartID)
+		if found && chain != activeChain {
+			continue
+		}
 		for sectionIndex := range (*parts)[partIndex].Sections {
 			stories := (*parts)[partIndex].Sections[sectionIndex].Stories
 			for storyIndex := range stories {
@@ -133,6 +168,7 @@ func (s *Account) EndMainStory(isClear bool) (PresentReceiveResult, error) {
 					continue
 				}
 				if !found {
+					activeChain = chain
 					if isClear {
 						if stories[storyIndex].StateFlag&2 == 0 {
 							var err error
@@ -142,6 +178,7 @@ func (s *Account) EndMainStory(isClear bool) (PresentReceiveResult, error) {
 							}
 						}
 						stories[storyIndex].StateFlag = stories[storyIndex].StateFlag&8 | 1<<1
+						s.markMissionMetricLocked(gamestate.MissionStoryCleared)
 						stories[storyIndex].UnlockText = ""
 						if err := s.advanceOnboardingLocked(onboardingEvent{kind: "story"}); err != nil {
 							return PresentReceiveResult{}, err
@@ -178,19 +215,42 @@ func (s *Account) StorySubState() []gamestate.StorySubCharacter {
 	defer s.mu.Unlock()
 	gamestate.UnlockCollectedCharacterStories(s.storySubCharacters, s.cardCollectionIDs)
 	characters := cloneStorySubCharacters(s.storySubCharacters)
+	visible := characters[:0]
 	for i := range characters {
 		sections := characters[i].Sections[:0]
 		for _, section := range characters[i].Sections {
-			if len(section.Stories) > 0 {
-				if _, _, learning := gamestate.FindBurstStory(section.Stories[0].StorySubID); learning {
-					continue
+			if len(section.Stories) == 0 {
+				continue
+			}
+			for j := range section.Stories {
+				story := &section.Stories[j]
+				if quest, step, learning := gamestate.FindBurstStory(story.StorySubID); learning {
+					story.StateFlag &= 8
+					switch {
+					case step < int(s.burstProgress[quest.ArthurType-1]):
+						story.StateFlag |= 2
+						story.UnlockText = ""
+					case !s.burstQuestAvailableLocked(quest):
+						story.StateFlag |= 4
+						story.UnlockText = "完成训练并开放对应职业后解锁。"
+					case step > int(s.burstProgress[quest.ArthurType-1]):
+						story.StateFlag |= 4
+						story.UnlockText = "完成前一段圣剑解放剧情后解锁。"
+					default:
+						story.StateFlag |= 1
+						story.UnlockText = ""
+					}
 				}
 			}
 			sections = append(sections, section)
 		}
+		if len(sections) == 0 {
+			continue
+		}
 		characters[i].Sections = sections
+		visible = append(visible, characters[i])
 	}
-	return characters
+	return visible
 }
 
 func (s *Account) StoryEventState() []gamestate.StoryEvent {
@@ -359,7 +419,7 @@ func (s *Account) UnlockEventStory(storySubID int) ([]gamestate.Item, []gamestat
 
 func (s *Account) BeginSubStory(storySubID int) bool {
 	if _, _, learning := gamestate.FindBurstStory(storySubID); learning {
-		return false
+		return s.BeginBurstStory(storySubID) == nil
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -374,6 +434,7 @@ func (s *Account) BeginSubStory(storySubID int) bool {
 					return false
 				}
 				s.activeSubStoryID = storySubID
+				s.activeSubStoryTowerID, s.activeSubStoryTowerFloor = 0, 0
 				s.storyTeamBattleSession = gamestate.StoryTeamBattleSession{}
 				s.activeMainStoryID = 0
 				s.activeMainStoryCN = false
@@ -390,6 +451,7 @@ func (s *Account) BeginSubStory(storySubID int) bool {
 				return false
 			}
 			s.activeSubStoryID = storySubID
+			s.activeSubStoryTowerID, s.activeSubStoryTowerFloor = 0, 0
 			s.storyTeamBattleSession = gamestate.StoryTeamBattleSession{}
 			s.activeMainStoryID = 0
 			s.activeMainStoryCN = false
@@ -402,8 +464,18 @@ func (s *Account) BeginSubStory(storySubID int) bool {
 func (s *Account) EndSubStory(isClear bool) (PresentReceiveResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.storyTeamBattleSession.StoryID != 0 {
+		if !isClear {
+			s.storyTeamBattleSession = gamestate.StoryTeamBattleSession{}
+			return PresentReceiveResult{}, nil
+		}
+		return s.endBurstStoryLocked()
+	}
 	if s.activeSubStoryID == 0 {
 		return PresentReceiveResult{}, errors.New("no active sub story")
+	}
+	if s.activeSubStoryTowerID != 0 {
+		return s.endTowerStoryLocked(isClear)
 	}
 	activeID := s.activeSubStoryID
 	for characterIndex := range s.storySubCharacters {
@@ -426,6 +498,7 @@ func (s *Account) EndSubStory(isClear bool) (PresentReceiveResult, error) {
 					}
 				}
 				stories[storyIndex].StateFlag = stories[storyIndex].StateFlag&8 | 2
+				s.markMissionMetricLocked(gamestate.MissionStoryCleared)
 				stories[storyIndex].UnlockText = ""
 				if storyIndex+1 < len(stories) && stories[storyIndex+1].StateFlag&2 == 0 {
 					stories[storyIndex+1].StateFlag = stories[storyIndex+1].StateFlag&8 | 1
@@ -455,6 +528,7 @@ func (s *Account) EndSubStory(isClear bool) (PresentReceiveResult, error) {
 				}
 			}
 			stories[storyIndex].Sub.StateFlag = stories[storyIndex].Sub.StateFlag&8 | 2
+			s.markMissionMetricLocked(gamestate.MissionStoryCleared)
 			stories[storyIndex].Sub.UnlockText = ""
 			if storyIndex+1 < len(stories) && stories[storyIndex+1].Sub.StateFlag&2 == 0 {
 				nextStatic := stories[storyIndex+1].Sub.StateFlag & (8 | 16)

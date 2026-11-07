@@ -35,7 +35,20 @@ func (c *clientConn) readDeadline() time.Time {
 	if finishing := c.finishingDeadline(); !finishing.IsZero() && finishing.Before(deadline) {
 		deadline = finishing
 	}
+	c.deadlineMu.Lock()
+	if !c.recoveryUntil.IsZero() && c.recoveryUntil.Before(deadline) {
+		deadline = c.recoveryUntil
+	}
+	c.deadlineMu.Unlock()
 	return deadline
+}
+
+// An unconfirmed recovery cannot keep the phase barrier held indefinitely by
+// sending Ping. The existing read loop enforces this absolute deadline.
+func (c *clientConn) setRecoveryDeadline(deadline time.Time) {
+	c.deadlineMu.Lock()
+	c.recoveryUntil = deadline
+	c.deadlineMu.Unlock()
 }
 
 func (c *clientConn) finishingDeadline() time.Time {

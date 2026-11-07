@@ -15,7 +15,10 @@ import (
 
 const maxNaviMasterBytes = 1024 * 1024
 
+const naviPresentationLive2D = 0
+
 type naviDefinition struct {
+	PresentationKind  int    `json:"presentation_kind,omitempty"`
 	NaviID            int    `json:"navi_id"`
 	Name              string `json:"name"`
 	PictID            int    `json:"pict_id"`
@@ -115,10 +118,11 @@ func validateNaviRuntimeMaster(master naviRuntimeMaster) error {
 	imported := 0
 	excluded := make([]int, 0)
 	for _, navigator := range master.Navigators {
-		if navigator.Live2DSourceState == "PRESENT_IN_JP_DERIVED_OVERLAY" {
+		if navigator.Live2DSourceState == "PRESENT_IN_JP_DERIVED_OVERLAY" || navigator.Live2DSourceState == "PRESENT_IN_WORKSHOP_OVERLAY" || navigator.Live2DSourceState == "PRESENT_IN_USER_DERIVED_OVERLAY" {
 			imported++
 		}
-		if navigator.NaviID < 0 || navigator.NaviID > 127 || navigator.Name == "" ||
+		if navigator.PresentationKind != naviPresentationLive2D ||
+			navigator.NaviID < 0 || navigator.NaviID > 127 || navigator.Name == "" ||
 			navigator.PictID <= 0 || navigator.ItemPictID <= 0 ||
 			navigator.Live2DFolder == "" || navigator.VoiceID < 0 {
 			return fmt.Errorf("invalid CN navigator %d", navigator.NaviID)
@@ -131,9 +135,11 @@ func validateNaviRuntimeMaster(master naviRuntimeMaster) error {
 			validSource := navigator.Live2DSourceState == "PRESENT_IN_CN_OFFICIAL_ASSET_MAP" ||
 				(master.Publication.Evidence == "INFERRED" &&
 					(navigator.Live2DSourceState == "PRESENT_IN_PRIVATE_DERIVED_OVERLAY" ||
-						navigator.Live2DSourceState == "PRESENT_IN_JP_DERIVED_OVERLAY"))
+						navigator.Live2DSourceState == "PRESENT_IN_JP_DERIVED_OVERLAY" ||
+						navigator.Live2DSourceState == "PRESENT_IN_WORKSHOP_OVERLAY" ||
+						navigator.Live2DSourceState == "PRESENT_IN_USER_DERIVED_OVERLAY"))
 			if navigator.Live2DBundle != expectedBundle || !validSource {
-				return fmt.Errorf("published CN navigator %d has no Live2D resource closure", navigator.NaviID)
+				return fmt.Errorf("published CN navigator %d has no presentation resource closure", navigator.NaviID)
 			}
 			published++
 		} else {

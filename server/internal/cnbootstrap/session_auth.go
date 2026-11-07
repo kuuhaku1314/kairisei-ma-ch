@@ -63,7 +63,7 @@ func authenticateCNSessions(accounts *accountstore.Accounts) func(http.Handler) 
 
 func isUnauthenticatedCNPost(path string) bool {
 	switch path {
-	case "/loginSDK.php", "/mods_switch.php", "/Ping", "/log.php", "/subcribe_push.php":
+	case "/local/client/login", "/mods_switch.php", "/Ping", "/log.php", "/subcribe_push.php":
 		return true
 	}
 	return strings.HasPrefix(path, "/disabled/envsdk/") || strings.HasPrefix(path, "/d/")

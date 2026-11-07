@@ -3,6 +3,7 @@ package httpapi
 import (
 	"errors"
 
+	"kairisei.local/server/internal/game"
 	"kairisei.local/server/internal/multiplayer"
 )
 
@@ -11,5 +12,6 @@ func (h *accountBusinessHandler) ChargeMultiplayerContinue(request multiplayer.B
 	if request.UserID != a.initialState.User.UserID || request.RoomID <= 0 || request.BossID <= 0 || request.Sequence <= 0 {
 		return multiplayer.ContinueBalance{}, errors.New("multiplayer continue identity is invalid")
 	}
-	return a.account.ChargeMultiplayerContinue(request, a.initialState, a.persistState)
+	balance, err := a.account.ChargeMultiplayerContinue(game.MultiplayerContinuation{RoomID: request.RoomID, BossID: request.BossID, Sequence: request.Sequence}, a.initialState, a.persistState)
+	return multiplayer.ContinueBalance{Coin: balance.Coin, CoinFree: balance.CoinFree}, err
 }

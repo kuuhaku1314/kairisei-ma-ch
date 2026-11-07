@@ -60,10 +60,10 @@ const partnerRelationProjection = `SELECT a.user_id, p.payload_json, p.payload_s
  FROM selected s
  JOIN cn_local_account a ON a.user_id = s.user_id
  JOIN cn_account_projection p ON p.user_id = s.user_id
- WHERE a.user_id <> ?1 ORDER BY a.user_id`
+ WHERE a.user_id <> ?1`
 
 func (accounts *Accounts) ListFriendPointPartnerRecommendations(userID int) ([]game.FriendPointAccountRelation, error) {
-	return accounts.queryPartnerRelations(userID, partnerRecommendationSelection,
+	return accounts.queryPartnerRelations(userID, partnerRecommendationSelection+partnerRelationProjection+" ORDER BY a.user_id",
 		userID, SystemPartnerUserIDBase, recentPartnerAccountLimit, SystemPartnerUserIDBase+systemPartnerArthurCount)
 }
 
@@ -86,10 +86,10 @@ func (accounts *Accounts) LoadFriendPointAccountRelations(userID int, targetUser
 		return nil, nil
 	}
 	selection := "WITH selected(user_id) AS (VALUES " + strings.Join(values, ",") + ")\n"
-	return accounts.queryPartnerRelations(userID, selection, arguments...)
+	return accounts.queryPartnerRelations(userID, selection+partnerRelationProjection+" ORDER BY a.user_id", arguments...)
 }
 
-func (accounts *Accounts) queryPartnerRelations(userID int, selection string, arguments ...any) ([]game.FriendPointAccountRelation, error) {
+func (accounts *Accounts) queryPartnerRelations(userID int, query string, arguments ...any) ([]game.FriendPointAccountRelation, error) {
 	if userID < PrimaryUserID {
 		return nil, errors.New("invalid CN partner relationship owner")
 	}
@@ -97,7 +97,7 @@ func (accounts *Accounts) queryPartnerRelations(userID int, selection string, ar
 	if err != nil {
 		return nil, err
 	}
-	rows, err := database.QueryContext(context.Background(), selection+partnerRelationProjection, arguments...)
+	rows, err := database.QueryContext(context.Background(), query, arguments...)
 	if err != nil {
 		return nil, fmt.Errorf("query CN partner accounts: %w", err)
 	}

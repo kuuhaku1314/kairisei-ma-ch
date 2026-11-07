@@ -40,10 +40,10 @@ func probeCompleteRuntimePurchase(t *testing.T, handler http.Handler, savePath, 
 	})
 	accounts := testfixture.TestAccountRepository(t, storage)
 	testfixture.AttachProbeCardCatalog(t, storage, cards)
-	if _, err := accounts.ResolveLogin("00000000-0000-0000-0004-000000000000"); err != nil {
+	if _, err := accounts.ResolveInternalLogin("00000000-0000-0000-0004-000000000000"); err != nil {
 		t.Fatal(err)
 	}
-	identity, err := accounts.ResolveLogin("00000000-0000-0000-0004-000000000001")
+	identity, err := accounts.ResolveInternalLogin("00000000-0000-0000-0004-000000000001")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func probeCompleteRuntimePurchase(t *testing.T, handler http.Handler, savePath, 
 			t.Fatal("invalid group list")
 		}
 		for _, group := range groups {
-			if group.ID != 700300201 && group.ID != 800045001 {
+			if group.ID != 700300201 {
 				t.Fatalf("unpublished activity %d remained", group.ID)
 			}
 		}
