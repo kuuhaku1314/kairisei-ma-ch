@@ -40,20 +40,36 @@ CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -buildvcs=false -trimpath '-ldfla
 .\tools\powershell\Build-Launcher.ps1
 ```
 
-使用 Windows 自带 .NET Framework 4 的 C# 编译器，输出 `_local/bin/Kairisei-Launcher.exe`。不传图标也能独立构建；图标和游戏资源不存入源码仓库。
+使用 Windows 自带 .NET Framework 4 的 C# 编译器，输出 `_local/bin/Kairisei-Launcher.exe`。将它复制到完整服务端运行目录，与 `Start-Server.ps1`、`Stop-Server.ps1` 和 `deployment.json` 放在一起。启动器读取该目录的连接设置；本机连接默认使用 `127.0.0.1:26040`。
+
+不传图标也能独立构建。需要自定义图标时可加 `-IconPath C:\Icons\launcher.ico`；图标和游戏资源不存入源码仓库。`-DryRun` 可以只查看构建目标。
+
+## 源码和工具入口
+
+| 路径 | 用途 |
+| --- | --- |
+| `server/cmd/kairi-server/` | 游戏服务端及独立的 CDN 同步命令 |
+| `cmd/kairi-launcher-winforms/` | Windows 图形启动器源码，调用运行目录中的启停脚本 |
+| `tools/powershell/Build-Server.ps1`、`tools/sh/Build-Server.sh` | 编译服务端 |
+| `tools/powershell/Build-Launcher.ps1` | 编译 Windows 启动器 |
+| `tools/powershell/Start-Server.ps1`、`Stop-Server.ps1` | 通过 `-PackageRoot` 调用已解压服务端的配套启停脚本 |
+| `tools/portable/` | 当前完整服务端使用的运行脚本模板 |
+| `tools/config/cdn-sync.example.json` | 可复制后填写的存储配置示例 |
+
+`tools/portable/` 的脚本放到完整运行目录后使用。Windows 启动检查平台资源与完整资源清单，Linux 复用包内按资源清单生成的 `server-arguments.sh`。两端均接入 Admin 运行日志和可选的运营图片同步配置。更新源码脚本时，保留完整包内的资源目录、`server-arguments.sh`、`deployment.json` 及自己的 CDN 配置。
 
 ## 使用构建结果
 
 **完整服务端 7z 分卷解压出的目录是运行目录。保留其中的 `resource-set/` 和 `platform/`，在源码目录完成编译。**
 
 1. 选择与源码版本配套的完整服务端资源包，将所有 7z 分卷放在一起，从 `.7z.001` 解压。
-2. 保留解压出来的整个 `kairisei-ma-cn602-server/` 文件夹，放在哪里都可以，例如 Windows 的 `D:\Games\kairisei-ma-cn602-server\`。
+2. 保留解压出来的整个服务端文件夹，放在哪里都可以，例如 Windows 的 `D:\Games\KairiseiMA-Server\`。
 3. 正常停止服务，将源码编译得到的 `_local/bin/` 中对应程序复制到这个文件夹，替换同名程序，再从这个文件夹启动。
 
 解压后的相对位置应保持如下（只列出主要文件）：
 
 ```text
-kairisei-ma-cn602-server/       ← 运行目录，也是 -PackageRoot 指向的位置
+KairiseiMA-Server/             ← 运行目录，也是 -PackageRoot 指向的位置
 ├── kairi-server.exe            ← Windows：替换为自己编译的这个文件
 ├── kairi-server-linux-amd64    ← Linux x64：替换这个文件
 ├── kairi-server-linux-arm64    ← Linux ARM64：替换这个文件
@@ -71,7 +87,7 @@ kairisei-ma-cn602-server/       ← 运行目录，也是 -PackageRoot 指向的
 └── _local/data/                ← 首次启动后生成的数据库与存档
 ```
 
-例如，Windows 将 **源码目录的 `_local/bin/kairi-server.exe`** 复制到 **`D:\Games\kairisei-ma-cn602-server\kairi-server.exe`**，然后双击同目录的 `Kairisei-Launcher.exe` 即可。
+例如，Windows 将 **源码目录的 `_local/bin/kairi-server.exe`** 复制到 **`D:\Games\KairiseiMA-Server\kairi-server.exe`**，然后双击同目录的 `Kairisei-Launcher.exe` 即可。更新启动器源码后，同样重新构建并替换 `Kairisei-Launcher.exe`。
 
 **`resource-set/`、`platform/`、`deployment.json` 与服务端程序放在同一层。** 不需要把资源复制进源码的 `server/` 或 `_local/bin/`，也不需要单独拆开资源目录。发布版本升级时一起更新配套服务端、资源包和客户端，保留 `_local/data/` 中的数据库与自己的部署配置。
 

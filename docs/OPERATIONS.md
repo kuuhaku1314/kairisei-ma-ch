@@ -73,6 +73,12 @@ BOSS详情按难度配置“单人／组队”和“单人（仅自己的卡组�
 
 备份时正常停止服务，保存完整 `_local/data/` 以及自己的 `cdn.json`、`cdn-sync.json` 和连接设置。不要把玩家数据或填写过密钥的配置放进源码仓库。
 
+## 运营图片同步
+
+Windows／Linux 启动脚本通过 `-cdn-sync-config` 读取运行目录的 `cdn-sync.json`。填写存储上传地址、桶和访问密钥后重启服务，在「维护工具 → 同步运营图片到存储容器」依次检查、同步、启用。公开读取地址来自「运营设置 → 上传图片来源」。游戏资源上传另用 `Sync-CDN.cmd` 或 `Sync-CDN.sh`，详见 [CDN 配置](resources/CDN.md)。
+
+文件缺失或保留未填写的示例时，后台同步功能关闭；配置有误时后台显示原因。上传和启用由后台操作触发。
+
 ## 账号缓存容量
 
 启动前设置环境变量 `KAIRI_ACCOUNT_CACHE_LIMIT` 可调整空闲账号处理器数量，默认32，范围0–4096（0禁用空闲缓存）。Windows启动器和Linux启动脚本均继承此变量；修改后重启服务端生效。PowerShell示例：`$env:KAIRI_ACCOUNT_CACHE_LIMIT='64'`，随后在同一终端启动服务；Linux示例：`KAIRI_ACCOUNT_CACHE_LIMIT=64 sh Start-Server-linux-amd64.sh 192.168.1.100`。

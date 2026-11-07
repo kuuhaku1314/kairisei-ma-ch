@@ -1,4 +1,4 @@
-[CmdletBinding(SupportsShouldProcess)]
+﻿[CmdletBinding(SupportsShouldProcess)]
 param(
     [ValidateNotNullOrEmpty()]
     [string]$AdvertiseHost = '10.0.2.2',
@@ -7,12 +7,14 @@ param(
     [string]$ListenHost = '0.0.0.0',
 
     [ValidateRange(1, 65533)]
-    [int]$Port = 26020,
+    [int]$Port = 26040,
 
     [ValidateRange(5, 120)]
     [int]$ReadinessTimeoutSeconds = 60,
 
     [switch]$DryRun,
+
+    [switch]$IncludeAndroid,
 
     [switch]$ValidationOnly
 )
@@ -86,86 +88,80 @@ function Test-PortAvailable {
 }
 
 $packageRoot = [IO.Path]::GetFullPath($PSScriptRoot)
-$serverPath = Join-Path $packageRoot 'kairi-server.exe'
-$configRoot = Join-Path $packageRoot 'server\config'
-$controlRoot = Join-Path $packageRoot '_local\control\server'
-$resourceRoot = Join-Path $packageRoot '_local\resources'
-$dataRoot = Join-Path $packageRoot '_local\data'
-$deploymentPath = Join-Path $packageRoot 'deployment.json'
-$runRoot = Join-Path $packageRoot ('_local\runtime\server-runs\' + [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ'))
+function Resolve-PackagePath {
+    param([string]$RelativePath)
+    if (-not $RelativePath -or [IO.Path]::IsPathRooted($RelativePath) -or
+        $RelativePath.Contains(':') -or $RelativePath.Contains('\') -or
+        @($RelativePath.Split('/') | Where-Object { $_ -in @('', '.', '..') }).Count) {
+        throw "Invalid package-relative path: $RelativePath"
+    }
+    $path = [IO.Path]::GetFullPath((Join-Path $packageRoot $RelativePath))
+    if (-not $path.StartsWith($packageRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'Path leaves this package.' }
+    Assert-RequiredPath -LiteralPath $path
+    return $path
+}
+$serverPath = Resolve-PackagePath 'kairi-server.exe'
+$deploymentPath = Resolve-PackagePath 'deployment.json'
+$deployment = Get-Content -LiteralPath $deploymentPath -Raw -Encoding UTF8 | ConvertFrom-Json
+if (-not $PSBoundParameters.ContainsKey('AdvertiseHost')) { $AdvertiseHost = [string]$deployment.advertise_host }
+if (-not $PSBoundParameters.ContainsKey('Port')) { $Port = [int]$deployment.port }
+$resourceSetPath = Resolve-PackagePath 'resource-set/resource-set.json'
+if (Test-Path -LiteralPath (Join-Path $packageRoot 'Clean-RetiredResources.ps1')) {
+    $normalization = & (Resolve-PackagePath 'Clean-RetiredResources.ps1') -DryRun:$DryRun -WhatIf:$WhatIfPreference -PassThru
+    if (($DryRun -or $WhatIfPreference) -and $normalization.Found -gt 0) {
+        Write-Host '预览完成；正常启动时将先移除上述退役文件，再校验资源并启动。未启动服务。'
+        return
+    }
+}
+. (Resolve-PackagePath 'Read-ResourceSet.ps1')
+$resourceSet = Read-PortableResourceSet -ManifestPath $resourceSetPath
+if ($resourceSet.Manifest.policy.publishable -ne $true -or $deployment.validation_only) {
+    if (-not $ValidationOnly) { throw 'This test package requires -ValidationOnly; use the packaged launcher.' }
+}
+$resourceSetSHA256 = (Get-FileHash -LiteralPath $resourceSetPath -Algorithm SHA256).Hash.ToLowerInvariant()
+$platformContents = @($deployment.platform_contents | ForEach-Object { Resolve-PackagePath ([string]$_) })
+if ($IncludeAndroid) {
+    $androidProfilePath = Resolve-PackagePath 'platform/android/delivery.json'
+    if ($platformContents -notcontains $androidProfilePath) { $platformContents += $androidProfilePath }
+}
+if ($platformContents.Count -lt 1 -or $platformContents.Count -gt 2) { throw 'Select one or two PC/Android platform deliveries.' }
+$platformHashes = @{}
+foreach ($profilePath in $platformContents) {
+    $platformProfile = Get-Content -LiteralPath $profilePath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $platform = [string]$platformProfile.platform
+    if ($platformProfile.format -ne 1 -or $platform -cnotin @('StandaloneWindows64', 'Android')) { throw 'Expected a PC or Android platform delivery.' }
+    if ($platformHashes.ContainsKey($platform)) { throw "Repeated platform delivery: $platform" }
+    $platformHashes[$platform] = (Get-FileHash -LiteralPath $profilePath -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+# Sort by platform identity so deployment list order does not affect restarts.
+$platformIdentity = ($platformHashes.Keys | Sort-Object | ForEach-Object { "${_}:$($platformHashes[$_])" }) -join "`n"
+$profileHash = [Security.Cryptography.SHA256]::Create()
+try {
+    $platformContentsSHA256 = [BitConverter]::ToString($profileHash.ComputeHash([Text.Encoding]::UTF8.GetBytes($platformIdentity))).Replace('-', '').ToLowerInvariant()
+}
+finally { $profileHash.Dispose() }
+$resourceInputs = $resourceSet.Entrypoints
+$bindings = @{
+    'cn-save-seed'='saveSeedPath'; 'cn-asset-map'='assetMapPath'; 'cn-card-master'='cardMasterPath'
+    'cn-explore-master'='exploreMasterPath'; 'cn-story-master'='storyMasterPath'; 'cn-battle-master'='battleMasterPath'
+    'cn-combat-card-master'='combatCardPath'; 'cn-combat-master-root'='combatMasterRoot'; 'cn-navi-master'='naviMasterPath'
+    'cn-item-master'='itemMasterPath'; 'cn-avatar-master'='avatarMasterPath'; 'cn-gacha-banner'='gachaBannerPath'
+    'cn-five-star-gacha-banner'='fiveStarBannerPath'; 'cn-home-banner'='homeBannerPath'; 'cn-stamp-master'='stampMasterPath'
+    'cn-honor-master'='honorMasterPath'; 'cn-pvp-master'='pvpMasterPath'; 'cn-player-progression'='playerProgressionPath'
+    'cn-login-bonus'='loginBonusPath'; 'cn-cpk-root'='cpkRoot'; 'cn-cpk-aliases'='cpkAliasesPath'; 'cn-image-root'='imageRoot'
+}
+foreach ($name in $bindings.Keys) {
+    if (-not $resourceInputs.ContainsKey($name)) { throw "Missing resource entrypoint: $name" }
+    Set-Variable -Name $bindings[$name] -Value $resourceInputs[$name]
+}
+$dataRoot = Join-Path $packageRoot '_local/data'
+$runRoot = Join-Path $packageRoot ('_local/runtime/server-runs/' + [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ'))
 $statePath = Join-Path $dataRoot 'server-state.json'
-$saveSeedPath = Join-Path $configRoot 'cn602-save-template.json'
 $savePath = Join-Path $dataRoot 'cn602-save.json'
 $saveDatabasePath = Join-Path $dataRoot 'cn602-save-state.sqlite3'
 $requestLogPath = Join-Path $runRoot 'requests.jsonl'
 $stdoutPath = Join-Path $runRoot 'stdout.log'
 $stderrPath = Join-Path $runRoot 'stderr.log'
-$assetMapPath = Join-Path $controlRoot 'cn602-private-derived-avatar-icons-asset-map.json'
-$cardMasterPath = Join-Path $controlRoot 'cn602-card-runtime-master.json'
-$exploreMasterPath = Join-Path $controlRoot 'cn602-explore-runtime-master.json'
-$storyMasterPath = Join-Path $controlRoot 'cn602-story-runtime-master.json'
-$battleMasterPath = Join-Path $controlRoot 'cn602-battle-runtime-master.json'
-$combatCardPath = Join-Path $controlRoot 'cn602-card-master\card.csv'
-$combatMasterRoot = Join-Path $controlRoot 'cn602-battle-master'
-$naviMasterPath = Join-Path $controlRoot 'cn602-navi-runtime-master.json'
-$itemMasterPath = Join-Path $controlRoot 'cn602-item-runtime-master.json'
-$avatarMasterPath = Join-Path $controlRoot 'cn602-avatar-runtime-master.json'
-$gachaBannerPath = Join-Path $resourceRoot 'banners\gacha.png'
-$fiveStarBannerPath = Join-Path $controlRoot 'cn602-gacha-five-star-banner.png'
-$homeBannerPath = Join-Path $resourceRoot 'banners\home.png'
-$stampMasterPath = Join-Path $controlRoot 'cn602-stamp-runtime-master.json'
-$honorMasterPath = Join-Path $controlRoot 'cn602-honor-runtime-master.json'
-$pvpMasterPath = Join-Path $configRoot 'cn602-pvp-runtime.json'
-$playerProgressionPath = Join-Path $configRoot 'cn602-player-progression-runtime.json'
-$loginBonusPath = Join-Path $configRoot 'cn602-login-bonus-runtime.json'
-$cpkRoot = Join-Path $resourceRoot 'cpk'
-$cpkAliasesPath = Join-Path $controlRoot 'cn602-cpk-aliases.json'
-$imageRoot = $null
-$avatarPatchRoot = Join-Path $controlRoot 'cn602-private-derived-avatar-icons'
-$patchRoot = Join-Path $resourceRoot 'patch'
-$resourceSetPath = Join-Path $packageRoot 'resource-set\resource-set.json'
-$resourceSetSHA256 = $null
-$resourceInputs = $null
-if (Test-Path -LiteralPath $deploymentPath -PathType Leaf) {
-    $deployment = Get-Content -LiteralPath $deploymentPath -Raw | ConvertFrom-Json
-    if (-not $PSBoundParameters.ContainsKey('AdvertiseHost') -and
-        $deployment.PSObject.Properties.Name -contains 'advertise_host') {
-        $AdvertiseHost = [string]$deployment.advertise_host
-    }
-    if (-not $PSBoundParameters.ContainsKey('Port') -and
-        $deployment.PSObject.Properties.Name -contains 'port') {
-        $Port = [int]$deployment.port
-    }
-}
-if (Test-Path -LiteralPath $resourceSetPath -PathType Leaf) {
-    if (-not (Test-Path -LiteralPath $deploymentPath -PathType Leaf)) { throw 'Resource-set package needs deployment.json.' }
-    # Runtime identity is derived from the actual manifest, not duplicated in
-    # the editable deployment settings. Used only to detect a running old set.
-    $resourceSetSHA256 = (Get-FileHash -LiteralPath $resourceSetPath -Algorithm SHA256).Hash.ToLowerInvariant()
-    . (Join-Path $packageRoot 'Read-ResourceSet.ps1')
-    $resourceSet = Read-PortableResourceSet -ManifestPath $resourceSetPath
-    if ($resourceSet.Manifest.policy.publishable -ne $true -or $deployment.validation_only) {
-        if (-not $ValidationOnly) {
-            throw 'Candidate package requires -ValidationOnly; use the packaged test launcher or pass the switch explicitly.'
-        }
-    }
-    $resourceInputs = $resourceSet.Entrypoints
-    $bindings = @{
-        'cn-save-seed'='saveSeedPath'; 'cn-asset-map'='assetMapPath'; 'cn-card-master'='cardMasterPath'
-        'cn-explore-master'='exploreMasterPath'; 'cn-story-master'='storyMasterPath'; 'cn-battle-master'='battleMasterPath'
-        'cn-combat-card-master'='combatCardPath'; 'cn-combat-master-root'='combatMasterRoot'; 'cn-navi-master'='naviMasterPath'
-        'cn-item-master'='itemMasterPath'; 'cn-avatar-master'='avatarMasterPath'; 'cn-gacha-banner'='gachaBannerPath'
-        'cn-five-star-gacha-banner'='fiveStarBannerPath'; 'cn-home-banner'='homeBannerPath'; 'cn-stamp-master'='stampMasterPath'
-        'cn-honor-master'='honorMasterPath'; 'cn-pvp-master'='pvpMasterPath'; 'cn-player-progression'='playerProgressionPath'
-        'cn-login-bonus'='loginBonusPath'; 'cn-cpk-root'='cpkRoot'; 'cn-cpk-aliases'='cpkAliasesPath'; 'cn-patch-root'='patchRoot'
-        'cn-image-root'='imageRoot'
-    }
-    foreach ($name in $bindings.Keys) {
-        if (-not $resourceInputs.ContainsKey($name)) { throw "Missing resource entrypoint: $name" }
-        Set-Variable -Name $bindings[$name] -Value $resourceInputs[$name]
-    }
-    $avatarPatchRoot = $patchRoot
-}
 if ($Port -lt 1 -or $Port -gt 65533) {
     throw "Port must be 1 through 65533: $Port"
 }
@@ -175,22 +171,6 @@ $healthURL = "http://127.0.0.1:$Port/healthz"
 $adminHealthURL = "http://127.0.0.1:$adminPort/api/health"
 
 $AdvertiseHost = Assert-AdvertiseHost -Address $AdvertiseHost
-foreach ($path in @(
-    $serverPath, $saveSeedPath, $assetMapPath, $cardMasterPath, $exploreMasterPath,
-    $storyMasterPath, $battleMasterPath, $combatCardPath, $naviMasterPath,
-    $itemMasterPath, $avatarMasterPath, $gachaBannerPath, $fiveStarBannerPath,
-    $homeBannerPath, $stampMasterPath, $honorMasterPath, $pvpMasterPath,
-    $playerProgressionPath, $loginBonusPath, $cpkAliasesPath
-)) {
-    Assert-RequiredPath -LiteralPath $path
-}
-foreach ($path in @($combatMasterRoot, $cpkRoot, $avatarPatchRoot, $patchRoot)) {
-    Assert-RequiredPath -LiteralPath $path -PathType Container
-}
-if ($null -ne $imageRoot) {
-    Assert-RequiredPath -LiteralPath $imageRoot -PathType Container
-}
-
 if (Test-Path -LiteralPath $statePath -PathType Leaf) {
     $oldState = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
     if ($null -ne $oldState.process_id -and [int]$oldState.process_id -gt 0) {
@@ -204,7 +184,9 @@ if (Test-Path -LiteralPath $statePath -PathType Leaf) {
                     $oldState.advertise_host -ne $AdvertiseHost -or
                     ($null -ne $resourceInputs -and
                      ($oldState.PSObject.Properties.Name -notcontains 'resource_set_sha256' -or
-                      $oldState.resource_set_sha256 -ne $resourceSetSHA256))) {
+                      $oldState.resource_set_sha256 -ne $resourceSetSHA256)) -or
+                    ($oldState.PSObject.Properties.Name -notcontains 'platform_contents_sha256') -or
+                    ([string]$oldState.platform_contents_sha256 -ne $platformContentsSHA256)) {
                     throw 'Running package uses different resources or network settings; stop it before restarting.'
                 }
                 [ordered]@{
@@ -221,19 +203,16 @@ if (Test-Path -LiteralPath $statePath -PathType Leaf) {
     }
 }
 
-foreach ($candidatePort in @($Port, $battlePort, $adminPort)) {
-    if (-not (Test-PortAvailable -CandidatePort $candidatePort)) {
-        throw "TCP port $candidatePort is already in use. No existing process was stopped."
-    }
-}
 
 $arguments = [Collections.Generic.List[string]]::new()
 $cdnConfigPath = Join-Path $packageRoot 'cdn.json'
 if (Test-Path -LiteralPath $cdnConfigPath -PathType Leaf) {
     Add-NativeArgument -List $arguments -Name '-cdn-config' -Value $cdnConfigPath
 }
+Add-NativeArgument -List $arguments -Name '-cdn-sync-config' -Value (Join-Path $packageRoot 'cdn-sync.json')
 Add-NativeArgument -List $arguments -Name '-client-profile' -Value 'cn602-bootstrap'
 Add-NativeArgument -List $arguments -Name '-request-log' -Value $requestLogPath
+Add-NativeArgument -List $arguments -Name '-admin-log-file' -Value $stdoutPath
 Add-NativeArgument -List $arguments -Name '-cn-save-path' -Value $savePath
 Add-NativeArgument -List $arguments -Name '-cn-save-seed' -Value $saveSeedPath
 Add-NativeArgument -List $arguments -Name '-cn-asset-map' -Value $assetMapPath
@@ -259,9 +238,8 @@ Add-NativeArgument -List $arguments -Name '-cn-cpk-aliases' -Value $cpkAliasesPa
 if ($null -ne $imageRoot) {
     Add-NativeArgument -List $arguments -Name '-cn-image-root' -Value $imageRoot
 }
-Add-NativeArgument -List $arguments -Name '-cn-patch-root' -Value $patchRoot
-if ($null -eq $resourceInputs) {
-    Add-NativeArgument -List $arguments -Name '-cn-patch-root' -Value $avatarPatchRoot
+foreach ($profilePath in $platformContents) {
+    Add-NativeArgument -List $arguments -Name '-platform-content' -Value $profilePath
 }
 Add-NativeArgument -List $arguments -Name '-listen-host' -Value $ListenHost
 Add-NativeArgument -List $arguments -Name '-advertise-host' -Value $AdvertiseHost
@@ -277,17 +255,25 @@ $preview = [ordered]@{
     action = 'START_PORTABLE_CN602_SERVER'
     executable = $serverPath
     resource_set_sha256 = $resourceSetSHA256
+    platform_contents_sha256 = $platformContentsSHA256
     advertise_host = $AdvertiseHost
     listen_host = $ListenHost
     port = $Port
     battle_port = $battlePort
     admin_port = $adminPort
     save_path = $saveDatabasePath
+    arguments = $arguments.ToArray()
     fresh_save_created_on_first_run = -not (Test-Path -LiteralPath $saveDatabasePath -PathType Leaf)
 }
 if ($DryRun -or -not $PSCmdlet.ShouldProcess($serverPath, 'Start portable local server')) {
     $preview | ConvertTo-Json -Depth 4
     return
+}
+
+foreach ($candidatePort in @($Port, $battlePort, $adminPort)) {
+    if (-not (Test-PortAvailable -CandidatePort $candidatePort)) {
+        throw "TCP port $candidatePort is already in use. No existing process was stopped."
+    }
 }
 
 New-Item -ItemType Directory -Path $dataRoot -Force | Out-Null
@@ -308,6 +294,7 @@ $process = Start-Process `
 [ordered]@{
     schema_version = 1; status = 'STARTING'; process_id = [int]$process.Id
     executable = $serverPath; shutdown_event = $shutdownEvent
+    listen_host = $ListenHost; resource_set_sha256 = $resourceSetSHA256; platform_contents_sha256 = $platformContentsSHA256
     port = $Port; battle_port = $battlePort; admin_port = $adminPort; advertise_host = $AdvertiseHost
     stdout_path = $stdoutPath; stderr_path = $stderrPath
 } | ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding UTF8
@@ -361,6 +348,7 @@ $state = [ordered]@{
     shutdown_event = $shutdownEvent
     executable = $serverPath
     resource_set_sha256 = $resourceSetSHA256
+    platform_contents_sha256 = $platformContentsSHA256
     executable_sha256 = (Get-FileHash -LiteralPath $serverPath -Algorithm SHA256).Hash.ToLowerInvariant()
     started_utc = [DateTime]::UtcNow.ToString('o')
     advertise_host = $AdvertiseHost

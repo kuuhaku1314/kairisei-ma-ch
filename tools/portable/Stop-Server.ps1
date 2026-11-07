@@ -1,4 +1,4 @@
-[CmdletBinding(SupportsShouldProcess)]
+﻿[CmdletBinding(SupportsShouldProcess)]
 param([switch]$DryRun)
 
 Set-StrictMode -Version Latest
@@ -21,7 +21,7 @@ if ($null -eq $state.process_id -or [int]$state.process_id -le 0) {
 
 $process = Get-Process -Id ([int]$state.process_id) -ErrorAction SilentlyContinue
 if ($null -eq $process) {
-    if ($PSCmdlet.ShouldProcess($statePath, 'Record already stopped portable server')) {
+    if (-not $DryRun -and $PSCmdlet.ShouldProcess($statePath, 'Record already stopped portable server')) {
         $state.status = 'STOPPED'
         $state | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $statePath -Encoding UTF8
     }

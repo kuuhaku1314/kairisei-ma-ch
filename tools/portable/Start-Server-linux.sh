@@ -8,14 +8,14 @@ case "$ARCH" in amd64|arm64) shift ;; *) echo 'Unsupported server architecture.'
 
 usage() {
     echo "Usage: sh Start-Server-linux-$ARCH.sh <server IPv4 or DNS host> [port] [--dry-run]"
-    echo 'Example: sh Start-Server-linux-amd64.sh 192.168.2.149 26020'
+    echo 'Example: sh Start-Server-linux-amd64.sh 192.168.2.149 26040'
     echo 'Admin stays on 127.0.0.1 at port + 2. Stop with Ctrl+C or SIGTERM.'
 }
 if [ "$#" -eq 0 ]; then usage; exit 2; fi
 if [ "$1" = '--help' ]; then usage; exit 0; fi
 ADVERTISE_HOST=$1
 shift
-PORT=26020
+PORT=26040
 if [ "$#" -gt 0 ] && [ "$1" != '--dry-run' ]; then PORT=$1; shift; fi
 DRY_RUN=false
 if [ "$#" -gt 0 ] && [ "$1" = '--dry-run' ]; then DRY_RUN=true; shift; fi
@@ -62,7 +62,15 @@ SERVER="$ROOT/kairi-server-linux-$ARCH"
 if [ ! -f "$SERVER" ] || [ ! -f server-arguments.sh ]; then
     echo 'Incomplete package. Extract all release files first.' >&2; exit 1
 fi
+if [ -e "$ROOT/Clean-RetiredResources.sh" ] || [ -L "$ROOT/Clean-RetiredResources.sh" ]; then
+    if [ "$DRY_RUN" = true ]; then
+        sh "$ROOT/Clean-RetiredResources.sh" --dry-run
+    else
+        sh "$ROOT/Clean-RetiredResources.sh"
+    fi
+fi
 . "$ROOT/server-arguments.sh"
+set -- "$@" -cdn-sync-config "$ROOT/cdn-sync.json"
 if [ "$DRY_RUN" = true ]; then
     echo 'Dry run: no server started and no account data written.'
     printf '%s\n' "$SERVER" "$@"
@@ -72,6 +80,10 @@ mkdir -p "$ROOT/_local/data" "$ROOT/_local/runtime"
 # The request recorder appends to an existing file. Preserve previous requests.
 : >> "$ROOT/_local/runtime/requests.jsonl"
 chmod u+x "$SERVER"
+mkdir -p "$ROOT/_local/runtime/server-runs"
+run_dir=$(mktemp -d "$ROOT/_local/runtime/server-runs/run.XXXXXXXX")
+runtime_log="$run_dir/stdout.log"
 echo "Starting Linux $ARCH server at http://$ADVERTISE_HOST:$PORT"
 echo "Admin: http://127.0.0.1:$ADMIN_PORT/ ; Ctrl+C/SIGTERM stops gracefully."
-exec "$SERVER" "$@"
+echo "Runtime log: $runtime_log"
+exec "$SERVER" "$@" -admin-log-file "$runtime_log" > "$runtime_log"

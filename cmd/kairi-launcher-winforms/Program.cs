@@ -87,8 +87,8 @@ namespace KairiseiLauncher
         private Button startButton;
         private Button stopButton;
         private Button adminButton;
-        private string packagedHost = "10.0.2.2";
-        private int packagedPort = 26020;
+        private string packagedHost = "127.0.0.1";
+        private int packagedPort = 26040;
         private bool validationOnly;
         private bool busy;
         private bool refreshing;
@@ -115,7 +115,7 @@ namespace KairiseiLauncher
 
         private void BuildUI()
         {
-            Text = "乖离性百万亚瑟王 · 服务端启动器";
+            Text = "乖离性MA · 服务端启动器";
             StartPosition = FormStartPosition.CenterScreen;
             ClientSize = new Size(1040, 675);
             MinimumSize = new Size(1056, 714);
@@ -136,13 +136,13 @@ namespace KairiseiLauncher
             header.Controls.Add(iconBox);
             header.Controls.Add(new Label
             {
-                Text = "乖离性百万亚瑟王",
+                Text = "乖离性MA",
                 Location = new Point(116, 20), AutoSize = true,
                 Font = new Font("Microsoft YaHei UI", 20F, FontStyle.Bold), ForeColor = Navy
             });
             header.Controls.Add(new Label
             {
-                Text = "国服本地服务 · Windows x64",
+                Text = "Windows x64",
                 Location = new Point(119, 78), AutoSize = true,
                 ForeColor = Muted
             });
@@ -181,7 +181,7 @@ namespace KairiseiLauncher
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 Location = new Point(160, 31), Size = new Size(260, 34)
             };
-            mode.Items.AddRange(new object[] { "Android 模拟器", "局域网", "公网 IP / 域名" });
+            mode.Items.AddRange(new object[] { "本机", "局域网", "公网 IP / 域名" });
             mode.SelectedIndex = 0;
             mode.SelectedIndexChanged += delegate { ApplyMode(); };
             settings.Controls.Add(mode);
@@ -189,7 +189,7 @@ namespace KairiseiLauncher
             address = new ComboBox
             {
                 DropDownStyle = ComboBoxStyle.DropDown,
-                Location = new Point(160, 78), Size = new Size(215, 34), Text = "10.0.2.2"
+                Location = new Point(160, 78), Size = new Size(215, 34), Text = "127.0.0.1"
             };
             address.TextChanged += delegate { UpdateClientConfig(); };
             settings.Controls.Add(address);
@@ -200,7 +200,7 @@ namespace KairiseiLauncher
             port = new NumericUpDown
             {
                 Location = new Point(160, 125), Size = new Size(140, 34),
-                Minimum = 1, Maximum = 65533, Value = 26020
+                Minimum = 1, Maximum = 65533, Value = 26040
             };
             port.ValueChanged += delegate { UpdateClientConfig(); };
             settings.Controls.Add(port);
@@ -228,7 +228,7 @@ namespace KairiseiLauncher
             actions.Controls.AddRange(new Control[] { startButton, stopButton, adminButton, logsButton });
             endpoints = new Label
             {
-                Text = "游戏 26020  ·  战斗 26021  ·  Admin 127.0.0.1:26022",
+                Text = "游戏 26040  ·  战斗 26041  ·  Admin 127.0.0.1:26042",
                 Location = new Point(23, 93), Size = new Size(800, 25), ForeColor = Muted
             };
             actions.Controls.Add(endpoints);
@@ -314,7 +314,6 @@ namespace KairiseiLauncher
                 packagedHost = parsed;
                 packagedPort = defaults.port;
                 validationOnly = defaults.validation_only;
-                if (validationOnly) Text += " · 测试包";
                 RestoreDeploymentDefaults();
             }
             catch { }
@@ -324,9 +323,7 @@ namespace KairiseiLauncher
         {
             var host = NormalizeHost(packagedHost);
             if (host == null) return;
-            var parsed = ParseIPv4(host);
-            mode.SelectedIndex = host == "10.0.2.2"
-                ? 0 : parsed != null && IsPrivate(parsed) ? 1 : 2;
+            mode.SelectedIndex = ModeForHost(host);
             address.Text = host;
             port.Value = Math.Max(port.Minimum, Math.Min(port.Maximum, packagedPort));
             UpdateClientConfig();
@@ -340,19 +337,26 @@ namespace KairiseiLauncher
                 (bytes[0] == 192 && bytes[1] == 168));
         }
 
+        private static int ModeForHost(string host)
+        {
+            var parsed = ParseIPv4(host);
+            if (host == "localhost" || (parsed != null && IPAddress.IsLoopback(parsed))) return 0;
+            return parsed != null && IsPrivate(parsed) ? 1 : 2;
+        }
+
         private void ApplyMode()
         {
             if (mode.SelectedIndex == 0)
             {
-                address.Text = "10.0.2.2";
+                address.Text = "127.0.0.1";
                 address.Enabled = false;
-                hint.Text = "适用于本机 Android 模拟器。\r\n客户端默认地址就是 10.0.2.2，无需改 APK。";
+                hint.Text = "供同一台电脑上的 PC 客户端连接。\r\n客户端填写 127.0.0.1 和下方主端口。";
             }
             else if (mode.SelectedIndex == 1)
             {
                 address.Enabled = true;
                 var current = ParseIPv4(address.Text);
-                if (NormalizeHost(address.Text) == null || (current != null && current.ToString() == "10.0.2.2"))
+                if (NormalizeHost(address.Text) == null || (current != null && IPAddress.IsLoopback(current)) || address.Text == "localhost")
                     address.Text = address.Items.Count > 0 ? address.Items[0].ToString() : "192.168.1.100";
                 hint.Text = "填写客户端可访问的 IPv4 或域名，支持虚拟局域网及内网穿透。\r\n需放行或映射 TCP 主端口和战斗端口。";
             }
@@ -490,9 +494,7 @@ namespace KairiseiLauncher
                     var runningHost = NormalizeHost(state.advertise_host);
                     if (runningHost != null)
                     {
-                        var runningAddress = ParseIPv4(runningHost);
-                        mode.SelectedIndex = runningHost == "10.0.2.2"
-                            ? 0 : runningAddress != null && IsPrivate(runningAddress) ? 1 : 2;
+                        mode.SelectedIndex = ModeForHost(runningHost);
                         address.Text = runningHost;
                     }
                 }
@@ -511,7 +513,7 @@ namespace KairiseiLauncher
             stopButton.Enabled = !value && latestState != null;
             adminButton.Enabled = latestState != null && latestState.IsReady;
             mode.Enabled = !value;
-            address.Enabled = !value;
+            address.Enabled = !value && mode.SelectedIndex != 0;
             port.Enabled = !value;
         }
 

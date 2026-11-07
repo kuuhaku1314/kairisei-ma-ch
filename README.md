@@ -116,7 +116,7 @@ KAIRI_ACCOUNT_CACHE_LIMIT=256 sh Start-Server-linux-amd64.sh 192.168.1.100 26040
 
 | 系统 | 启动入口 |
 | --- | --- |
-| Windows x64 | `Start-Server.cmd`，默认模拟器配置；手机连接建议使用图形启动器 |
+| Windows x64 | `Start-Server.cmd`，使用 `deployment.json` 中的连接设置；也可使用图形启动器 |
 | Linux x64 / x86_64 | `sh Start-Server-linux-amd64.sh 服务器IPv4 26040` |
 | Linux ARM64 / aarch64 | `sh Start-Server-linux-arm64.sh 服务器IPv4 26040` |
 
