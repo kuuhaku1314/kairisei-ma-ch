@@ -108,7 +108,7 @@ func (s *Account) TeamBattleEntryRulesForBoss(bossID int) (TeamBattleEntryRules,
 }
 
 func (s *Account) teamBattleEntryRulesForBossLocked(bossID int, catalog *battleCatalogState) (TeamBattleEntryRules, bool) {
-	if s.disabledTeamBattleBossIDs[bossID] {
+	if s.battlePublicationDisabledBossesLocked()[bossID] {
 		return TeamBattleEntryRules{}, false
 	}
 	if rules, found := catalog.entryRules(bossID); found {

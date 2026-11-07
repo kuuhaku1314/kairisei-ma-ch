@@ -319,17 +319,17 @@ func (s *Account) FinishCardFameTraining(uniqueID int64, now time.Time) (cardFam
 	}, nil
 }
 
-func (s *Account) HowToGetCards(cardIDs []int, profiles []gamestate.TeamBattleRewardProfile, allowedGroups map[int]struct{}) ([]howToGetCardList, error) {
-	return s.howToGetCards(cardIDs, profiles, allowedGroups, false)
+func (s *Account) HowToGetCards(cardIDs []int, profiles []gamestate.TeamBattleRewardProfile, policy CardSourcePolicy) ([]howToGetCardList, error) {
+	return s.howToGetCards(cardIDs, profiles, policy, false)
 }
 
 // HowToGetMissingCards supplies the native clear-deck missing-card list. The
 // ordinary detail query still returns acquisition sources for owned cards too.
-func (s *Account) HowToGetMissingCards(cardIDs []int, profiles []gamestate.TeamBattleRewardProfile, allowedGroups map[int]struct{}) ([]howToGetCardList, error) {
-	return s.howToGetCards(cardIDs, profiles, allowedGroups, true)
+func (s *Account) HowToGetMissingCards(cardIDs []int, profiles []gamestate.TeamBattleRewardProfile, policy CardSourcePolicy) ([]howToGetCardList, error) {
+	return s.howToGetCards(cardIDs, profiles, policy, true)
 }
 
-func (s *Account) howToGetCards(cardIDs []int, profiles []gamestate.TeamBattleRewardProfile, allowedGroups map[int]struct{}, missingOnly bool) ([]howToGetCardList, error) {
+func (s *Account) howToGetCards(cardIDs []int, profiles []gamestate.TeamBattleRewardProfile, policy CardSourcePolicy, missingOnly bool) ([]howToGetCardList, error) {
 	if len(cardIDs) == 0 || len(cardIDs) > 64 {
 		return nil, errors.New("card acquisition query is empty or too large")
 	}
@@ -370,10 +370,10 @@ func (s *Account) howToGetCards(cardIDs []int, profiles []gamestate.TeamBattleRe
 	if len(requested) == 0 {
 		return result, nil
 	}
-	if err := s.battleCardSourcesLocked(profiles, allowedGroups, sources); err != nil {
+	if err := s.battleCardSourcesLocked(profiles, policy.BattleGroups, sources); err != nil {
 		return nil, err
 	}
-	s.gachaCardSourcesLocked(sources)
+	s.gachaCardSourcesLocked(sources, policy.GachaPublished)
 	s.exchangeCardSourcesLocked(sources)
 	s.missionCardSourcesLocked(sources)
 	for _, transition := range s.cardActions.EvolutionTransitions {

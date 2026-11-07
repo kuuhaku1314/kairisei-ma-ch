@@ -954,7 +954,7 @@ func (s *Account) TeamBattleSoloState() json.RawMessage {
 			return projected
 		}
 	}
-	return filterBattleCatalog(append(json.RawMessage(nil), s.teamBattleSolo.saved()...), s.disabledTeamBattleBossIDs)
+	return filterBattleCatalog(append(json.RawMessage(nil), s.teamBattleSolo.saved()...), s.battlePublicationDisabledBossesLocked())
 }
 
 // TeamBattleCatalog gives protocol adapters a request-owned view without an
@@ -976,7 +976,7 @@ func (s *Account) teamBattleCatalogLocked() (*TeamBattleCatalog, error) {
 	if err := catalog.project(s.stageQuests, s.teamBattleLimitedGroupIDs, tutorialNormalQuest, tutorialActivity); err != nil {
 		return nil, err
 	}
-	catalog.filterDisabled(s.disabledTeamBattleBossIDs)
+	catalog.filterDisabled(s.battlePublicationDisabledBossesLocked())
 	return catalog, nil
 }
 

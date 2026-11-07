@@ -344,6 +344,8 @@ func New(config Config) (http.Handler, error) {
 	router.Get("/api/evolution-policy", admin.evolutionEditor)
 	router.Put("/api/evolution-policy", admin.saveEvolutionPolicy)
 	router.Get("/api/player-policy", admin.playerPolicy)
+	router.Get("/api/popup-announcements", admin.popupAnnouncements)
+	router.Post("/api/popup-announcements", admin.popupAnnouncementAction)
 	router.Get("/api/player-policy/notice-preview", admin.operations.LocalNotice)
 	router.Put("/api/player-policy", admin.savePlayerPolicy)
 	router.Get("/player-policy.js", func(w http.ResponseWriter, _ *http.Request) {
@@ -361,11 +363,12 @@ func New(config Config) (http.Handler, error) {
 		"/admin.js": adminJS, "/accounts.js": adminAccountsJS, "/mail.js": adminMailJS, "/settings.js": adminSettingsJS,
 		"/evolution.js": adminEvolutionJS, "/insights.js": adminInsightsJS, "/kit.js": adminKitJS, "/missions.js": adminMissionsJS,
 		"/gift-codes.js": adminGiftCodesJS, "/pool-rules.js": adminPoolRulesJS, "/maintenance-history.js": adminMaintenanceHistoryJS,
-		"/image-sync.js":   adminImageSyncJS,
-		"/access.js":       adminAccessJS,
-		"/runtime-logs.js": adminRuntimeLogsJS,
-		"/pool-gifts.js":   adminPoolGiftsJS,
-		"/admin.css":       adminCSS, "/editors.css": adminEditorsCSS,
+		"/image-sync.js":          adminImageSyncJS,
+		"/access.js":              adminAccessJS,
+		"/runtime-logs.js":        adminRuntimeLogsJS,
+		"/pool-gifts.js":          adminPoolGiftsJS,
+		"/popup-announcements.js": adminPopupAnnouncementsJS,
+		"/admin.css":              adminCSS, "/editors.css": adminEditorsCSS,
 	} {
 		router.Get(path, func(w http.ResponseWriter, _ *http.Request) {
 			contentType := "text/javascript; charset=utf-8"

@@ -20,6 +20,7 @@ import (
 )
 
 type API struct {
+	popupAnnouncements  []game.PopupAnnouncement
 	homeBanners         operations.HomeBannerConfiguration
 	giftCodes           game.GiftCodeRepository
 	requestRejected     bool // Protected by the account coordinator, like all per-request mutations.

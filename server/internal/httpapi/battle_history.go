@@ -186,10 +186,10 @@ func (a *API) clearDeckMetadata(r *http.Request, decks []gamestate.BattleClearDe
 		cardIDs = append(cardIDs, id)
 	}
 	sort.Ints(cardIDs)
-	groups, _ := r.Context().Value(cardAcquisitionGroupsKey{}).(map[int]struct{})
+	policy := cardSourcePolicy(r)
 	how := []any{}
 	for start := 0; start < len(cardIDs); start += 64 {
-		lists, err := a.account.HowToGetMissingCards(cardIDs[start:min(start+64, len(cardIDs))], a.initialState.TeamBattleRewards, groups)
+		lists, err := a.account.HowToGetMissingCards(cardIDs[start:min(start+64, len(cardIDs))], a.initialState.TeamBattleRewards, policy)
 		if err != nil {
 			return nil, nil, err
 		}

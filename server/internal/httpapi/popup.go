@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"kairisei.local/server/internal/gamestate"
 	"net/http"
 )
 
@@ -13,7 +14,14 @@ func (a *API) popupExec(writer http.ResponseWriter, request *http.Request) {
 		a.writeStoreError(writer, err)
 		return
 	}
-	if err := a.account.AcknowledgePopup(a.initialState.PopupProfile, payload.PopupID, payload.IsSystem); err != nil {
+	profile := gamestate.PopupProfile{}
+	for _, publication := range a.popupAnnouncements {
+		if publication.ID == payload.PopupID {
+			profile = publication.Profile()
+			break
+		}
+	}
+	if err := a.account.AcknowledgePopup(profile, payload.PopupID, payload.IsSystem); err != nil {
 		a.writeStoreError(writer, err)
 		return
 	}

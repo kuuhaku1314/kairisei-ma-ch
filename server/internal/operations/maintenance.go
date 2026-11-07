@@ -90,6 +90,19 @@ func (o *Runtime) AdmitGameRequest() (func(), bool) {
 
 var ErrMaintenanceConflict = errors.New("维护状态已变化或有任务正在进行，请刷新后重试")
 
+// A small configuration deletion enters through the ordinary Admin mutation
+// middleware, so one active Admin request is its own. Keep the gate locked
+// through commit: maintenance cannot end or another job begin in between.
+func (o *Runtime) WithMaintenanceMutation(work func() error) error {
+	m := &o.maintenance
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.state.Enabled || m.state.Busy || m.state.GameRequests != 0 || m.state.AdminRequests > 1 {
+		return ErrMaintenanceConflict
+	}
+	return work()
+}
+
 func (o *Runtime) AdmitAdminMutation() (func(), bool) {
 	m := &o.maintenance
 	m.mu.Lock()

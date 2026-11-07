@@ -117,7 +117,6 @@ type storyRuntimeMaster struct {
 	EventMappings            []storyEventMapping         `json:"event_mappings"`
 	RewardPolicy             gamestate.StoryRewardPolicy `json:"reward_policy"`
 	EventPageProfile         gamestate.EventPageProfile  `json:"event_page_profile"`
-	PopupProfile             gamestate.PopupProfile      `json:"popup_profile"`
 	StoryBattles             storyBattleCatalog          `json:"story_battles"`
 	NormalStoryCount         int                         `json:"normal_story_count"`
 	CNStoryCount             int                         `json:"cn_story_count"`
@@ -216,16 +215,6 @@ func validateStoryRuntimeMaster(master storyRuntimeMaster) error {
 		if !found {
 			return errors.New("CN permanent event replay has no complete story")
 		}
-	}
-	popup := master.PopupProfile
-	if popup.PopupID != 602000001 || popup.PopupType != 7 || popup.Priority <= 0 ||
-		popup.IsSPView != 0 || popup.BannerURL != "" || popup.OpenURL != "" ||
-		popup.TitleText == "" || popup.BodyText == "" || popup.ButtonText == "" ||
-		popup.Destination != "" || popup.IsSystem != 1 || popup.ItemLineup == nil ||
-		popup.Gacha == nil || popup.Mission == nil || popup.ItemIcon == nil ||
-		len(popup.ItemLineup) != 0 || len(popup.Gacha) != 0 || len(popup.Mission) != 0 ||
-		len(popup.ItemIcon) != 0 || popup.Evidence != "PLACEHOLDER_LOCAL_INFORMATION" {
-		return errors.New("CN story runtime local popup profile is invalid")
 	}
 	if normalCount != master.NormalStoryCount ||
 		cnCount != master.CNStoryCount ||
@@ -804,11 +793,6 @@ func ApplyStoryRuntimeMaster(state *gamestate.State, master storyRuntimeMaster) 
 	state.EventPageProfile = master.EventPageProfile
 	state.EventPageProfile.ItemIDs = append([]int{}, master.EventPageProfile.ItemIDs...)
 	state.EventPageProfile.Buttons = append([]gamestate.EventPageButton{}, master.EventPageProfile.Buttons...)
-	state.PopupProfile = master.PopupProfile
-	state.PopupProfile.ItemLineup = append([]any{}, master.PopupProfile.ItemLineup...)
-	state.PopupProfile.Gacha = append([]any{}, master.PopupProfile.Gacha...)
-	state.PopupProfile.Mission = append([]any{}, master.PopupProfile.Mission...)
-	state.PopupProfile.ItemIcon = append([]any{}, master.PopupProfile.ItemIcon...)
 	state.Story.StoryBattleIDs = append([]int(nil), master.StoryBattles.OfficialIDs...)
 	state.Story.StoryBattleReferences = make([]gamestate.StoryBattleReference, len(master.StoryBattles.References))
 	for index, reference := range master.StoryBattles.References {

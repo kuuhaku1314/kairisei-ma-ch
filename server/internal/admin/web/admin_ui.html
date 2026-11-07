@@ -686,14 +686,35 @@
     <!-- 公告与奖励 -->
     <section class="view" id="player-policy">
       <div class="view-alert" role="alert" hidden></div>
-      <nav class="section-nav sticky" aria-label="本页分区"><a href="#pp-notice">游戏公告</a><a href="#pp-banners">首页轮播</a><a href="#pp-mail">新手毕业邮件</a><a href="#pp-story">剧情首通</a><a href="#pp-login">签到奖励</a><a href="#pp-navi">看板购买</a><span class="hint">整页一次保存，保存后生效并在重启后保留；签到与剧情保留领取进度。</span></nav>
-      <div class="panel" id="pp-notice"><div class="panel-head"><h2>游戏公告</h2><a href="/api/player-policy/notice-preview" target="_blank" rel="noopener">查看已发布公告 ↗</a></div><div class="panel-body">
+      <nav class="section-nav sticky" aria-label="本页分区"><a href="#pp-notice">游戏公告</a><a href="#pp-popups">首页弹窗</a><a href="#pp-banners">首页轮播</a><a href="#pp-mail">新手毕业邮件</a><a href="#pp-story">剧情首通</a><a href="#pp-login">签到奖励</a><a href="#pp-navi">看板购买</a><span class="hint">首页弹窗公告单独发布；其余分区整页一次保存，保存后生效并在重启后保留；签到与剧情保留领取进度。</span></nav>
+      <div class="panel" id="pp-notice"><div class="panel-head"><div><h2>游戏公告</h2><span class="hint">玩家在游戏里点「公告」时打开的页面，不会自动弹出。</span></div><a href="/api/player-policy/notice-preview" target="_blank" rel="noopener">查看已发布公告 ↗</a></div><div class="panel-body">
         <label class="switch"><input id="player-notice-enabled" type="checkbox"><span>显示公告内容</span></label>
         <div class="form-grid three"><div class="field"><label for="player-notice-title">标题</label><input id="player-notice-title" maxlength="80"></div><div class="field"><label for="player-notice-start">开始显示（本机时区，留空立即）</label><input id="player-notice-start" type="datetime-local"></div><div class="field"><label for="player-notice-end">结束显示（留空不限）</label><input id="player-notice-end" type="datetime-local"></div></div>
         <p class="hint" id="player-notice-schedule"></p>
         <div class="field"><label for="player-notice-body">正文（纯文字，支持换行）</label><textarea id="player-notice-body" maxlength="8000" rows="6"></textarea></div>
         <p class="hint">关闭时公告页显示“暂无公告”，游戏入口保留。</p>
       </div></div>
+      <div class="panel" id="pp-popups">
+        <div class="panel-head">
+          <div><h2>首页弹窗公告</h2><span class="hint">玩家到首页时自动弹出，不用点「公告」。完成全部新手任务后，登录或回到首页时按发布顺序逐条弹出，每位玩家确认后不再弹出。单独发布，不随整页保存。</span></div>
+          <span class="pill" id="popup-count"></span>
+        </div>
+        <div class="panel-body pa-body">
+          <div class="pa-ws">
+            <aside class="pa-list" aria-label="首页弹窗公告">
+              <div class="pa-list-head">
+                <input id="popup-search" class="search" type="search" placeholder="搜索标题或编号" aria-label="搜索首页弹窗公告">
+                <button class="primary sm" id="popup-new" type="button" disabled><svg class="icon"><use href="#i-plus"/></svg>新建</button>
+              </div>
+              <div class="pa-items" id="popup-list"></div>
+            </aside>
+            <div class="pa-main">
+              <div id="popup-alert"></div>
+              <div class="pa-editor" id="popup-editor"></div>
+            </div>
+          </div>
+        </div>
+      </div>
       <div class="panel" id="pp-banners">
         <div class="panel-head">
           <div><h2>首页轮播</h2><span class="hint">按列表顺序每 5.5 秒轮换；保存整页后，玩家下次回到首页或重新登录时生效。</span></div>
@@ -917,6 +938,16 @@
             <div id="history-report" class="mt-report" aria-live="polite"></div>
           </div>
         </article>
+        <article class="panel mt-tool" id="maintenance-popup-tool">
+          <div class="panel-head"><div><h2>清理首页弹窗公告</h2><span class="hint">删除不再需要的草稿、已停用和已过期的首页弹窗公告，控制公告列表长度。内容不备份，删除后不能恢复；玩家的已读记录不变，已用过的编号不会再分配。</span></div><span class="mt-lock">需先开启维护</span></div>
+          <div class="panel-body">
+            <div class="pc-now" id="popup-cleanup-now"></div>
+            <div class="toolbar"><button class="secondary sm" id="popup-cleanup-all" type="button">选择全部可清理</button><button class="secondary sm" id="popup-cleanup-none" type="button">全不选</button></div>
+            <div class="hc-bosses pc-list" id="popup-cleanup-list"></div>
+            <ol class="mt-steps"><li><span>选择</span><b id="popup-cleanup-picked">未选择</b></li><li><span>执行</span><button class="danger" id="popup-cleanup-apply" type="button" disabled>删除所选公告</button></li><li><button class="ghost sm" id="popup-cleanup-refresh" type="button"><svg class="icon"><use href="#i-refresh"/></svg>刷新列表</button></li></ol>
+            <div id="popup-cleanup-report" class="mt-report" aria-live="polite"></div>
+          </div>
+        </article>
         <article class="panel mt-tool" id="maintenance-state-tool">
           <div class="panel-head"><div><h2>清理无引用运营状态</h2><span class="hint">只清理已没有任何配置引用的抽取／自选／每日免费记录及商店、兑换限额。过期、停用、草稿与回收站中的配置仍保留计数；卡牌、货币、奖励领取和战斗进度不参与。</span></div><span class="mt-lock">需先开启维护</span></div>
           <div class="panel-body"><ol class="mt-steps"><li><span>预览</span><button class="secondary" id="maintenance-preview" type="button" disabled>预览可清理状态</button></li><li><span>执行</span><button class="danger" id="maintenance-apply" type="button" disabled>备份并清理</button></li></ol>
@@ -941,7 +972,7 @@
     <section class="view" id="audit">
       <div class="view-alert" role="alert" hidden></div>
       <div class="panel"><div class="panel-body">
-        <div class="filterbar"><input id="audit-search" class="search" type="search" placeholder="搜索玩家 ID、批次编号或操作内容"><select id="audit-operation" aria-label="操作类型"><option value="">所有操作</option><option value="mail-delivery">批量赠礼</option><option value="account-mail">单封赠礼</option><option value="account-mail-delete">删除玩家邮件</option><option value="account-grant">资源与进度调整</option><option value="account-credentials-admin">账号绑定／密码</option><option value="account-unbind">解除绑定</option><option value="boss-policy">BOSS发布</option><option value="boss-rules">BOSS难度规则</option><option value="boss-drops">BOSS掉落</option><option value="activity-rewards">圣剑杯与探索</option><option value="exchange-shops">兑换所</option><option value="item-shop">道具商店</option><option value="gacha-policy">扭蛋发布</option><option value="gacha-draft">卡池草稿</option><option value="gacha-live">卡池发布</option><option value="gacha-custom">新建／删除卡池</option><option value="runtime-settings">运营设置</option><option value="image-sync">运营图片同步</option><option value="player-policy">公告与奖励</option></select>
+        <div class="filterbar"><input id="audit-search" class="search" type="search" placeholder="搜索玩家 ID、批次编号或操作内容"><select id="audit-operation" aria-label="操作类型"><option value="">所有操作</option><option value="mail-delivery">批量赠礼</option><option value="account-mail">单封赠礼</option><option value="account-mail-delete">删除玩家邮件</option><option value="account-grant">资源与进度调整</option><option value="account-credentials-admin">账号绑定／密码</option><option value="account-unbind">解除绑定</option><option value="boss-policy">BOSS发布</option><option value="boss-rules">BOSS难度规则</option><option value="boss-drops">BOSS掉落</option><option value="activity-rewards">圣剑杯与探索</option><option value="exchange-shops">兑换所</option><option value="item-shop">道具商店</option><option value="gacha-policy">扭蛋发布</option><option value="gacha-draft">卡池草稿</option><option value="gacha-live">卡池发布</option><option value="gacha-custom">新建／删除卡池</option><option value="runtime-settings">运营设置</option><option value="image-sync">运营图片同步</option><option value="player-policy">公告与奖励</option><option value="popup-announcements">首页弹窗公告</option></select>
           <span class="range" role="group" aria-label="时间范围"><input type="datetime-local" id="audit-after" aria-label="开始时间"><span>–</span><input type="datetime-local" id="audit-before" aria-label="结束时间"></span><button class="secondary" id="audit-reset">清除筛选</button><button id="audit-export" class="secondary">导出本页</button></div>
         <div class="table-wrap"><table><thead><tr><th>ID / 时间</th><th>操作</th><th>目标</th><th>详细内容</th></tr></thead><tbody id="audit-rows"></tbody></table></div>
         <div class="pager" id="audit-pager"><button class="secondary" id="audit-prev">上一页</button><span id="audit-page-info" class="page-info"></span><label>跳至 <input id="audit-page" type="number" min="1" value="1" aria-label="页码"> 页</label><button class="secondary" id="audit-next">下一页</button></div>
@@ -1122,5 +1153,6 @@
 <script defer src="/access.js"></script>
 <script defer src="/runtime-logs.js"></script>
 <script defer src="/pool-gifts.js"></script>
+<script defer src="/popup-announcements.js"></script>
 </body>
 </html>

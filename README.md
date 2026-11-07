@@ -47,6 +47,8 @@ KAIRI_ACCOUNT_CACHE_LIMIT=256 sh Start-Server-linux-amd64.sh 192.168.1.100 26040
 
 准备与 **2.0.0** 配套的 Windows 客户端 ZIP 或 Android APK，以及完整服务端的全部 7z 分卷。把 `.7z.001` 到 `.7z.018` 放在同一个目录，从 `.7z.001` 解压到新目录。Linux 使用支持 7z 分卷的解压工具。
 
+若 Release 同时提供“服务端增量”ZIP，先解压完整服务端，再在停服状态下将增量内全部文件覆盖到服务端根目录，并使用同次更新的 Windows／Android 客户端。增量包含配套资源与清单，不能只替换服务端程序；保留自己的 `_local/data/` 和连接、CDN 配置。
+
 解压后的 `resource-set/` 提供共用资源，`platform/` 提供各平台的资源。两个目录均与服务端程序、`deployment.json` 放在同一层。整个服务端文件夹可放在任意位置；不要单独搬动或拆开里面的资源目录。
 
 一套包同时包含 Windows x64、Linux x64、Linux ARM64 的服务端和启动脚本，共用 `resource-set` 游戏资源。保留整个解压目录，不能只复制一个 exe。使用发布包无需安装 Go、Python 或 Unity。

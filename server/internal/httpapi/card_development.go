@@ -116,8 +116,7 @@ func (a *API) howToGetCardShow(writer http.ResponseWriter, request *http.Request
 		a.writeStoreError(writer, err)
 		return
 	}
-	allowedGroups, _ := request.Context().Value(cardAcquisitionGroupsKey{}).(map[int]struct{})
-	lists, err := a.account.HowToGetCards(payload.CardIDs, a.initialState.TeamBattleRewards, allowedGroups)
+	lists, err := a.account.HowToGetCards(payload.CardIDs, a.initialState.TeamBattleRewards, cardSourcePolicy(request))
 	if err != nil {
 		a.writeStoreError(writer, err)
 		return

@@ -156,6 +156,7 @@ $('#player-mail-add').onclick = () =>
     ['currency', 'card', 'material', 'item', 'sphere', 'buddy', 'costume', 'stamp', 'honor'],
   );
 async function loadPlayerPolicy() {
+  const popups = reloadPopupSection({ reset: true });
   const data = await api('/api/player-policy');
   playerPolicy.saved = data.config;
   playerPolicy.defaults = data.defaults;
@@ -169,6 +170,7 @@ async function loadPlayerPolicy() {
     [10, 0],
   ]).catch(() => {});
   renderPlayerPolicy(data.config);
+  await popups;
 }
 $('#player-policy').oninput = playerPolicyChanged;
 $('#player-policy').onchange = (e) => {

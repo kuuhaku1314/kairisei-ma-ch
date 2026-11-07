@@ -61,7 +61,7 @@ var gachaEditorCategories = []gachaEditorCategory{
 	{8, "新手扭蛋", 8},
 	{11, "炼金扭蛋", 9},
 	{12, "四亚瑟扭蛋", 10},
-	{gamestate.MainQuestGachaCategory, "主线剧情扭蛋", 11},
+	{9, "主线剧情扭蛋", 11},
 }
 
 func gachaEditorCategoryByID(id int) (gachaEditorCategory, bool) {

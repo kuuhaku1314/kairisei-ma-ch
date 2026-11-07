@@ -12,12 +12,12 @@ func cnBootstrapHowToGetCardShow(business http.Handler, operations *operationser
 }
 
 func cnCardAcquisitionPublication(business http.Handler, operations *operationservice.Runtime) http.Handler {
-	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	return cnGachaPublicationBusiness(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		groups, err := operations.TeamBattleGroupAllowlist()
 		if err != nil {
 			http.Error(writer, "read local card acquisition publication", http.StatusInternalServerError)
 			return
 		}
 		business.ServeHTTP(writer, httpapi.WithCardAcquisitionGroups(request, groups))
-	})
+	}), operations)
 }

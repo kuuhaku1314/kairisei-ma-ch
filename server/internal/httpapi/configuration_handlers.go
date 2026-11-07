@@ -4,6 +4,10 @@ import (
 	"kairisei.local/server/internal/game"
 )
 
+func (h *accountBusinessHandler) ApplyPopupAnnouncements(publications []game.PopupAnnouncement) {
+	h.api.popupAnnouncements = publications
+}
+
 func (h *accountBusinessHandler) ApplyEvolutionRestrictions(policy *game.EvolutionRestrictions) {
 	h.api.account.ApplyEvolutionRestrictions(policy)
 }

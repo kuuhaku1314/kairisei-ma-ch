@@ -17,18 +17,72 @@ func TestMissingCardSourcesFollowInventoryWithoutChangingDetailQueries(t *testin
 		containerCards:  []CardInfo{{UniqueID: 102, CardID: 2}},
 	}
 	ids := []int{3, 1, 2}
-	missing, err := s.HowToGetMissingCards(ids, nil, nil)
+	missing, err := s.HowToGetMissingCards(ids, nil, CardSourcePolicy{})
 	if err != nil || len(missing) != 2 || missing[0].CardID != 3 || missing[1].CardID != 2 {
 		t.Fatalf("missing list should exclude equipped inventory and retain warehouse-only cards: %+v (%v)", missing, err)
 	}
-	all, err := s.HowToGetCards(ids, nil, nil)
+	all, err := s.HowToGetCards(ids, nil, CardSourcePolicy{})
 	if err != nil || len(all) != 3 || all[1].CardID != 1 || !slices.Equal(ids, []int{3, 1, 2}) {
 		t.Fatalf("detail query or caller-owned IDs changed: %+v (%v)", all, err)
 	}
 	s.cards = append(s.cards, CardInfo{UniqueID: 103, CardID: 2}, CardInfo{UniqueID: 104, CardID: 3})
-	missing, err = s.HowToGetMissingCards(ids, nil, nil)
+	missing, err = s.HowToGetMissingCards(ids, nil, CardSourcePolicy{})
 	if err != nil || missing == nil || len(missing) != 0 {
 		t.Fatalf("new inventory should clear the missing-card response: %+v (%v)", missing, err)
+	}
+}
+
+func TestCardSourcesRespectGachaPublicationAndRandomGiftEligibility(t *testing.T) {
+	card := func(id int) gamestate.Reward { return gamestate.Reward{Type: 6, RewardTypeID: id, Num: 1} }
+	s := &Account{cardDefinitions: map[int]gamestate.Card{}, gachas: []gamestate.GachaProfile{{
+		GachaID: 101, GroupID: 100, Name: "附赠池", PlayCount: 2, PlayCountMax: 3,
+		RewardPool: []gamestate.WeightedReward{{Reward: card(1), Weight: 1}},
+		Gifts:      []gamestate.GachaGiftRule{{FromPlay: 3, ToPlay: 3, Rewards: []gamestate.Reward{card(2)}}},
+		RandomGifts: []gamestate.GachaRandomGiftRule{
+			{FromPlay: 3, ToPlay: 3, Pool: []gamestate.WeightedReward{{Reward: card(3), Weight: 1}}},
+			{FromPlay: 1, ToPlay: 2, Pool: []gamestate.WeightedReward{{Reward: card(4), Weight: 1}}},
+			{FromPlay: 4, Pool: []gamestate.WeightedReward{{Reward: card(5), Weight: 1}}},
+			{FromPlay: 3, Pool: []gamestate.WeightedReward{{Reward: card(6), Weight: 0}}},
+		},
+	}}}
+	ids := []int{1, 2, 3, 4, 5, 6}
+	for _, id := range ids {
+		s.cardDefinitions[id] = gamestate.Card{CardID: id}
+	}
+	open := false
+	policy := CardSourcePolicy{GachaPublished: func(id int) bool { return open && id == 101 }}
+	for _, query := range []func([]int, []gamestate.TeamBattleRewardProfile, CardSourcePolicy) ([]howToGetCardList, error){s.HowToGetCards, s.HowToGetMissingCards} {
+		for _, published := range []bool{false, true, false, true} {
+			open = published
+			rows, err := query(ids, nil, policy)
+			if err != nil || len(rows) != len(ids) {
+				t.Fatal("source query failed", rows, err)
+			}
+			for i, row := range rows {
+				want := 0
+				if open && i < 3 {
+					want = 7
+				}
+				if len(row.GetCards) != 1 || row.GetCards[0].Type != want {
+					t.Fatalf("published=%t card=%d sources=%+v", open, row.CardID, row.GetCards)
+				}
+				if open && row.CardID == 3 && !strings.Contains(row.GetCards[0].Text, "随机附赠") {
+					t.Fatal("random gift was not distinguished from the main pool")
+				}
+			}
+		}
+	}
+	for _, window := range [][2]int64{{time.Now().Add(time.Hour).Unix(), 0}, {0, time.Now().Add(-time.Hour).Unix()}, {0, 1}} {
+		s.gachaWindows = map[int][2]int64{101: window}
+		rows, err := s.HowToGetCards(ids, nil, policy)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, row := range rows {
+			if len(row.GetCards) != 1 || row.GetCards[0].Type != 0 {
+				t.Fatal("scheduled or disabled pool remained obtainable", window, rows)
+			}
+		}
 	}
 }
 
@@ -72,7 +126,7 @@ func TestCardSourcesFollowPublishedRewardsAndRemainingEligibility(t *testing.T) 
 	}
 	read := func(groups map[int]struct{}) map[int][]howToGetCardEntry {
 		t.Helper()
-		lists, err := s.HowToGetCards(ids, profiles, groups)
+		lists, err := s.HowToGetCards(ids, profiles, CardSourcePolicy{BattleGroups: groups})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -123,6 +177,33 @@ func TestCardSourcesFollowPublishedRewardsAndRemainingEligibility(t *testing.T) 
 	shop.StartTime = int(time.Now().Add(time.Hour).Unix())
 	s.tradeShopProfiles[301] = shop
 	check(read(nil), 6, 0, 0, 0)
+	shop.StartTime, shop.EndTime = 0, int(time.Now().Add(-time.Hour).Unix())
+	s.tradeShopProfiles[301] = shop
+	check(read(nil), 6, 0, 0, 0)
+	shop.EndTime, shop.Disabled = 0, true
+	s.tradeShopProfiles[301] = shop
+	check(read(nil), 6, 0, 0, 0)
+	shop.Disabled, shop.Lineups[0].Disabled = false, true
+	s.tradeShopProfiles[301] = shop
+	check(read(nil), 6, 0, 0, 0)
+	shop.Lineups[0].Disabled = false
+	s.tradeShopProfiles[301] = shop
+	check(read(nil), 6, 8, 301, 0)
+	// A temporarily unaffordable source remains useful; only its own
+	// publication, schedule, prerequisite and reward state determine visibility.
+	s.missions[401] = gamestate.MissionProgress{MissionID: 401}
+	for _, definition := range []gamestate.MissionDefinition{
+		{MissionID: 401, Rewards: []gamestate.Reward{card(7)}},
+		{MissionID: 401, Published: true, StartsAt: time.Now().Add(time.Hour).Unix(), Rewards: []gamestate.Reward{card(7)}},
+		{MissionID: 401, Published: true, EndsAt: time.Now().Add(-time.Hour).Unix(), Rewards: []gamestate.Reward{card(7)}},
+		{MissionID: 401, Published: true, PrerequisiteID: 402, Rewards: []gamestate.Reward{card(7)}},
+	} {
+		definition.Title = "任务"
+		s.missionCatalog = missionCatalogFixture(t, map[int]gamestate.MissionDefinition{
+			401: definition, 402: {MissionID: 402, Title: "前置任务", Rewards: []gamestate.Reward{card(13)}},
+		})
+		check(read(nil), 7, 0, 0, 0)
+	}
 }
 
 func TestModernCardSourcesUsePublishedDestinationKinds(t *testing.T) {
@@ -159,7 +240,7 @@ func TestModernCardSourcesUsePublishedDestinationKinds(t *testing.T) {
 		{BossID: 105601, TowerID: 1056, ResultRewards: []gamestate.Reward{card(6)}},
 		{BossID: 300590201, ResultRewards: []gamestate.Reward{card(8)}},
 	}
-	result, err := s.HowToGetCards(ids, profiles, nil)
+	result, err := s.HowToGetCards(ids, profiles, CardSourcePolicy{})
 	if err != nil {
 		t.Fatal(err)
 	}

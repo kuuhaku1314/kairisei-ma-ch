@@ -20,6 +20,62 @@ import (
 	"kairisei.local/server/internal/testfixture"
 )
 
+func TestHomeMissionNoticeDistinguishesCompletionFromClaiming(t *testing.T) {
+	now := time.Now()
+	end := now.Add(time.Hour).Unix()
+	state := testfixture.RuntimeState(t)
+	state.MissionDefinitions = map[int]gamestate.MissionDefinition{
+		810001: {MissionID: 810001, TabType: 1, Published: true, EndsAt: end, Title: "限时任务", ProgressMax: 1},
+		810002: {MissionID: 810002, TabType: 3, Published: true, EndsAt: end, Title: "活动任务", ProgressMax: 1},
+		810003: {MissionID: 810003, TabType: 0, Published: true, Title: "普通成就", ProgressMax: 1},
+	}
+	state.Engagement.Missions = []gamestate.Mission{
+		{Info: gamestate.MissionProgress{MissionID: 810001, State: 1, ProgressNow: 1, ClearLimitTime: int(end)}},
+		{Info: gamestate.MissionProgress{MissionID: 810002, State: 1, ProgressNow: 1, ClearLimitTime: int(end)}},
+		{Info: gamestate.MissionProgress{MissionID: 810003, State: 1, ProgressNow: 1}},
+	}
+	account, err := game.New(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	account.SetMissionRequestTime(now)
+	a := &API{account: account, initialState: state}
+	check := func(total, complete int, claimable int8) {
+		t.Helper()
+		response := httptest.NewRecorder()
+		a.writeProtocol(response, map[string]any{})
+		var common commonResponse
+		if json.Unmarshal([]byte(strings.SplitN(response.Body.String(), "\n", 2)[0]), &common) != nil || len(common.Notifications) != 1 {
+			t.Fatal("invalid notification", response.Body.String())
+		}
+		notice := common.Notifications[0]
+		if notice.MissionTotal != total || notice.MissionComplete != complete || notice.MissionClearReceive != claimable {
+			t.Fatalf("mission notice=%+v, want %d/%d flag=%d", notice, complete, total, claimable)
+		}
+	}
+	check(2, 2, 1) // All complete; neither reward claimed.
+	if _, _, err = account.ReceiveMissionRewards([]int{810001}); err != nil {
+		t.Fatal(err)
+	}
+	check(2, 2, 1) // The event reward still needs claiming.
+	if _, _, err = account.ReceiveMissionRewards([]int{810002}); err != nil {
+		t.Fatal(err)
+	}
+	check(2, 2, 1) // Ordinary achievements do not change the counts, but still remind players to claim.
+	if !account.MissionNotice().Claimable {
+		t.Fatal("ordinary achievement lost its independent claimable state")
+	}
+	account.SetMissionRequestTime(now.Add(2 * time.Hour))
+	check(0, 0, 1) // With no timed tasks, the ordinary reward can still flash without a count.
+	account.SetMissionRequestTime(now)
+	if _, _, err = account.ReceiveMissionRewards([]int{810003}); err != nil {
+		t.Fatal(err)
+	}
+	check(2, 2, 0) // Once every reward is claimed, Home may hide the complete period counter.
+	account.SetMissionRequestTime(now.Add(2 * time.Hour))
+	check(0, 0, 0) // Expired timed tasks leave the current period's totals.
+}
+
 func TestExploreMissionDeltasShareCommitAndDoNotReplay(t *testing.T) {
 	state := testfixture.RuntimeState(t)
 	state.User.AP, state.User.APMax = 2, 3

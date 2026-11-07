@@ -83,8 +83,10 @@ func (operations *Operations) setBattlePublication(key string, publication TeamB
 // Operations owns Admin editing catalogs and publication transactions. Player
 // request paths consume the embedded immutable Runtime, never configMu.
 type Operations struct {
-	missionBase   map[int]gamestate.MissionDefinition
-	missionConfig game.MissionConfiguration
+	popupAnnouncements         popupAnnouncementRegistry
+	popupAnnouncementsRevision int
+	missionBase                map[int]gamestate.MissionDefinition
+	missionConfig              game.MissionConfiguration
 	*operationservice.Runtime
 	evolutionEdges          map[game.EvolutionPath]int
 	evolutionClosed         []game.EvolutionPath
@@ -205,6 +207,9 @@ func NewOperations(storage *accountstore.Database, gachas []gamestate.GachaProfi
 		return nil, err
 	}
 	if err := operations.loadModuleSwitches(); err != nil {
+		return nil, err
+	}
+	if err := operations.loadPopupAnnouncements(); err != nil {
 		return nil, err
 	}
 	if err := operations.loadEvolutionRestrictions(); err != nil {

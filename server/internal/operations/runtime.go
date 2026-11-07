@@ -15,6 +15,7 @@ import (
 // Publication combines immutable, independently versioned policies. Publishing
 // one atomic pointer prevents a request observing half a group update.
 type Publication struct {
+	PopupAnnouncements   []game.PopupAnnouncement
 	IPBlacklist          IPBlacklist
 	LoginWhitelist       accountstore.LoginWhitelist
 	DisabledModules      protocol.ModuleSwitch
@@ -51,6 +52,7 @@ func NewRuntime(storage *accountstore.Database) (*Runtime, error) {
 // Editors call Publish only after a successful database commit. Definitions
 // inside each policy remain immutable; copy containers the editor may replace.
 func (runtime *Runtime) Publish(publication Publication) {
+	publication.PopupAnnouncements = slices.Clone(publication.PopupAnnouncements)
 	publication.HomeBanners.Items = slices.Clone(publication.HomeBanners.Items)
 	publication.Gachas = slices.Clone(publication.Gachas)
 	publication.Settings.ItemShop = slices.Clone(publication.Settings.ItemShop)
@@ -87,6 +89,9 @@ func (runtime *Runtime) ContentConfiguration() game.ContentConfiguration {
 // HTTP handler, socket or database work is needed to apply a publication.
 func (runtime *Runtime) PrepareBusiness(target any) {
 	published := runtime.current.Load()
+	if c, ok := target.(game.PopupAnnouncementConfigurator); ok {
+		c.ApplyPopupAnnouncements(published.PopupAnnouncements)
+	}
 	if c, ok := target.(HomeBannerConfigurator); ok {
 		config := HomeBannerConfiguration{Policy: published.HomeBanners}
 		if published.Settings.GachaCoverSource == "storage" {

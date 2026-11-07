@@ -3,7 +3,70 @@ package game
 import (
 	"encoding/json"
 	"testing"
+	"time"
+
+	"kairisei.local/server/internal/gamestate"
 )
+
+func TestOnboardingIceDragonIgnoresPublicationClosureOnlyForItsQuest(t *testing.T) {
+	const bossID = 30010102
+	raw := json.RawMessage(`{"9":[],"10":[
+		{"0":700300101,"9":0,"10":[
+			{"0":30010102,"14":1,"5":15,"10":0,"16":0},
+			{"0":30010103,"14":1,"10":0,"16":0}]},
+		{"0":700300201,"9":0,"10":[{"0":30020102,"14":1,"10":0,"16":0}]}
+	],"11":[],"12":[{"0":700400010,"9":0,"10":[{"0":40001002,"14":0,"10":0,"16":0}]}]}`)
+	disabled := map[int]bool{bossID: true, 30010103: true, 30020102: true}
+	s := onboardingTestStore()
+	s.teamBattleSolo = battleCatalogFixture(t, raw)
+	s.ApplyBattleCatalogConfiguration(nil, disabled)
+	s.cardDefinitions = map[int]gamestate.Card{1: {CardID: 1}}
+	s.bp, s.bpMax, s.bpRecoveryInterval = 30, 30, 3*time.Minute
+	helper := &s.playerProgression.Friends.HelperReward
+	helper.OtherPerPartner, helper.FriendPerPartner, helper.MaximumPartners = 5, 10, 3
+	profiles := []gamestate.TeamBattleRewardProfile{{BossID: bossID}}
+	sourceProfiles := []gamestate.TeamBattleRewardProfile{{BossID: bossID,
+		ResultRewards: []gamestate.Reward{{Type: 6, RewardTypeID: 1, Num: 1}}}}
+	for _, step := range []int{cnOnboardingStepCount - 2, cnOnboardingStepCount - 1, cnOnboardingStepCount} {
+		s.onboarding.Step = step
+		wantOpen := step == cnOnboardingStepCount-1
+		catalog, err := s.TeamBattleCatalog()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if catalog.HasBoss(bossID) != wantOpen || catalog.BossAccessible(bossID, time.Now().Unix()) != wantOpen {
+			t.Fatalf("step %d published/accessibility differs from tutorial exception", step)
+		}
+		if catalog.HasBoss(30010103) || catalog.HasBoss(30020102) {
+			t.Fatalf("step %d reopened another closed difficulty", step)
+		}
+		if _, found := s.TeamBattleEntryRulesForBoss(bossID); found != wantOpen {
+			t.Fatalf("step %d entry rules differ from publication", step)
+		}
+		rows, err := s.HowToGetCards([]int{1}, sourceProfiles, CardSourcePolicy{})
+		if err != nil || len(rows) != 1 || len(rows[0].GetCards) != 1 {
+			t.Fatalf("step %d card source query: %+v, %v", step, rows, err)
+		}
+		if source := rows[0].GetCards[0]; (source.Type == 10 && source.ContentID == bossID) != wantOpen {
+			t.Fatalf("step %d card source differs from publication: %+v", step, source)
+		}
+		beforeBP := s.bp
+		_, _, started, err := s.BeginTeamBattle(TeamBattleEntry{BossID: bossID,
+			EnemyTypes: []int8{0}, Profiles: profiles, FameSeed: "onboarding-publication",
+			FameSources: []TeamBattleFameSource{{MemberType: 1, LeaderFame: 1}}})
+		if wantOpen {
+			if err != nil || !started || s.bp != beforeBP-15 {
+				t.Fatalf("tutorial entry did not debit normally: started=%t bp=%d err=%v", started, s.bp, err)
+			}
+			s.activeBattle = nil
+		} else if err == nil || started || s.bp != beforeBP {
+			t.Fatalf("step %d admitted or charged the closed boss", step)
+		}
+		if !disabled[bossID] || !s.disabledTeamBattleBossIDs[bossID] {
+			t.Fatal("account exception mutated the shared Admin closure")
+		}
+	}
+}
 
 func publicationGroup(groupID, areaID, model int) json.RawMessage {
 	bossID := groupID + 1

@@ -107,7 +107,7 @@ func (a *API) homeShow(writer http.ResponseWriter, request *http.Request) {
 	}
 	homePopups := []gamestate.PopupProfile{}
 	if !a.account.OnboardingInProgress() {
-		homePopups = a.account.UnreadPopupState(a.initialState.PopupProfile)
+		homePopups = append(homePopups, a.account.UnreadPopupAnnouncements(a.popupAnnouncements, now)...)
 	}
 	cardFlags := a.account.LocalCardPayload(now)
 	a.writeProtocolWithPopups(writer, map[string]any{

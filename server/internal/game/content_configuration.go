@@ -3,6 +3,7 @@ package game
 import (
 	"encoding/json"
 	"log/slog"
+	"maps"
 
 	"kairisei.local/server/internal/gamestate"
 )
@@ -68,6 +69,19 @@ func (s *Account) ApplyBattleCatalogConfiguration(definitions *TeamBattleDefinit
 		s.teamBattleSolo.encoded = nil
 	}
 	s.disabledTeamBattleBossIDs = disabled
+}
+
+// Quest 1047's fixed activity guide must remain playable even when Admin closes
+// Ice Dragon. The exception belongs to this account's final onboarding step,
+// never to the shared publication configuration or its other difficulties.
+func (s *Account) battlePublicationDisabledBossesLocked() map[int]bool {
+	disabled := s.disabledTeamBattleBossIDs
+	const tutorialBossID = 30010102
+	if disabled[tutorialBossID] && s.onboarding.ConfigVersion == cnOnboardingConfigVersion && s.onboarding.Step == cnOnboardingStepCount-1 {
+		disabled = maps.Clone(disabled)
+		delete(disabled, tutorialBossID)
+	}
+	return disabled
 }
 
 // Keep the full catalog in the account so closing an entry never erases clears.

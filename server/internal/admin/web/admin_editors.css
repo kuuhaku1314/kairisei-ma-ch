@@ -2383,6 +2383,371 @@
   border-radius: var(--radius);
 }
 
+/* 公告与奖励 › 首页弹窗公告: the list beside one editor; the player's view on the right --------------- */
+.pa-body {
+  gap: 0;
+  padding: 0;
+}
+
+.pa-ws {
+  display: grid;
+  grid-template-columns: minmax(220px, 272px) minmax(0, 1fr);
+  min-height: 440px;
+}
+
+.pa-list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-right: 1px solid var(--line);
+  border-radius: 0 0 0 var(--radius);
+  background: var(--surface-2);
+}
+
+.pa-list-head {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.pa-list-head .search {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pa-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 600px;
+  padding: 4px 6px 8px;
+  overflow: auto;
+}
+
+.pa-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 10px 8px 4px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+
+.pa-group small {
+  color: var(--faint);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.pa-items .ws-item:hover {
+  background: var(--surface);
+}
+
+.pa-items .ws-item.selected {
+  background: var(--accent-soft);
+}
+
+.pa-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pa-main > #popup-alert:not(:empty) {
+  margin: 14px 20px 0;
+}
+
+.pa-editor {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pa-main .ws-title h3 {
+  margin: 2px 0 6px;
+  font-size: 17px;
+  overflow-wrap: anywhere;
+}
+
+.pa-editor .ws-empty {
+  flex: 1;
+  justify-content: center;
+}
+
+.pa-dirty {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--amber);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pa-dirty::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.pa-dirty[hidden] {
+  display: none;
+}
+
+.pa-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  gap: 20px 24px;
+  align-items: start;
+  padding: 16px 20px 18px;
+}
+
+.pa-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.pa-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pa-label label {
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.pa-count {
+  color: var(--faint);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pa-count.over {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* The shared invalid style covers input and select only. */
+.pa-form textarea.invalid {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.pa-times {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.pa-schedule {
+  margin: -4px 0 0;
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+
+.pa-schedule.bad {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.pa-delivery {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 20px 20px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+
+.pa-delivery .icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--info);
+}
+
+.pa-facts {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.pa-facts > div {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 12px;
+  padding: 9px 12px;
+  font-size: 13px;
+}
+
+.pa-facts > div + div {
+  border-top: 1px solid var(--line);
+}
+
+.pa-facts dt {
+  color: var(--muted);
+}
+
+.pa-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The game draws its own window over a dark Home screen, so the preview keeps fixed colors in both themes. */
+.pa-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+}
+
+.pa-screen {
+  display: grid;
+  place-items: center;
+  min-height: 300px;
+  padding: 24px 18px;
+  border-radius: var(--radius-sm);
+  background: radial-gradient(120% 80% at 50% 0%, rgba(92, 112, 160, 0.35), transparent 60%),
+    linear-gradient(180deg, #1b2130, #0d1018);
+}
+
+.pa-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 270px;
+  padding: 14px 14px 12px;
+  border: 1px solid #c9a45c;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #262d3d, #171b26);
+  box-shadow:
+    0 0 0 3px rgba(201, 164, 92, 0.16),
+    0 12px 32px rgba(0, 0, 0, 0.5);
+  color: #eef0f4;
+}
+
+.pa-dialog-title {
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(201, 164, 92, 0.35);
+  color: #f1d699;
+  font-size: 14px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.pa-dialog-body {
+  max-height: 190px;
+  overflow: auto;
+  color: #dfe3ea;
+  font-size: 12.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.pa-dialog .empty {
+  color: rgba(238, 240, 244, 0.42);
+  font-weight: 400;
+}
+
+.pa-dialog-button {
+  align-self: center;
+  min-width: 104px;
+  padding: 5px 18px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #e8c77f, #b98d3e);
+  color: #2a1d06;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.pa-preview figcaption {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+@media (max-width: 1280px) {
+  .pa-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pa-preview {
+    width: 100%;
+    max-width: 380px;
+  }
+
+  .pa-screen {
+    min-height: 240px;
+  }
+}
+
+@media (max-width: 900px) {
+  .pa-ws {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pa-list {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+  }
+
+  .pa-items {
+    max-height: 280px;
+  }
+}
+
+@media (max-width: 640px) {
+  .pa-times {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pa-grid {
+    padding: 14px;
+  }
+
+  .pa-main > #popup-alert:not(:empty) {
+    margin: 12px 14px 0;
+  }
+
+  .pa-delivery {
+    margin: 0 14px 14px;
+  }
+}
+
+/* 维护工具 › 清理首页弹窗公告: reuses the Boss checklist rows of 清理历史数据 */
+.pc-now {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 10px;
+  font-size: 13px;
+}
+
+.pc-list {
+  max-height: 260px;
+  margin-bottom: 4px;
+}
+
 /* 维护工具 › 清理历史数据 ------------------------------------------------------------------------- */
 .hc-size {
   display: flex;

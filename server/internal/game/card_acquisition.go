@@ -15,6 +15,13 @@ import (
 // index of every obtainable card for each detail-window request.
 type cardSourceIndex map[int]map[howToGetCardEntry]struct{}
 
+// CardSourcePolicy carries the request's current publication rules. Account
+// progress, schedules and reward eligibility remain owned by their sources.
+type CardSourcePolicy struct {
+	BattleGroups   map[int]struct{}
+	GachaPublished func(int) bool
+}
+
 func (sources cardSourceIndex) add(cardID int, entry howToGetCardEntry) {
 	if entries, requested := sources[cardID]; requested {
 		entries[entry] = struct{}{}
@@ -59,7 +66,7 @@ func (s *Account) battleCardSourcesLocked(profiles []gamestate.TeamBattleRewardP
 				stage, _ := teamBattleCatalogInteger(group.fields["1"])
 				for _, boss := range group.bosses {
 					locked, _ := teamBattleCatalogInteger(boss.fields["26"])
-					if locked != 0 || s.disabledTeamBattleBossIDs[boss.id] {
+					if locked != 0 {
 						continue
 					}
 					difficulty, _ := boss.fields["4"].(string)
@@ -170,8 +177,11 @@ func (s *Account) battleCardSourcesLocked(profiles []gamestate.TeamBattleRewardP
 	return nil
 }
 
-func (s *Account) gachaCardSourcesLocked(sources cardSourceIndex) {
+func (s *Account) gachaCardSourcesLocked(sources cardSourceIndex, published func(int) bool) {
 	for _, gacha := range s.VisibleGachasLocked() {
+		if published != nil && !published(gacha.GachaID) {
+			continue
+		}
 		remaining := math.MaxInt - gacha.PlayCount
 		if gacha.PlayCountMax > 0 {
 			remaining = min(remaining, gacha.PlayCountMax-gacha.GroupPlayCount)
@@ -220,6 +230,14 @@ func (s *Account) gachaCardSourcesLocked(sources cardSourceIndex) {
 			for _, reward := range gift.Rewards {
 				sources.addReward(reward, row)
 			}
+		}
+		for _, gift := range gacha.RandomGifts {
+			if gift.FromPlay > gacha.PlayCount+remaining || (gift.ToPlay > 0 && gift.ToPlay <= gacha.PlayCount) {
+				continue
+			}
+			row := entry
+			row.Text += "（随机附赠奖励）"
+			addPool(gift.Pool, row)
 		}
 	}
 }

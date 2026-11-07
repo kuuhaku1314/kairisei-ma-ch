@@ -163,17 +163,6 @@ func validateCNRunnableContent(state gamestate.State) (cnRuntimeContentGate, err
 		return summary, fmt.Errorf("CN runtime EventPage profile: %w", err)
 	}
 	summary.EventPageProfiles = 1
-	popup := state.PopupProfile
-	if popup.PopupID != 602000001 || popup.PopupType != 7 || popup.Priority <= 0 ||
-		popup.IsSPView != 0 || popup.BannerURL != "" || popup.OpenURL != "" ||
-		popup.TitleText == "" || popup.BodyText == "" || popup.ButtonText == "" ||
-		popup.Destination != "" || popup.IsSystem != 1 || popup.ItemLineup == nil ||
-		popup.Gacha == nil || popup.Mission == nil || popup.ItemIcon == nil ||
-		len(popup.ItemLineup) != 0 || len(popup.Gacha) != 0 || len(popup.Mission) != 0 ||
-		len(popup.ItemIcon) != 0 {
-		return summary, errors.New("CN runtime local popup profile is incomplete")
-	}
-	summary.PopupProfiles = 1
 	return summary, nil
 }
 

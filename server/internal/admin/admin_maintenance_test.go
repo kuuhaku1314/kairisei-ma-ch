@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	operationservice "kairisei.local/server/internal/operations"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +19,46 @@ import (
 	"kairisei.local/server/internal/multiplayer"
 	"kairisei.local/server/internal/testfixture"
 )
+
+func TestMaintenanceConfigurationDeletionRequiresIdleAdmission(t *testing.T) {
+	accounts := testfixture.NewFriendCapacityTestAccounts(t)
+	o, err := NewOperations(accounts.Database(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	work := func() error { called = true; return nil }
+	if err = o.WithMaintenanceMutation(work); !errors.Is(err, operationservice.ErrMaintenanceConflict) || called {
+		t.Fatal("deletion outside maintenance", err)
+	}
+	finishGame, ok := o.AdmitGameRequest()
+	if !ok {
+		t.Fatal("request rejected before maintenance")
+	}
+	if _, err = o.SetMaintenance(true, 0, func(bool) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if err = o.WithMaintenanceMutation(work); !errors.Is(err, operationservice.ErrMaintenanceConflict) || called {
+		t.Fatal("deletion raced accepted game request", err)
+	}
+	finishGame()
+	finishOwn, ok := o.AdmitAdminMutation()
+	if !ok {
+		t.Fatal("own mutation rejected")
+	}
+	defer finishOwn()
+	finishOther, ok := o.AdmitAdminMutation()
+	if !ok {
+		t.Fatal("other mutation rejected")
+	}
+	if err = o.WithMaintenanceMutation(work); !errors.Is(err, operationservice.ErrMaintenanceConflict) || called {
+		t.Fatal("deletion raced another Admin mutation", err)
+	}
+	finishOther()
+	if err = o.WithMaintenanceMutation(work); err != nil || !called {
+		t.Fatal("idle maintenance deletion rejected", err)
+	}
+}
 
 func TestMaintenanceAdmissionPersistenceAndCleanup(t *testing.T) {
 	accounts := testfixture.NewFriendCapacityTestAccounts(t)

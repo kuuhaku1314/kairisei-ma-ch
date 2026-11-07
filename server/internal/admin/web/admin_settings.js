@@ -133,6 +133,7 @@ function renderMaintenance() {
   if (purge?.backup) retirement += `<p>恢复备份：<code>${esc(purge.backup)}</code></p>`;
   $('#maintenance-gacha-report').innerHTML = retirement;
   if (typeof renderHistoryCleanup === 'function') renderHistoryCleanup();
+  if (typeof renderPopupCleanup === 'function') renderPopupCleanup();
 }
 async function loadMaintenance() {
   const serial = ++maintenance.loadSerial;
@@ -145,6 +146,8 @@ async function loadMaintenance() {
   if (serial !== maintenance.loadSerial) return;
   if (typeof loadHistoryOverview === 'function' && !historyCleanup.overview)
     loadHistoryOverview().catch((e) => reportError('maintenance', e));
+  if (typeof loadPopupBoard === 'function' && !popupBoard.loaded)
+    loadPopupBoard().catch((e) => reportError('maintenance', e, '载入'));
   maintenance.value = data.maintenance;
   maintenance.rooms = data.rooms || 0;
   maintenance.creating = data.creating_rooms || 0;
@@ -212,6 +215,7 @@ $('.nav [data-view="maintenance"]').addEventListener('click', () => {
   if (state.loaded.has('maintenance')) {
     loadMaintenance().catch((e) => reportError('maintenance', e));
     loadHistoryOverview().catch((e) => reportError('maintenance', e));
+    loadPopupBoard().catch((e) => reportError('maintenance', e, '载入'));
   }
 });
 $('#maintenance-toggle').onclick = async () => {

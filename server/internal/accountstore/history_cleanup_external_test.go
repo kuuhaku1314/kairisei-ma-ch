@@ -3,6 +3,8 @@ package accountstore_test
 import (
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"os"
@@ -47,7 +49,9 @@ func TestHistoryCleanupKeepsUnfinishedBatchesRecentDaysAndOtherBosses(t *testing
 		}
 		exec(`UPDATE cn_global_operation SET updated_utc=? WHERE operation_key=?`, created, accountstore.MailBatchPrefix+id)
 		for _, user := range delivered {
-			exec(`INSERT INTO cn_admin_action_receipt VALUES(?,?,?,?,?,?)`, accountstore.MailBatchPrefix+id, user, doc.SHA256, `{"ok":true}`, strings.Repeat("b", 64), old)
+			result := `{"ok":true}`
+			sum := sha256.Sum256([]byte(result))
+			exec(`INSERT INTO cn_admin_action_receipt VALUES(?,?,?,?,?,?)`, accountstore.MailBatchPrefix+id, user, doc.SHA256, result, hex.EncodeToString(sum[:]), old)
 		}
 	}
 	batch("finished-old", old, first, second)
@@ -141,5 +145,132 @@ func TestHistoryCleanupKeepsUnfinishedBatchesRecentDaysAndOtherBosses(t *testing
 	}
 	if err := (&accountstore.HistoryCleanupRequest{ClearKeepDays: 1}).Normalize(time.Now()); err == nil {
 		t.Fatal("yesterday ranking window accepted")
+	}
+}
+
+func TestHistoryCleanupRejectsChangedRowsWithoutCountChanges(t *testing.T) {
+	a := testfixture.NewFriendCapacityTestAccounts(t)
+	user := testfixture.CreateNamedFriendCapacityAccount(t, a, 1)
+	d := a.Database()
+	db, err := d.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec := func(query string, args ...any) {
+		t.Helper()
+		if _, err := db.Exec(query, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ctx := context.Background()
+	oldDay := gamestate.BattleClearDay(time.Now().Unix()) - 10
+	exec(`INSERT INTO cn_boss_score_rank VALUES(100,1,?,10,1,1)`, user)
+	exec(`INSERT INTO cn_battle_clear_daily VALUES(?,100,0,?,0,1,1,'event',?,?)`, oldDay, user, []byte(`[]`), strings.Repeat("c", 64))
+	request := accountstore.HistoryCleanupRequest{RankBossIDs: []int{100}, ClearKeepDays: 2}
+	preview, err := d.CleanupHistory(ctx, request, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec(`UPDATE cn_boss_score_rank SET best_score=20 WHERE boss_id=100`)
+	if _, err = d.CleanupHistory(ctx, request, preview.Digest); err == nil {
+		t.Fatal("changed score accepted with stale preview")
+	}
+	preview, err = d.CleanupHistory(ctx, request, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec(`UPDATE cn_battle_clear_daily SET clear_count=2 WHERE boss_id=100`)
+	if _, err = d.CleanupHistory(ctx, request, preview.Digest); err == nil {
+		t.Fatal("changed clear count accepted with stale preview")
+	}
+	preview, err = d.CleanupHistory(ctx, request, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec(`CREATE TRIGGER fail_history BEFORE DELETE ON cn_boss_score_rank BEGIN SELECT RAISE(ABORT,'injected failure'); END`)
+	failed, err := d.CleanupHistory(ctx, request, preview.Digest)
+	if err == nil || failed.Applied || failed.Backup != "" {
+		t.Fatal("failed cleanup reported a commit or missing backup", failed, err)
+	}
+	var n int
+	if err = db.QueryRow(`SELECT count(*) FROM cn_battle_clear_daily`).Scan(&n); err != nil || n != 1 {
+		t.Fatal("partial history delete committed", n, err)
+	}
+}
+
+func TestHistoryCleanupFingerprintsAndVerifiesMailReceipts(t *testing.T) {
+	a := testfixture.NewFriendCapacityTestAccounts(t)
+	d := a.Database()
+	db, err := d.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	key := accountstore.MailBatchPrefix + "fingerprint"
+	doc, err := d.WriteDocument(key, 0, map[string]any{"user_ids": []int{accountstore.PrimaryUserID}}, "mail-batch")
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339Nano)
+	if _, err = db.Exec(`UPDATE cn_global_operation SET updated_utc=? WHERE operation_key=?`, old, key); err != nil {
+		t.Fatal(err)
+	}
+	result := []byte(`{"ok":true}`)
+	sum := sha256.Sum256(result)
+	if _, err = db.Exec(`INSERT INTO cn_admin_action_receipt VALUES(?,?,?,?,?,?)`, key, accountstore.PrimaryUserID, doc.SHA256, result, hex.EncodeToString(sum[:]), old); err != nil {
+		t.Fatal(err)
+	}
+	request := accountstore.HistoryCleanupRequest{MailBeforeUTC: time.Now().UTC().Format(time.RFC3339Nano)}
+	preview, err := d.CleanupHistory(ctx, request, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result = []byte(`{"ok":true,"changed":1}`)
+	sum = sha256.Sum256(result)
+	if _, err = db.Exec(`UPDATE cn_admin_action_receipt SET result_json=?,result_sha256=? WHERE operation_key=?`, result, hex.EncodeToString(sum[:]), key); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = d.CleanupHistory(ctx, request, preview.Digest); err == nil {
+		t.Fatal("changed same-count receipt accepted")
+	}
+	if _, err = db.Exec(`UPDATE cn_admin_action_receipt SET result_sha256=? WHERE operation_key=?`, strings.Repeat("0", 64), key); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = d.CleanupHistory(ctx, request, ""); err == nil {
+		t.Fatal("corrupt receipt accepted for cleanup")
+	}
+}
+
+func TestHistoryCleanupKeepsSyncedBackupWhenCommitFails(t *testing.T) {
+	a := testfixture.NewFriendCapacityTestAccounts(t)
+	user := testfixture.CreateNamedFriendCapacityAccount(t, a, 1)
+	d := a.Database()
+	db, err := d.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(`INSERT INTO cn_boss_score_rank VALUES(100,1,?,10,1,1)`, user); err != nil {
+		t.Fatal(err)
+	}
+	for _, query := range []string{
+		`CREATE TABLE cleanup_parent(id INTEGER PRIMARY KEY)`,
+		`CREATE TABLE cleanup_child(id INTEGER REFERENCES cleanup_parent(id) DEFERRABLE INITIALLY DEFERRED)`,
+		`CREATE TRIGGER fail_history_commit AFTER DELETE ON cn_boss_score_rank BEGIN INSERT INTO cleanup_child VALUES(1); END`,
+	} {
+		if _, err = db.Exec(query); err != nil {
+			t.Fatal(err)
+		}
+	}
+	request := accountstore.HistoryCleanupRequest{RankBossIDs: []int{100}}
+	preview, err := d.CleanupHistory(context.Background(), request, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	failed, err := d.CleanupHistory(context.Background(), request, preview.Digest)
+	if err == nil || failed.Applied || failed.Backup == "" {
+		t.Fatal("commit failure lost recovery backup", failed, err)
+	}
+	if _, err = os.Stat(failed.Backup); err != nil {
+		t.Fatal("synced backup removed on commit failure", err)
 	}
 }

@@ -20,10 +20,11 @@ func (o *Operations) publishRuntimeLocked() {
 		groups[config.Profile.GachaID] = config.Profile.GroupID
 	}
 	publication := operations.Publication{
-		IPBlacklist:     o.ipBlacklist,
-		LoginWhitelist:  o.loginWhitelist,
-		DisabledModules: o.disabledModules,
-		Missions:        o.missionConfig, Evolution: o.evolutionPolicy, Settings: settings, Gachas: o.gachaConfigurations, GachaRevision: o.gachaRevision,
+		PopupAnnouncements: o.publishedPopupAnnouncements(),
+		IPBlacklist:        o.ipBlacklist,
+		LoginWhitelist:     o.loginWhitelist,
+		DisabledModules:    o.disabledModules,
+		Missions:           o.missionConfig, Evolution: o.evolutionPolicy, Settings: settings, Gachas: o.gachaConfigurations, GachaRevision: o.gachaRevision,
 		TowerAdmission: o.towerAdmission,
 		GachaGroups:    groups, ManagedGachaGroups: o.managedGachaGroups,
 		DefaultGachaGroups: o.defaultGachaPublication, PermanentGachaGroups: map[int]struct{}{},

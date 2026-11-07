@@ -267,27 +267,35 @@ func (d *Database) CleanupHistory(ctx context.Context, request HistoryCleanupReq
 			report.MailBatches++
 			report.MailReceipts += batch.Receipts
 			report.MailBytes += batch.Bytes
-			fmt.Fprintf(hash, "\nmail %s %s %d", batch.Key, batch.SHA256, batch.Receipts)
+		}
+		if err := visitHistoryMail(ctx, tx, batches, json.NewEncoder(hash).Encode); err != nil {
+			return report, err
 		}
 	}
 	if request.ClearKeepDays > 0 {
 		report.ClearBeforeDay = gamestate.BattleClearDay(now.Unix()) - int64(request.ClearKeepDays) + 1
-		rows, err := tx.QueryContext(ctx, `SELECT day,boss_id,mode,user_id,arthur_type,completed_at,decks_sha256,length(decks_json)
+		rows, err := tx.QueryContext(ctx, `SELECT day,boss_id,mode,user_id,arthur_type,clear_count,completed_at,event_key,decks_sha256,decks_json
  FROM cn_battle_clear_daily WHERE day<? ORDER BY day,boss_id,mode,user_id,arthur_type`, report.ClearBeforeDay)
 		if err != nil {
 			return report, err
 		}
 		for rows.Next() {
-			var day, completed, size int64
+			var day, completed, clears int64
 			var boss, mode, user, job int
-			var sum string
-			if err := rows.Scan(&day, &boss, &mode, &user, &job, &completed, &sum, &size); err != nil {
+			var sum, event string
+			var decks []byte
+			if err := rows.Scan(&day, &boss, &mode, &user, &job, &clears, &completed, &event, &sum, &decks); err != nil {
 				rows.Close()
 				return report, err
 			}
 			report.ClearRows++
-			report.ClearBytes += size
-			fmt.Fprintf(hash, "\nclear %d %d %d %d %d %d %s", day, boss, mode, user, job, completed, sum)
+			report.ClearBytes += int64(len(decks))
+			actual := sha256.Sum256(decks)
+			identity := []any{"clear", day, boss, mode, user, job, clears, completed, event, sum, hex.EncodeToString(actual[:])}
+			if err := json.NewEncoder(hash).Encode(identity); err != nil {
+				rows.Close()
+				return report, err
+			}
 		}
 		err = rows.Err()
 		rows.Close()
@@ -299,8 +307,8 @@ func (d *Database) CleanupHistory(ctx context.Context, request HistoryCleanupReq
 		if report.RankRows, err = rankCounts(ctx, tx, request.RankBossIDs); err != nil {
 			return report, err
 		}
-		for _, count := range report.RankRows {
-			fmt.Fprintf(hash, "\nrank %d %d", count.BossID, count.Rows)
+		if err := visitHistoryRanks(ctx, tx, report.RankRows, json.NewEncoder(hash).Encode); err != nil {
+			return report, err
 		}
 	}
 	report.Digest = hex.EncodeToString(hash.Sum(nil))
@@ -320,6 +328,7 @@ func (d *Database) CleanupHistory(ctx context.Context, request HistoryCleanupReq
 	defer func() {
 		if !keep && backup != "" {
 			_ = os.Remove(backup)
+			report.Backup = ""
 		}
 	}()
 	report.Backup = backup
@@ -344,11 +353,13 @@ func (d *Database) CleanupHistory(ctx context.Context, request HistoryCleanupReq
 		report.Applied = false
 		return report, err
 	}
+	// A commit error can leave its durable outcome uncertain. Keep the already
+	// synced recovery copy, just like operational and audit cleanup do.
+	keep = true
 	if err = tx.Commit(); err != nil {
 		report.Applied = false
 		return report, err
 	}
-	keep = true
 	if request.Vacuum {
 		// VACUUM cannot run inside a transaction. The cleanup above is already
 		// committed, so a failure here leaves a consistent, just larger, file.
@@ -392,81 +403,11 @@ func (d *Database) backupHistory(ctx context.Context, tx *sql.Tx, report History
 	if err = encoder.Encode(map[string]any{"format": "history-cleanup-v1", "created_utc": time.Now().UTC(), "report": report}); err != nil {
 		return path, err
 	}
-	for _, batch := range batches {
-		var doc struct {
-			Key        string          `json:"operation_key"`
-			Revision   int             `json:"revision"`
-			UpdatedUTC string          `json:"updated_utc"`
-			Payload    json.RawMessage `json:"payload"`
-			SHA256     string          `json:"payload_sha256"`
-		}
-		var payload []byte
-		if err = tx.QueryRowContext(ctx, `SELECT operation_key,revision,updated_utc,payload_json,payload_sha256 FROM cn_global_operation WHERE operation_key=?`, batch.Key).
-			Scan(&doc.Key, &doc.Revision, &doc.UpdatedUTC, &payload, &doc.SHA256); err != nil {
-			return path, err
-		}
-		doc.Payload = payload
-		if err = encoder.Encode(map[string]any{"mail_batch": doc}); err != nil {
-			return path, err
-		}
-		rows, err := tx.QueryContext(ctx, `SELECT user_id,request_sha256,result_json,result_sha256,created_utc FROM cn_admin_action_receipt WHERE operation_key=? ORDER BY user_id`, batch.Key)
-		if err != nil {
-			return path, err
-		}
-		for rows.Next() {
-			var receipt struct {
-				Key        string          `json:"operation_key"`
-				UserID     int             `json:"user_id"`
-				RequestSHA string          `json:"request_sha256"`
-				Result     json.RawMessage `json:"result"`
-				ResultSHA  string          `json:"result_sha256"`
-				CreatedUTC string          `json:"created_utc"`
-			}
-			var result []byte
-			if err = rows.Scan(&receipt.UserID, &receipt.RequestSHA, &result, &receipt.ResultSHA, &receipt.CreatedUTC); err != nil {
-				rows.Close()
-				return path, err
-			}
-			receipt.Key, receipt.Result = batch.Key, result
-			if err = encoder.Encode(map[string]any{"mail_receipt": receipt}); err != nil {
-				rows.Close()
-				return path, err
-			}
-		}
-		err = rows.Err()
-		rows.Close()
-		if err != nil {
-			return path, err
-		}
+	if err = visitHistoryMail(ctx, tx, batches, encoder.Encode); err != nil {
+		return path, err
 	}
-	for _, count := range report.RankRows {
-		rows, err := tx.QueryContext(ctx, `SELECT boss_id,mode,user_id,best_score,best_grade,best_at_unix FROM cn_boss_score_rank WHERE boss_id=? ORDER BY mode,user_id`, count.BossID)
-		if err != nil {
-			return path, err
-		}
-		for rows.Next() {
-			var row struct {
-				BossID int   `json:"boss_id"`
-				Mode   int   `json:"mode"`
-				UserID int   `json:"user_id"`
-				Score  int64 `json:"best_score"`
-				Grade  int   `json:"best_grade"`
-				AtUnix int64 `json:"best_at_unix"`
-			}
-			if err = rows.Scan(&row.BossID, &row.Mode, &row.UserID, &row.Score, &row.Grade, &row.AtUnix); err != nil {
-				rows.Close()
-				return path, err
-			}
-			if err = encoder.Encode(map[string]any{"boss_score_rank": row}); err != nil {
-				rows.Close()
-				return path, err
-			}
-		}
-		err = rows.Err()
-		rows.Close()
-		if err != nil {
-			return path, err
-		}
+	if err = visitHistoryRanks(ctx, tx, report.RankRows, encoder.Encode); err != nil {
+		return path, err
 	}
 	if err = zipped.Close(); err != nil {
 		return path, err
