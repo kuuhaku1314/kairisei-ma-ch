@@ -446,8 +446,8 @@
     <!-- Boss 发布 -->
     <section class="view" id="bosses">
       <div class="view-alert" role="alert" hidden></div>
-      <div class="tabs" id="boss-catalogs" role="group" aria-label="目录"><button class="active" data-catalog="activity">活动／素材副本</button><button data-catalog="past">往期 BOSS</button><button data-catalog="tower">炼金塔</button></div>
-      <div class="panel"><div class="panel-head"><div><h2>发布设置<span class="tag info" id="boss-publish-scope">仅活动／素材副本</span></h2><span class="hint" id="boss-publish-hint">活动／素材副本、往期 BOSS 和炼金塔各自单独发布。</span></div></div><div class="panel-body">
+      <div class="tabs" id="boss-catalogs" role="group" aria-label="目录"><button class="active" data-catalog="activity">活动／素材副本</button><button data-catalog="past">往期 BOSS</button><button data-catalog="tower">炼金塔</button><span class="tabs-sep" aria-hidden="true"></span><button data-catalog="economy">体力与经验</button></div>
+      <div class="panel" id="boss-publish-panel"><div class="panel-head"><div><h2>发布设置<span class="tag info" id="boss-publish-scope">仅活动／素材副本</span></h2><span class="hint" id="boss-publish-hint">活动／素材副本、往期 BOSS 和炼金塔各自单独发布。</span></div></div><div class="panel-body">
         <div class="publish-row">
           <div class="field"><label>开放方式</label><div class="mode"><button id="mode-all">全部开放</button><button id="mode-selected">仅开放选中项</button></div></div>
           <div class="field"><label for="boss-start">开放开始（可选，本机时间）</label><input type="datetime-local" id="boss-start" title="留空为立即"></div>
@@ -469,6 +469,36 @@
         <div class="boss-grid" id="boss-rows"></div>
         <div class="pager" id="boss-pager"><button class="secondary" id="boss-prev">上一页</button><span id="boss-page-info" class="page-info"></span><label>跳至 <input id="boss-page" type="number" min="1" value="1" aria-label="页码"> 页</label><button class="secondary" id="boss-next">下一页</button></div>
       </div></div>
+      <div class="panel" id="boss-economy-panel" hidden>
+        <div class="panel-head">
+          <div><h2>体力与经验<span class="tag info">3D 活动 · 2D 活动 · 往期</span></h2><span class="hint">按难度统一设置单人体力和通关经验。同名难度在这三类副本里共用一个设置，自卡组入口跟随对应难度；普通主线、炼金塔和钥匙素材本不受影响。</span></div>
+          <span class="pill" id="be-count"></span>
+        </div>
+        <div class="panel-body be-body">
+          <div class="rule-strip">
+            <div><svg class="icon"><use href="#i-info"/></svg><b>留空</b><span>沿用资源包默认值。「恢复默认」还原这些默认值，不是清零。</span></div>
+            <div><svg class="icon"><use href="#i-info"/></svg><b>组队建房</b><span>单人体力 ÷ 2，向上取整，不能单独设置；加入房间的队员按原规则扣除。</span></div>
+            <div><svg class="icon"><use href="#i-info"/></svg><b>经验填 0</b><span>不给通关经验；金币、掉落、名声和首通奖励照常。</span></div>
+            <div><svg class="icon"><use href="#i-info"/></svg><b>生效</b><span>保存后玩家下一次请求即用新值。已开战的体力不重复扣除，通关经验按结算时的设置发放。</span></div>
+          </div>
+          <div class="be-tools">
+            <div class="filterbar"><input class="search" id="be-search" type="search" placeholder="搜索难度" aria-label="搜索难度"><select id="be-filter" aria-label="设置状态"><option value="">全部难度</option><option value="set">已调整</option><option value="default">沿用默认</option><option value="changed">有未保存修改</option></select></div>
+            <span class="hint" id="be-shown" aria-live="polite"></span>
+          </div>
+          <div class="selbar be-bulk">
+            <div class="selbar-count" id="be-picked" aria-live="polite"></div>
+            <div class="selbar-actions">
+              <div class="input-unit"><input id="be-bulk-bp" type="number" inputmode="numeric" min="1" max="1000" step="1" placeholder="单人体力" aria-label="批量填写单人体力"><span>体力</span></div>
+              <div class="input-unit"><input id="be-bulk-exp" type="number" inputmode="numeric" min="0" max="10000000" step="1" placeholder="通关经验" aria-label="批量填写通关经验"><span>经验</span></div>
+              <button class="secondary sm" id="be-bulk-apply" type="button" disabled>填入已选</button>
+              <button class="secondary sm" id="be-bulk-reset" type="button" disabled>已选恢复默认</button>
+              <span class="divider-v"></span>
+              <button class="secondary sm" id="be-bulk-clear" type="button" disabled>清空选择</button>
+            </div>
+          </div>
+          <div class="table-wrap"><table class="be-table"><thead><tr><th class="check-col"><input class="check" type="checkbox" id="be-pick-all" aria-label="选择全部显示的难度"></th><th>难度</th><th class="num">副本数</th><th>单人体力</th><th class="num"><span title="单人体力 ÷ 2，向上取整">组队建房</span></th><th>通关经验</th><th><span class="sr-only">恢复默认</span></th></tr></thead><tbody id="be-rows"></tbody></table></div>
+        </div>
+      </div>
       <div class="savebar"><div class="savebar-status"><span class="pill gold" id="boss-revision">revision —</span><span id="boss-draft-state" aria-live="polite"></span></div><div class="savebar-actions"><button class="primary" id="save-policy" data-save-shortcut>发布策略</button></div></div>
     </section>
 
@@ -972,7 +1002,7 @@
     <section class="view" id="audit">
       <div class="view-alert" role="alert" hidden></div>
       <div class="panel"><div class="panel-body">
-        <div class="filterbar"><input id="audit-search" class="search" type="search" placeholder="搜索玩家 ID、批次编号或操作内容"><select id="audit-operation" aria-label="操作类型"><option value="">所有操作</option><option value="mail-delivery">批量赠礼</option><option value="account-mail">单封赠礼</option><option value="account-mail-delete">删除玩家邮件</option><option value="account-grant">资源与进度调整</option><option value="account-credentials-admin">账号绑定／密码</option><option value="account-unbind">解除绑定</option><option value="boss-policy">BOSS发布</option><option value="boss-rules">BOSS难度规则</option><option value="boss-drops">BOSS掉落</option><option value="activity-rewards">圣剑杯与探索</option><option value="exchange-shops">兑换所</option><option value="item-shop">道具商店</option><option value="gacha-policy">扭蛋发布</option><option value="gacha-draft">卡池草稿</option><option value="gacha-live">卡池发布</option><option value="gacha-custom">新建／删除卡池</option><option value="runtime-settings">运营设置</option><option value="image-sync">运营图片同步</option><option value="player-policy">公告与奖励</option><option value="popup-announcements">首页弹窗公告</option></select>
+        <div class="filterbar"><input id="audit-search" class="search" type="search" placeholder="搜索玩家 ID、批次编号或操作内容"><select id="audit-operation" aria-label="操作类型"><option value="">所有操作</option><option value="mail-delivery">批量赠礼</option><option value="account-mail">单封赠礼</option><option value="account-mail-delete">删除玩家邮件</option><option value="account-grant">资源与进度调整</option><option value="account-credentials-admin">账号绑定／密码</option><option value="account-unbind">解除绑定</option><option value="boss-policy">BOSS发布</option><option value="boss-rules">BOSS难度规则</option><option value="boss-economy">副本体力与经验</option><option value="boss-drops">BOSS掉落</option><option value="activity-rewards">圣剑杯与探索</option><option value="exchange-shops">兑换所</option><option value="item-shop">道具商店</option><option value="gacha-policy">扭蛋发布</option><option value="gacha-draft">卡池草稿</option><option value="gacha-live">卡池发布</option><option value="gacha-custom">新建／删除卡池</option><option value="runtime-settings">运营设置</option><option value="image-sync">运营图片同步</option><option value="player-policy">公告与奖励</option><option value="popup-announcements">首页弹窗公告</option></select>
           <span class="range" role="group" aria-label="时间范围"><input type="datetime-local" id="audit-after" aria-label="开始时间"><span>–</span><input type="datetime-local" id="audit-before" aria-label="结束时间"></span><button class="secondary" id="audit-reset">清除筛选</button><button id="audit-export" class="secondary">导出本页</button></div>
         <div class="table-wrap"><table><thead><tr><th>ID / 时间</th><th>操作</th><th>目标</th><th>详细内容</th></tr></thead><tbody id="audit-rows"></tbody></table></div>
         <div class="pager" id="audit-pager"><button class="secondary" id="audit-prev">上一页</button><span id="audit-page-info" class="page-info"></span><label>跳至 <input id="audit-page" type="number" min="1" value="1" aria-label="页码"> 页</label><button class="secondary" id="audit-next">下一页</button></div>
@@ -1154,5 +1184,6 @@
 <script defer src="/runtime-logs.js"></script>
 <script defer src="/pool-gifts.js"></script>
 <script defer src="/popup-announcements.js"></script>
+<script defer src="/boss-economy.js"></script>
 </body>
 </html>

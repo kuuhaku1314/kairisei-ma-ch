@@ -1024,6 +1024,9 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 				return fmt.Errorf("CN battle runtime %d has an invalid enemy drop", profile.BossID)
 			}
 		}
+		if err := ValidateBattleDropSlots(profile.EnemyDrops); err != nil {
+			return fmt.Errorf("CN battle runtime %d: %w", profile.BossID, err)
+		}
 		if tower, exists := towerBossFloors[profile.BossID]; exists {
 			if profile.TowerID != tower[0] || profile.TowerFloor != tower[1] {
 				return fmt.Errorf("invalid CN tower reward %d", profile.BossID)

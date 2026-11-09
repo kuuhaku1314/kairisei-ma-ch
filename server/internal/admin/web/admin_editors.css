@@ -3089,6 +3089,165 @@
   text-align: right;
 }
 
+/* Boss 发布 › 体力与经验: one row per difficulty; an empty input means the resource default -------------- */
+.tabs-sep {
+  align-self: center;
+  width: 1px;
+  height: 18px;
+  margin: 0 10px;
+  background: var(--line-strong);
+}
+
+.be-body {
+  display: grid;
+  gap: 14px;
+}
+
+.be-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.be-tools .search {
+  width: 260px;
+}
+
+.be-bulk .input-unit input {
+  width: 108px;
+  height: 28px;
+}
+
+.be-bulk-note.ok {
+  color: var(--ok);
+}
+
+.be-bulk-note.bad {
+  color: var(--danger);
+}
+
+.be-table {
+  min-width: 820px;
+}
+
+.be-table .check-col {
+  width: 36px;
+}
+
+/* The name column takes the slack; each default sits beside its input and wraps under it when narrow. */
+.be-table th:nth-child(3),
+.be-table th:nth-child(5) {
+  width: 84px;
+}
+
+.be-table th:nth-child(4) {
+  width: 320px;
+}
+
+.be-table th:nth-child(6) {
+  width: 390px;
+}
+
+.be-table th:last-child {
+  width: 96px;
+}
+
+.be-name {
+  white-space: normal;
+}
+
+.be-name b {
+  font-size: 14px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.be-tags .tag {
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+
+.be-count {
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.be-team {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.be-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.be-cell .input-unit input {
+  width: 120px;
+}
+
+.be-note {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: normal;
+}
+
+.be-note.warn {
+  color: var(--amber);
+}
+
+.be-note.bad {
+  color: var(--danger);
+}
+
+.be-action {
+  text-align: right;
+}
+
+/* Only rows with something to clear offer 恢复默认. */
+.be-action [data-reset]:disabled {
+  visibility: hidden;
+}
+
+.be-row.picked td {
+  background: var(--accent-soft);
+}
+
+/* After .picked: an unsaved value stays visible on a ticked row. */
+.be-table td.changed {
+  background: var(--amber-soft);
+}
+
+@media (max-width: 640px) {
+  .tabs-sep {
+    margin: 0 4px;
+  }
+
+  .be-tools .filterbar,
+  .be-tools .search {
+    width: 100%;
+  }
+
+  .be-tools .search {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .be-bulk .input-unit {
+    flex: 1 1 130px;
+  }
+
+  .be-bulk .input-unit input {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+  }
+}
+
 /* Boss 掉落 › 炼金塔: the picker becomes a side column — tower select, then floors grouped by boss ------- */
 .drop-layout,
 .drop-main {

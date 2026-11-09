@@ -9,7 +9,7 @@ import (
 )
 
 func TestCNClientVersionGateBeforeAccountCreation(t *testing.T) {
-	for _, version := range []string{"", "1.9.99", "2.0", "2.0.00", "2.0.0.0", "2.0.1", "6.0.2", "6.0.7", "6.0.10", "7.0.0", "garbage"} {
+	for _, version := range []string{"", "1.9.99", "2.0", "2.0.00", "2.0.0", "2.0.0.0", "2.0.1", "6.0.2", "6.0.7", "6.0.10", "7.0.0", "garbage"} {
 		body, _ := json.Marshal(localLoginPayload{UUID: "00000000-0000-4000-8000-00000000a501", ClientVersion: version, ResourcePlatform: "StandaloneWindows64", UnityVersion: "6000.3.26f1"})
 		response := httptest.NewRecorder()
 		// A nil account store proves rejected clients cannot mint a session.

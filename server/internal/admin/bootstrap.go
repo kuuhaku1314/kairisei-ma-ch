@@ -368,6 +368,7 @@ func New(config Config) (http.Handler, error) {
 		"/runtime-logs.js":        adminRuntimeLogsJS,
 		"/pool-gifts.js":          adminPoolGiftsJS,
 		"/popup-announcements.js": adminPopupAnnouncementsJS,
+		"/boss-economy.js":        adminBossEconomyJS,
 		"/admin.css":              adminCSS, "/editors.css": adminEditorsCSS,
 	} {
 		router.Get(path, func(w http.ResponseWriter, _ *http.Request) {
@@ -414,6 +415,8 @@ func New(config Config) (http.Handler, error) {
 	router.Put("/api/activity-rewards", admin.saveActivityRewards)
 	router.Get("/api/boss-rules", admin.bossRules)
 	router.Put("/api/boss-rules", admin.saveBossRules)
+	router.Get("/api/boss-economy", admin.bossEconomy)
+	router.Put("/api/boss-economy", admin.saveBossEconomy)
 	router.Put("/api/boss-drops", admin.saveDropEditor)
 	router.Get("/tower-drops.js", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")

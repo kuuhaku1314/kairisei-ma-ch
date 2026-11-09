@@ -1,6 +1,6 @@
 服务端运行脚本
 
-这些文件用于 2.0.0 完整服务端目录。Windows 使用 Kairisei-Launcher.exe 或
+这些文件用于 2.0.2 服务端运行目录（2.0.0 完整包覆盖配套增量后）。Windows 使用 Kairisei-Launcher.exe 或
 Start-Server.cmd，正常停止使用 Stop-Server.cmd。默认主端口 26040，战斗端口
 为主端口 +1，Admin 为主端口 +2，仅在本机监听。
 

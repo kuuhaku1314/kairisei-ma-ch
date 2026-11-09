@@ -167,6 +167,12 @@ func (a *API) bossRules(w http.ResponseWriter, r *http.Request) {
 		if rule, ok := c.rules[id]; ok {
 			row.BossRules = rule
 		}
+		if base, ok := c.economyBases[id]; ok {
+			if rule := c.economy[base.Difficulty]; rule.BPUse != nil {
+				row.BPUse = *rule.BPUse
+				row.BPUseHalf = (row.BPUse + 1) / 2
+			}
+		}
 		rows = append(rows, row)
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].BossID < rows[j].BossID })

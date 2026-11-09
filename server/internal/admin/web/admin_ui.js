@@ -77,7 +77,10 @@ const viewMeta = {
   dashboard: ['概览', '待处理事项、玩家与对局、服务运行，以及内容与部署状态'],
   accounts: ['玩家', '筛选玩家、查看存档、调整资源与绑定，跨页选择收件人'],
   mail: ['玩家', '选择收件人与奖励，预览后按批次发放；中断后可从批次继续'],
-  bosses: ['战斗与活动', '活动／素材、往期 BOSS 与炼金塔各自的开放名单和开放时间，以及各难度入口规则'],
+  bosses: [
+    '战斗与活动',
+    '活动／素材、往期 BOSS 与炼金塔各自的开放名单和开放时间，各难度入口规则，以及体力与经验',
+  ],
   drops: ['战斗与活动', '按难度配置怪物／部位掉落与名声奖励，新开战生效'],
   'activity-rewards': ['战斗与活动', '圣剑杯九档固定奖励、回合与倍率，探索逐项概率奖励'],
   'pool-editor': ['扭蛋与商店', '编辑卡池内容与价格 → 保存草稿并预览 → 发布'],
@@ -962,9 +965,21 @@ function renderPager(key, page, total, size, onPage) {
 }
 // 活动／素材, 往期 BOSS and 炼金塔 are three publication catalogs, each its own document with its own mode, list
 // and open window. The tower catalog lists whole towers (policy.towers); its group_ids are tower IDs.
+// The fourth tab, 体力与经验 ('economy', admin_boss_economy.js), is no catalog: it shares only the save bar.
 const bossCatalogName = (catalog) =>
-  ({ activity: '活动／素材副本', past: '往期 BOSS', tower: '炼金塔' })[catalog];
+  ({ activity: '活动／素材副本', past: '往期 BOSS', tower: '炼金塔', economy: '体力与经验' })[catalog];
+function bossSaveReady() {
+  return state.bossCatalog === 'economy'
+    ? typeof bossEconomyReady === 'function' && bossEconomyReady()
+    : !!state.policy;
+}
 async function loadBossPublication(catalog) {
+  if (catalog === 'economy') {
+    await loadBossEconomy();
+    state.bossCatalog = catalog;
+    renderBosses();
+    return;
+  }
   const [groups, policy] = await Promise.all([
     api('/api/boss-groups?catalog=' + catalog),
     api('/api/boss-policy?catalog=' + catalog),
@@ -987,11 +1002,7 @@ $$('#boss-catalogs button').forEach(
       const catalog = b.dataset.catalog;
       if (catalog === state.bossCatalog || policyBusy('bosses')) return;
       if (
-        !(await confirmDiscard(
-          adminPolicyDirty('bosses'),
-          '切换目录会放弃当前目录未保存的修改。',
-          '放弃并切换',
-        ))
+        !(await confirmDiscard(adminPolicyDirty('bosses'), '切换会放弃当前页签未保存的修改。', '放弃并切换'))
       )
         return;
       state.loading.add('bosses');
@@ -1061,6 +1072,16 @@ function renderBosses() {
   $$('#boss-catalogs button').forEach((b) =>
     b.classList.toggle('active', b.dataset.catalog === state.bossCatalog),
   );
+  const economy = state.bossCatalog === 'economy';
+  $('#boss-economy-panel').hidden = !economy;
+  $('#boss-publish-panel').hidden = economy;
+  $('#save-policy').textContent = economy ? '保存设置' : '发布策略';
+  if (economy) {
+    $('#boss-tower-panel').hidden = $('#boss-groups-panel').hidden = true;
+    renderBossEconomy();
+    updateBossDraftState();
+    return;
+  }
   // Offer only the kinds this catalog has; 往期 BOSS holds 3D groups only, so its kind filter disappears.
   const kinds = new Set(state.groups.map((g) => g.category));
   $$('#boss-kinds button').forEach(
@@ -1071,7 +1092,7 @@ function renderBosses() {
   const name = bossCatalogName(state.bossCatalog);
   $('#boss-publish-scope').textContent = '仅' + name;
   $('#boss-publish-hint').textContent =
-    `开放方式、${state.bossCatalog === 'tower' ? '开放的塔' : '名单'}和开放时间只作用于${name}；另外两个 Tab 各自单独发布。已开始的战斗不受影响。`;
+    `开放方式、${state.bossCatalog === 'tower' ? '开放的塔' : '名单'}和开放时间只作用于${name}；其他目录各自单独发布。已开始的战斗不受影响。`;
   renderTowers();
   renderBossWindow();
   $('#boss-groups-panel').hidden = state.bossCatalog === 'tower';
@@ -1194,8 +1215,12 @@ $('#gacha-rows').addEventListener('change', (event) => {
 });
 // 炼金塔: the tower catalog opens whole towers by tower ID (its group_ids), never as Boss groups.
 function updateBossDraftState() {
-  const dirty = !!state.policy && adminPolicyDirty('bosses');
-  setSaveState('#boss-draft-state', dirty ? '有未发布的修改' : '与已发布设置一致', dirty ? 'dirty' : 'ok');
+  const economy = state.bossCatalog === 'economy',
+    dirty = bossSaveReady() && adminPolicyDirty('bosses');
+  const [pending, clean] = economy
+    ? ['有未保存的修改', '与已保存设置一致']
+    : ['有未发布的修改', '与已发布设置一致'];
+  setSaveState('#boss-draft-state', dirty ? pending : clean, dirty ? 'dirty' : 'ok');
   if (typeof updateDraftIndicators === 'function') updateDraftIndicators();
 }
 
@@ -1457,12 +1482,13 @@ function updatePolicyControls() {
   }
   document.body.classList.toggle('busy', policyBusy(state.currentView));
   if (typeof updatePoolControls === 'function') updatePoolControls();
-  $('#save-policy').disabled = policyBusy('bosses') || !state.policy;
+  $('#save-policy').disabled = policyBusy('bosses') || !bossSaveReady();
   $('#gacha-save').disabled = policyBusy('gachas') || !state.gachaPolicy;
   $('#refresh').disabled = policyBusy(state.currentView);
   if (typeof updateDraftIndicators === 'function') updateDraftIndicators();
 }
 $('#save-policy').onclick = async () => {
+  if (state.bossCatalog === 'economy') return saveBossEconomy();
   if (policyBusy('bosses') || !state.policy) return;
   const start = unixInput('#boss-start'),
     end = unixInput('#boss-end');

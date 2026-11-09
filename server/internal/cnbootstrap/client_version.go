@@ -9,7 +9,7 @@ import (
 
 // LOCAL_POLICY: installation versions are separate from catalog/CPK revisions.
 // Publish this exact modern client version in the server list and login gate.
-const cnMinimumClientVersion = "2.0.0"
+const cnMinimumClientVersion = "2.0.2"
 
 const cnClientReleaseURL = "https://github.com/kuuhaku1314/kairisei-ma-ch/releases"
 

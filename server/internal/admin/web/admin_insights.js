@@ -514,7 +514,7 @@ function renderBossRuleForms() {
     })
     .join('');
   $('#boss-detail-rules').innerHTML =
-    `<p class="hint">每个开关只影响后续开战，已开始的战斗不变。列标题的“全开／全关”作用于本组全部难度；普通与自卡组入口共用掉落和名声奖励。</p><div class="table-wrap"><table class="rule-matrix"><thead><tr><th>难度</th><th>BP 消耗</th>${head}<th><span class="sr-only">掉落</span></th></tr></thead><tbody>${rows || emptyRow(6, '此组没有可配置的难度')}</tbody></table></div><p class="hint" id="boss-rule-changes" aria-live="polite"></p><details class="tool-drawer"><summary>各难度敌人属性（HP 已计入编队倍率）</summary><p class="hint">基础参数来自当前战斗编队；不含开场被动、战斗BUFF和动态变身。</p>${bosses.map((b) => `<h3>${esc(b.difficulty)} <code>#${b.boss_id}</code></h3>${bossStatTable(b)}`).join('')}</details>`;
+    `<p class="hint">每个开关只影响后续开战，已开始的战斗不变。列标题的“全开／全关”作用于本组全部难度；普通与自卡组入口共用掉落和名声奖励。体力和通关经验在「Boss 发布 › 体力与经验」按难度统一设置。</p><div class="table-wrap"><table class="rule-matrix"><thead><tr><th>难度</th><th>BP 消耗</th>${head}<th><span class="sr-only">掉落</span></th></tr></thead><tbody>${rows || emptyRow(6, '此组没有可配置的难度')}</tbody></table></div><p class="hint" id="boss-rule-changes" aria-live="polite"></p><details class="tool-drawer"><summary>各难度敌人属性（HP 已计入编队倍率）</summary><p class="hint">基础参数来自当前战斗编队；不含开场被动、战斗BUFF和动态变身。</p>${bosses.map((b) => `<h3>${esc(b.difficulty)} <code>#${b.boss_id}</code></h3>${bossStatTable(b)}`).join('')}</details>`;
   updateBossRuleChanges();
 }
 function bossRuleChanges() {

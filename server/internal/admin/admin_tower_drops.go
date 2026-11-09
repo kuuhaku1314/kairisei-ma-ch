@@ -11,6 +11,7 @@ import (
 
 	"kairisei.local/server/internal/game"
 	"kairisei.local/server/internal/gamestate"
+	"kairisei.local/server/internal/masterdata"
 	"kairisei.local/server/internal/multiplayer"
 )
 
@@ -118,6 +119,9 @@ func (c *contentStore) projectTowerDrops(state *gamestate.State) error {
 			continue
 		}
 		p, view := projectBattleDrops(p, config.BossDrops)
+		if err := masterdata.ValidateBattleDropSlots(p.EnemyDrops); err != nil {
+			return fmt.Errorf("炼金塔%d第%d层: %w", p.TowerID, p.TowerFloor, err)
+		}
 		if config.FirstClearRewards != nil {
 			p.FirstClearRewards = append([]gamestate.Reward{}, (*config.FirstClearRewards)...)
 			firstClears[key] = p.FirstClearRewards

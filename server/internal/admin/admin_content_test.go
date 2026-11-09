@@ -38,6 +38,23 @@ func TestAdminContentAtomicConfigAndRestart(t *testing.T) {
 	if len(p.EnemyDrops) != 2 || p.EnemyDrops[0].Reward.Type != 4 || p.EnemyDrops[0].Reward.Num != 50 || p.ResultRewards[0].Type != 0 {
 		t.Fatal("fixed gold/EXP lost")
 	}
+	// Eight editable rows plus the fixed gold would overflow EnemyData.drop1..8.
+	// Reject before persisting or publishing any part of the new configuration.
+	overflow := config
+	overflow.Drops = make([]gamestate.TeamBattleEnemyDrop, 8)
+	for i := range overflow.Drops {
+		overflow.Drops[i] = config.Drops[0]
+	}
+	testfixture.CallContentAdmin(t, router, "PUT", "/drops", map[string]any{"expected_revision": 1, "configs": []BossDrops{overflow}}, 400)
+	if ops.content.dropRevision != 1 || len(ops.content.configuration.State.TeamBattleRewards[0].EnemyDrops) != 2 {
+		t.Fatal("native slot overflow was published")
+	}
+	boundary := overflow
+	boundary.Drops = boundary.Drops[:7]
+	boundary.Drops[0].Reward.Num = 100 // Quantity does not consume extra slots.
+	if _, err := ops.content.project(map[int]BossDrops{11: boundary}, ops.content.shops, ops.content.rules); err != nil {
+		t.Fatal("eight final slots should remain valid", err)
+	}
 	bad := config
 	bad.BossID = 99
 	testfixture.CallContentAdmin(t, router, "PUT", "/drops", map[string]any{"expected_revision": 1, "configs": []BossDrops{config, bad}}, 400)

@@ -90,6 +90,9 @@ type contentStore struct {
 	rules             map[int]BossRules
 	ruleRevision      int
 	ruleBases         map[int]bossRuleEntry
+	economy           map[string]bossEconomyOverride
+	economyBases      map[int]bossEconomyBase
+	economyRevision   int
 	configuration     game.ContentConfiguration
 }
 
@@ -250,6 +253,9 @@ func (o *Operations) InitializeContent(base gamestate.State, battleMasterPath st
 			return err
 		}
 	}
+	if err := c.loadBossEconomy(o, battleMasterPath); err != nil {
+		return err
+	}
 	state, err := c.project(c.drops, c.shops, c.rules)
 	if err != nil {
 		return err
@@ -276,6 +282,9 @@ func (c *contentStore) project(drops map[int]BossDrops, shops map[int]exchangeSh
 			continue
 		}
 		p, view := projectBattleDrops(p, config)
+		if err := masterdata.ValidateBattleDropSlots(p.EnemyDrops); err != nil {
+			return state, fmt.Errorf("BOSS %d: %w", p.BossID, err)
+		}
 		byBoss[p.BossID] = view
 		state.TeamBattleRewards[i] = p
 	}
@@ -315,6 +324,9 @@ func (c *contentStore) project(drops map[int]BossDrops, shops map[int]exchangeSh
 	err := c.projectBossRules(&state, rules)
 	if err == nil {
 		err = c.projectActivityRewards(&state)
+	}
+	if err == nil {
+		err = c.projectBossEconomy(&state)
 	}
 	return state, err
 }
@@ -402,7 +414,7 @@ func (a *API) validateDropsFor(row DropBoss, c BossDrops) error {
 			return err
 		}
 	}
-	return nil
+	return masterdata.ValidateBattleDropSlots(c.Drops)
 }
 
 func (a *API) dropEditor(w http.ResponseWriter, r *http.Request) {

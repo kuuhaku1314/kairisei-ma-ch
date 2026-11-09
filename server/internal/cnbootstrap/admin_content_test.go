@@ -16,6 +16,19 @@ import (
 func auditCompleteAdminContent(t *testing.T, h http.Handler) {
 	t.Helper()
 	admin := h.(interface{ AdminHandler() http.Handler }).AdminHandler()
+	var economy struct {
+		Revision int `json:"revision"`
+		Rules    []struct {
+			Difficulty string `json:"difficulty"`
+		} `json:"rules"`
+	}
+	if err := json.Unmarshal(testfixture.CallContentAdmin(t, admin, "GET", "/api/boss-economy", nil, 200), &economy); err != nil || len(economy.Rules) != 22 {
+		t.Fatalf("activity/past economy scope: %d difficulties, error %v", len(economy.Rules), err)
+	}
+	// Normal quests also have zero StageQuestAreaID in the real catalog. The
+	// production master directory, not that reward field, must exclude them.
+	testfixture.CallContentAdmin(t, admin, "PUT", "/api/boss-economy", map[string]any{"expected_revision": economy.Revision, "rules": []any{map[string]any{"difficulty": "空想神殿 / 一握之星", "bp_use": 1, "experience": 1}}}, 400)
+	t.Logf("boss economy: %d activity/past difficulties; ordinary main quest rejected", len(economy.Rules))
 	var activity struct {
 		Revision int `json:"revision"`
 		Config   struct {
