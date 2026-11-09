@@ -28,7 +28,6 @@ func LoadPVPRuntimeMaster(masterPath string) (game.PVPConfig, error) {
 	}
 	var config game.PVPConfig
 	decoder := json.NewDecoder(bytes.NewReader(content))
-	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&config); err != nil {
 		return game.PVPConfig{}, fmt.Errorf("decode CN PVP runtime config: %w", err)
 	}

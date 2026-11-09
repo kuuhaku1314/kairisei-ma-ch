@@ -133,10 +133,6 @@ func fixedRegenerateRoleValueScaled(role CombatSkillRole, level int, chainCount 
 	return scaleHealChain(maxInt(0, fixed+source*coefficient/1000), role.ChainRate, chainCount)
 }
 
-func scaledRoleValue(role CombatSkillRole, level int) int {
-	return combatParameterInt(role.Parameters[0]) + combatParameterInt(role.Parameters[1])*level/1000
-}
-
 // linearRoleValue is the existing unscaled base/growth producer used by
 // attack operators and card previews. Encoded client tooltip DTOs use this
 // layout too; CSV execution columns may have separate per-mille conversion.
@@ -282,10 +278,6 @@ func fixedBuffRoleValueScaled(role CombatSkillRole, level int, chainCount int, s
 		value += int32(role.ChainRate) * int32(chainCount-1)
 	}
 	return int(value)
-}
-
-func fixedBuffRoleSegments(role CombatSkillRole, level int) (int32, int32) {
-	return fixedBuffRoleSegmentsScaled(role, level, battleRoleScale{percent: 100})
 }
 
 func fixedBuffRoleSegmentsScaled(role CombatSkillRole, level int, scale battleRoleScale) (int32, int32) {

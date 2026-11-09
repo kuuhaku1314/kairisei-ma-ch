@@ -241,7 +241,7 @@ func TestAdminGachaDraftPublicationAndRestart(t *testing.T) {
 	}
 	initialRevision := 0
 	future := time.Now().Add(time.Hour).Unix()
-	if _, err := operations.SetTeamBattlePublication(TeamBattlePublication{Mode: "all", StartUnix: future, ExpectedRevision: &initialRevision}); err != nil {
+	if _, err := operations.setBattlePublication(teamBattlePublicationKey, TeamBattlePublication{Mode: "all", StartUnix: future, ExpectedRevision: &initialRevision}); err != nil {
 		t.Fatal(err)
 	}
 	allowed, err := operations.TeamBattleGroupAllowlist()
@@ -310,7 +310,6 @@ func TestCardSourceTabsKeepMultiSourceCardsAndExcludeEvolvedGachaCandidates(t *t
 
 func TestImportedCardCatalogFiltersIntersectBeforePagination(t *testing.T) {
 	master := masterdata.CardRuntimeMaster{
-		Source: json.RawMessage(`{"imported_inventory":[{"region":"JP","ids":{"card":[10214045,10214046,10214048,10214050,10214053]}}]}`),
 		CardTemplates: []gamestate.Card{
 			{CardID: 10214045, Name: "絢爛型オルトリート", RarityRank: 6},
 			{CardID: 10214046, Name: "蹴球型ドモヴォーイ", RarityRank: 6},
@@ -325,6 +324,9 @@ func TestImportedCardCatalogFiltersIntersectBeforePagination(t *testing.T) {
 			10214045: {ArthurType: 3}, 10214046: {ArthurType: 4}, 10214048: {ArthurType: 2},
 			10214050: {ArthurType: 1}, 10214053: {ArthurType: 2}, 10214099: {ArthurType: 2},
 		}},
+	}
+	if err := json.Unmarshal([]byte(`{"imported_inventory":[{"region":"JP","ids":{"card":[10214045,10214046,10214048,10214050,10214053]}}]}`), &master.Source); err != nil {
+		t.Fatal(err)
 	}
 	catalog, _, err := BuildAdminCatalog(master, masterdata.ItemRuntimeMaster{})
 	if err != nil {

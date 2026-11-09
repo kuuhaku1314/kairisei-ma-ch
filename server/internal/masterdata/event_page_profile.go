@@ -16,14 +16,12 @@ func ValidateEventPageProfile(profile gamestate.EventPageProfile) error {
 		return errors.New("CN EventPage profile is invalid")
 	}
 	if profile.EventID == 0 {
-		if profile.BackgroundPictID != 0 || profile.HomeButtonPictID != 0 || len(profile.Buttons) != 0 ||
-			profile.Evidence != "PLACEHOLDER_GENERIC_OFFICIAL_EVENTPAGE_ASSETS" {
+		if profile.BackgroundPictID != 0 || profile.HomeButtonPictID != 0 || len(profile.Buttons) != 0 {
 			return errors.New("invalid inactive CN EventPage template")
 		}
 	} else if profile.EventID != 11801010 || profile.BackgroundPictID != 1 || profile.HomeButtonPictID != 1 ||
 		len(profile.ItemIDs) != 0 || len(profile.Buttons) != 1 ||
-		profile.Buttons[0] != (gamestate.EventPageButton{Type: 6, PictID: 6, MoveTo: "eventstory"}) ||
-		profile.Evidence != "INFERRED_LOCAL_PERMANENT_EVENT_REPLAY" {
+		profile.Buttons[0] != (gamestate.EventPageButton{Type: 6, PictID: 6, MoveTo: "eventstory"}) {
 		return errors.New("invalid CN permanent event replay")
 	}
 	return nil

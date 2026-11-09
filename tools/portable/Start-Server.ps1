@@ -1,4 +1,4 @@
-﻿[CmdletBinding(SupportsShouldProcess)]
+[CmdletBinding(SupportsShouldProcess)]
 param(
     [ValidateNotNullOrEmpty()]
     [string]$AdvertiseHost = '10.0.2.2',
@@ -106,13 +106,6 @@ $deployment = Get-Content -LiteralPath $deploymentPath -Raw -Encoding UTF8 | Con
 if (-not $PSBoundParameters.ContainsKey('AdvertiseHost')) { $AdvertiseHost = [string]$deployment.advertise_host }
 if (-not $PSBoundParameters.ContainsKey('Port')) { $Port = [int]$deployment.port }
 $resourceSetPath = Resolve-PackagePath 'resource-set/resource-set.json'
-if (Test-Path -LiteralPath (Join-Path $packageRoot 'Clean-RetiredResources.ps1')) {
-    $normalization = & (Resolve-PackagePath 'Clean-RetiredResources.ps1') -DryRun:$DryRun -WhatIf:$WhatIfPreference -PassThru
-    if (($DryRun -or $WhatIfPreference) -and $normalization.Found -gt 0) {
-        Write-Host '预览完成；正常启动时将先移除上述退役文件，再校验资源并启动。未启动服务。'
-        return
-    }
-}
 . (Resolve-PackagePath 'Read-ResourceSet.ps1')
 $resourceSet = Read-PortableResourceSet -ManifestPath $resourceSetPath
 if ($resourceSet.Manifest.policy.publishable -ne $true -or $deployment.validation_only) {
@@ -140,20 +133,6 @@ try {
     $platformContentsSHA256 = [BitConverter]::ToString($profileHash.ComputeHash([Text.Encoding]::UTF8.GetBytes($platformIdentity))).Replace('-', '').ToLowerInvariant()
 }
 finally { $profileHash.Dispose() }
-$resourceInputs = $resourceSet.Entrypoints
-$bindings = @{
-    'cn-save-seed'='saveSeedPath'; 'cn-asset-map'='assetMapPath'; 'cn-card-master'='cardMasterPath'
-    'cn-explore-master'='exploreMasterPath'; 'cn-story-master'='storyMasterPath'; 'cn-battle-master'='battleMasterPath'
-    'cn-combat-card-master'='combatCardPath'; 'cn-combat-master-root'='combatMasterRoot'; 'cn-navi-master'='naviMasterPath'
-    'cn-item-master'='itemMasterPath'; 'cn-avatar-master'='avatarMasterPath'; 'cn-gacha-banner'='gachaBannerPath'
-    'cn-five-star-gacha-banner'='fiveStarBannerPath'; 'cn-home-banner'='homeBannerPath'; 'cn-stamp-master'='stampMasterPath'
-    'cn-honor-master'='honorMasterPath'; 'cn-pvp-master'='pvpMasterPath'; 'cn-player-progression'='playerProgressionPath'
-    'cn-login-bonus'='loginBonusPath'; 'cn-cpk-root'='cpkRoot'; 'cn-cpk-aliases'='cpkAliasesPath'; 'cn-image-root'='imageRoot'
-}
-foreach ($name in $bindings.Keys) {
-    if (-not $resourceInputs.ContainsKey($name)) { throw "Missing resource entrypoint: $name" }
-    Set-Variable -Name $bindings[$name] -Value $resourceInputs[$name]
-}
 $dataRoot = Join-Path $packageRoot '_local/data'
 $runRoot = Join-Path $packageRoot ('_local/runtime/server-runs/' + [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ'))
 $statePath = Join-Path $dataRoot 'server-state.json'
@@ -210,33 +189,11 @@ if (Test-Path -LiteralPath $cdnConfigPath -PathType Leaf) {
     Add-NativeArgument -List $arguments -Name '-cdn-config' -Value $cdnConfigPath
 }
 Add-NativeArgument -List $arguments -Name '-cdn-sync-config' -Value (Join-Path $packageRoot 'cdn-sync.json')
-Add-NativeArgument -List $arguments -Name '-client-profile' -Value 'cn602-bootstrap'
 Add-NativeArgument -List $arguments -Name '-request-log' -Value $requestLogPath
 Add-NativeArgument -List $arguments -Name '-admin-log-file' -Value $stdoutPath
 Add-NativeArgument -List $arguments -Name '-cn-save-path' -Value $savePath
-Add-NativeArgument -List $arguments -Name '-cn-save-seed' -Value $saveSeedPath
-Add-NativeArgument -List $arguments -Name '-cn-asset-map' -Value $assetMapPath
-Add-NativeArgument -List $arguments -Name '-cn-card-master' -Value $cardMasterPath
-Add-NativeArgument -List $arguments -Name '-cn-explore-master' -Value $exploreMasterPath
-Add-NativeArgument -List $arguments -Name '-cn-story-master' -Value $storyMasterPath
-Add-NativeArgument -List $arguments -Name '-cn-battle-master' -Value $battleMasterPath
-Add-NativeArgument -List $arguments -Name '-cn-combat-card-master' -Value $combatCardPath
-Add-NativeArgument -List $arguments -Name '-cn-combat-master-root' -Value $combatMasterRoot
-Add-NativeArgument -List $arguments -Name '-cn-navi-master' -Value $naviMasterPath
-Add-NativeArgument -List $arguments -Name '-cn-item-master' -Value $itemMasterPath
-Add-NativeArgument -List $arguments -Name '-cn-avatar-master' -Value $avatarMasterPath
-Add-NativeArgument -List $arguments -Name '-cn-gacha-banner' -Value $gachaBannerPath
-Add-NativeArgument -List $arguments -Name '-cn-five-star-gacha-banner' -Value $fiveStarBannerPath
-Add-NativeArgument -List $arguments -Name '-cn-home-banner' -Value $homeBannerPath
-Add-NativeArgument -List $arguments -Name '-cn-stamp-master' -Value $stampMasterPath
-Add-NativeArgument -List $arguments -Name '-cn-honor-master' -Value $honorMasterPath
-Add-NativeArgument -List $arguments -Name '-cn-pvp-master' -Value $pvpMasterPath
-Add-NativeArgument -List $arguments -Name '-cn-player-progression' -Value $playerProgressionPath
-Add-NativeArgument -List $arguments -Name '-cn-login-bonus' -Value $loginBonusPath
-Add-NativeArgument -List $arguments -Name '-cn-cpk-root' -Value $cpkRoot
-Add-NativeArgument -List $arguments -Name '-cn-cpk-aliases' -Value $cpkAliasesPath
+Add-NativeArgument -List $arguments -Name '-resource-set' -Value $resourceSetPath
 if ($null -ne $imageRoot) {
-    Add-NativeArgument -List $arguments -Name '-cn-image-root' -Value $imageRoot
 }
 foreach ($profilePath in $platformContents) {
     Add-NativeArgument -List $arguments -Name '-platform-content' -Value $profilePath

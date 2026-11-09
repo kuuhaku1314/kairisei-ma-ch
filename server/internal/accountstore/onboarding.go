@@ -234,16 +234,12 @@ func InstallOnboardingGacha(state *gamestate.State) error {
 	tutorial.CardNumMax = 1
 	tutorial.UserSelectMax = 0
 	tutorial.DailyFirstFree = false
-	tutorial.DailyFirstFreeSourceState = ""
 	tutorial.PlayCount = playCounts[masterdata.OnboardingGachaID]
 	tutorial.GuaranteedRarityRank = 0
 	tutorial.GuaranteedCount = 0
 	tutorial.RemainderRarityRank = 0
-	tutorial.ResultPolicySourceState = ""
 	tutorial.CardIDs = []int{10002001}
 	tutorial.CardWeights = []int{1}
-	tutorial.PoolSourceState = ""
-	tutorial.WeightSourceState = ""
 	gachas = append(gachas, tutorial)
 
 	// The first multi-draw returns eleven cards: one UR and ten SR.
@@ -262,14 +258,10 @@ func InstallOnboardingGacha(state *gamestate.State) error {
 	multi.CardNumMax = 11
 	multi.UserSelectMax = 0
 	multi.DailyFirstFree = false
-	multi.DailyFirstFreeSourceState = ""
 	multi.PlayCount = playCounts[masterdata.OnboardingMultiGachaID]
 	multi.GuaranteedRarityRank = 5
 	multi.GuaranteedCount = 1
 	multi.RemainderRarityRank = 4
-	multi.ResultPolicySourceState = ""
-	multi.PoolSourceState = ""
-	multi.WeightSourceState = ""
 	// Keep the tutorial lineup independent of the standard pool. The four URs
 	// are basic starter evolutions, one per profession; the remaining draws use SRs.
 	multi.CardIDs = []int{

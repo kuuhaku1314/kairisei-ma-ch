@@ -35,7 +35,6 @@ func cnBootstrapIntroPlaceholder(writer http.ResponseWriter, request *http.Reque
 	}
 	writer.Header().Set("Content-Type", "image/png")
 	writer.Header().Set("Cache-Control", "public, max-age=86400")
-	writer.Header().Set("X-Kairisei-Source-State", "PLACEHOLDER")
 	_, _ = writer.Write(cn602IntroPlaceholderPNG)
 }
 

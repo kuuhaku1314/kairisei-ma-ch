@@ -1,9 +1,10 @@
 package multiplayer
 
 import (
+	"testing"
+
 	"kairisei.local/server/battlecore"
 	"kairisei.local/server/internal/battlefixture"
-	"testing"
 )
 
 // Room tests add account identity outside the shared core fixture.

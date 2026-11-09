@@ -2,10 +2,11 @@ package battlecore
 
 import (
 	"encoding/json"
-	"kairisei.local/server/battlecontent"
 	"os"
 	"strings"
 	"testing"
+
+	"kairisei.local/server/battlecontent"
 )
 
 type nativeActionAPISkill struct {

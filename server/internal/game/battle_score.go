@@ -7,7 +7,7 @@ import (
 )
 
 func (settlement *teamBattleSettlement) setSoloRankingScore(policy *gamestate.TeamBattleScorePolicy, report TeamBattleDropReport, bossID int) {
-	if !report.SoloChallenge || !report.ScoreVerified || policy == nil || policy.SourceState != "LOCAL_POLICY_DAMAGE_SCORE" {
+	if !report.SoloChallenge || !report.ScoreVerified || policy == nil || !policy.IsDamageScore() {
 		return
 	}
 	for _, partner := range settlement.Context.SelectedPartners {
@@ -59,7 +59,7 @@ func planTeamBattleScore(p *gamestate.TeamBattleScorePolicy, progress gamestate.
 	}
 	rate := max(100, min(900, 900-(turns-p.BestTurn)*100))
 	damage := p.BaseScore
-	if p.SourceState == "LOCAL_POLICY_DAMAGE_SCORE" {
+	if p.IsDamageScore() {
 		if report.ScoreVerified {
 			damage, rate = report.ScoreDamage, p.Rate
 		} else {

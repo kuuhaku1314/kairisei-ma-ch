@@ -1,8 +1,9 @@
 package masterdata
 
 import (
-	"kairisei.local/server/internal/gamestate"
 	"testing"
+
+	"kairisei.local/server/internal/gamestate"
 )
 
 func TestAlchemyStoryStartsIndependentlyWithoutOpeningPartTwo(t *testing.T) {

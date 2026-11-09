@@ -444,10 +444,7 @@ func attachAdminCardDetails(entries []AdminCatalogEntry, templates []gamestate.C
 }
 
 func BuildAdminCatalog(cardMaster masterdata.CardRuntimeMaster, itemMaster masterdata.ItemRuntimeMaster) ([]AdminCatalogEntry, map[string]AdminCatalogEntry, error) {
-	jpCards, err := adminJPCardIDs(cardMaster.Source)
-	if err != nil {
-		return nil, nil, fmt.Errorf("read catalog import provenance: %w", err)
-	}
+	jpCards := adminJPCardIDs(cardMaster.Source)
 	evolved := make(map[int]bool)
 	evolutionSources := make(map[int][]int)
 	for _, transition := range cardMaster.EvolutionTransitions {

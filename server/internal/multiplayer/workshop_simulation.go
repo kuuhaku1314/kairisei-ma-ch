@@ -5,9 +5,10 @@ package multiplayer
 import (
 	"context"
 	"fmt"
+	"sort"
+
 	"kairisei.local/server/battlecore"
 	"kairisei.local/server/internal/gamestate"
-	"sort"
 )
 
 // These are explicit author-controlled test members, never loaded accounts.

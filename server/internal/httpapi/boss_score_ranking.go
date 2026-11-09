@@ -1,8 +1,9 @@
 package httpapi
 
 import (
-	"kairisei.local/server/internal/gamestate"
 	"net/http"
+
+	"kairisei.local/server/internal/gamestate"
 )
 
 // A boss closed to battles keeps its ranking, so players can still read the final standings.
@@ -12,7 +13,7 @@ func (a *API) scoreRankingBossAvailable(bossID int) bool {
 	}
 	for _, profile := range a.initialState.TeamBattleRewards {
 		if profile.BossID == bossID && profile.StageQuestAreaID == 0 && profile.TowerID == 0 &&
-			profile.ScorePolicy != nil && profile.ScorePolicy.SourceState == "LOCAL_POLICY_DAMAGE_SCORE" {
+			profile.ScorePolicy != nil && profile.ScorePolicy.IsDamageScore() {
 			return true
 		}
 	}

@@ -41,7 +41,6 @@ func LoadPlayerProgressionRuntimeMaster(path string) (gamestate.PlayerProgressio
 		return gamestate.PlayerProgressionPolicy{}, errors.New("CN player progression runtime must be a non-empty regular JSON file within the size limit")
 	}
 	decoder := json.NewDecoder(io.LimitReader(file, maxPlayerProgressionRuntimeBytes+1))
-	decoder.DisallowUnknownFields()
 	var master playerProgressionRuntimeMaster
 	if err := decoder.Decode(&master); err != nil {
 		return gamestate.PlayerProgressionPolicy{}, fmt.Errorf("decode CN player progression runtime: %w", err)

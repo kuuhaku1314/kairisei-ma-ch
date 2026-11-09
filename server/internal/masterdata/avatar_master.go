@@ -1,7 +1,6 @@
 package masterdata
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,9 +21,9 @@ const (
 )
 
 type avatarRuntimeMaster struct {
-	SchemaVersion             int                                    `json:"schema_version"`
-	ClientProfile             string                                 `json:"client_profile"`
-	Source                    json.RawMessage                        `json:"source"`
+	SchemaVersion int    `json:"schema_version"`
+	ClientProfile string `json:"client_profile"`
+
 	LocalAccountConfigVersion int                                    `json:"local_account_config_version"`
 	InitialOwnedPartIDs       []int                                  `json:"initial_owned_part_ids"`
 	DefaultDecks              map[string][]int                       `json:"default_decks"`
@@ -56,7 +55,6 @@ func LoadAvatarRuntimeMaster(masterPath string) (avatarRuntimeMaster, error) {
 		return avatarRuntimeMaster{}, errors.New("CN Avatar runtime master must be a non-empty regular JSON file within the size limit")
 	}
 	decoder := json.NewDecoder(io.LimitReader(file, maxAvatarMasterBytes+1))
-	decoder.DisallowUnknownFields()
 	var master avatarRuntimeMaster
 	if err := decoder.Decode(&master); err != nil {
 		return avatarRuntimeMaster{}, fmt.Errorf("decode CN Avatar runtime master: %w", err)
@@ -74,8 +72,7 @@ func validateAvatarRuntimeMaster(master avatarRuntimeMaster) error {
 	if master.SchemaVersion != 1 || master.ClientProfile != "cn602-bootstrap" {
 		return errors.New("CN Avatar runtime master identity is invalid")
 	}
-	if len(master.Source) == 0 || bytes.Equal(bytes.TrimSpace(master.Source), []byte("null")) ||
-		master.LocalAccountConfigVersion <= 0 || len(master.PartDefinitions) == 0 ||
+	if master.LocalAccountConfigVersion <= 0 || len(master.PartDefinitions) == 0 ||
 		len(master.Series) == 0 || len(master.SeriesCompletions) == 0 ||
 		len(master.InitialOwnedPartIDs) == 0 || len(master.CostumeRewards) == 0 {
 		return errors.New("CN Avatar runtime master is incomplete")
@@ -91,8 +88,7 @@ func validateAvatarRuntimeMaster(master avatarRuntimeMaster) error {
 		costumeIDs[row.ID] = struct{}{}
 	}
 	if master.ShopPolicy.PayType != 1 || master.ShopPolicy.PayTypeID != 0 || master.ShopPolicy.Price <= 0 ||
-		master.ShopPolicy.AppearEnd < 0 || master.ShopPolicy.NewAppearEnd < 0 ||
-		master.ShopPolicy.Evidence != "PLACEHOLDER_LOCAL_GOLD_PRICE" {
+		master.ShopPolicy.AppearEnd < 0 || master.ShopPolicy.NewAppearEnd < 0 {
 		return errors.New("CN Avatar local shop policy is invalid")
 	}
 	seriesIDs := make(map[int]struct{}, len(master.Series))

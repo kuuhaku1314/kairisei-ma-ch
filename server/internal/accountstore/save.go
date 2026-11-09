@@ -138,7 +138,6 @@ func DecodeSaveState(content []byte) (gamestate.State, error) {
 		return gamestate.State{}, errors.New("CN save JSON must be non-empty and within the size limit")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(content))
-	decoder.DisallowUnknownFields()
 	var save saveState
 	if err := decoder.Decode(&save); err != nil {
 		return gamestate.State{}, fmt.Errorf("decode CN save: %w", err)

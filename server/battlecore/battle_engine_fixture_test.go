@@ -1,8 +1,9 @@
 package battlecore
 
 import (
-	"kairisei.local/server/internal/battlefixture"
 	"testing"
+
+	"kairisei.local/server/internal/battlefixture"
 )
 
 func coreBattleFixture(t *testing.T) (*BattleEngine, []Participant) {

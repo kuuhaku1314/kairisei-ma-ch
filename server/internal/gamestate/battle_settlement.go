@@ -1,7 +1,6 @@
 package gamestate
 
 import (
-	"maps"
 	"slices"
 )
 
@@ -30,8 +29,6 @@ func CloneTeamBattleSettlementPlan(plan TeamBattleSettlementPlan) TeamBattleSett
 	}
 	plan.Profile.ScorePolicy = CloneTeamBattleScorePolicy(plan.Profile.ScorePolicy)
 	plan.FameBonus.EligibleRewardTypes = slices.Clone(plan.FameBonus.EligibleRewardTypes)
-	plan.FameBonus.SourceState = maps.Clone(plan.FameBonus.SourceState)
 	plan.HostBonus.EligibleRewardTypes = slices.Clone(plan.HostBonus.EligibleRewardTypes)
-	plan.HostBonus.SourceState = maps.Clone(plan.HostBonus.SourceState)
 	return plan
 }

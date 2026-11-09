@@ -2,56 +2,20 @@ package multiplayer
 
 import "kairisei.local/server/battlecore"
 
-// Existing server-facing names delegate to the single shared core.
-// No battle implementation or mutable state is duplicated here.
-func ValidateAppendSkillDefinition(source string, skill CombatSkillDefinition) error {
-	return battlecore.ValidateAppendSkillDefinition(source, skill)
-}
-func SupportsAppendCondition(condition string) bool {
-	return battlecore.SupportsAppendCondition(condition)
-}
-func CardIdentityResult(memberType int, card BattleCard) BattleResult {
-	return battlecore.CardIdentityResult(memberType, card)
-}
-
 type ContinuePlan = battlecore.ContinuePlan
 type ContractResultCodec = battlecore.ContractResultCodec
 
 func ValidateCoreContracts(catalog *CombatCatalog, codec ContractResultCodec) error {
 	return battlecore.ValidateCoreContracts(catalog, codec)
 }
-func ValidBattleDrop(drop BattleDrop) bool         { return battlecore.ValidBattleDrop(drop) }
-func SupportsEnemyActionTarget(kind string) bool   { return battlecore.SupportsEnemyActionTarget(kind) }
-func SupportsEnemyAITrigger(trigger string) bool   { return battlecore.SupportsEnemyAITrigger(trigger) }
-func ValidEnemyAIOrderFields(fields []string) bool { return battlecore.ValidEnemyAIOrderFields(fields) }
-func SupportsEnemyFunction(function string) bool   { return battlecore.SupportsEnemyFunction(function) }
-func FunctionNeedsBuffCode(function string) bool   { return battlecore.FunctionNeedsBuffCode(function) }
-func SupportsEnemyBranchCondition(condition string) bool {
-	return battlecore.SupportsEnemyBranchCondition(condition)
-}
-func SupportsPlayerBranchCondition(condition string) bool {
-	return battlecore.SupportsPlayerBranchCondition(condition)
-}
+func ValidBattleDrop(drop BattleDrop) bool { return battlecore.ValidBattleDrop(drop) }
 
 type BattleCard = battlecore.BattleCard
 type BattleSphere = battlecore.BattleSphere
 type BattleBuddy = battlecore.BattleBuddy
 type BattleDrop = battlecore.BattleDrop
 
-func EnemySkillLevel(function string) int { return battlecore.EnemySkillLevel(function) }
-
 type WaveOutcome = battlecore.WaveOutcome
-
-func SupportsMainCardPassiveFunction(function string) bool {
-	return battlecore.SupportsMainCardPassiveFunction(function)
-}
-func ValidateEnemyPassiveDefinitions(catalog *CombatCatalog) error {
-	return battlecore.ValidateEnemyPassiveDefinitions(catalog)
-}
-func PreviewEnemyPlans(catalog *CombatCatalog, partyID int, seed uint32, snapshots []battlecore.EnemyPlanSnapshot) ([]battlecore.EnemyTurnPlan, error) {
-	return battlecore.PreviewEnemyPlans(catalog, partyID, seed, snapshots)
-}
-func SupportsPlayerFunction(function string) bool { return battlecore.SupportsPlayerFunction(function) }
 
 const CommandSkill = battlecore.CommandSkill
 const CommandCardSkill = battlecore.CommandCardSkill
@@ -78,10 +42,6 @@ const SphereTypeChalice = battlecore.SphereTypeChalice
 
 var ErrChaliceSphereUnavailable = battlecore.ErrChaliceSphereUnavailable
 
-func SupportsSupportFunction(function string) bool {
-	return battlecore.SupportsSupportFunction(function)
-}
-
 type BattleEngine = battlecore.BattleEngine
 type Phase = battlecore.Phase
 
@@ -99,9 +59,6 @@ func NewBattleEngine(catalog *CombatCatalog, spec battlecore.Config, members []b
 	return battlecore.NewBattleEngine(catalog, spec, members)
 }
 func ValidateSupportCards(cards []BattleCard) error { return battlecore.ValidateSupportCards(cards) }
-func NativeSupportSkillIndex(partitions [3]int, loveRate int) int {
-	return battlecore.NativeSupportSkillIndex(partitions, loveRate)
-}
 
 const CommandTurn = battlecore.CommandTurn
 const CommandEnd = battlecore.CommandEnd
@@ -192,14 +149,6 @@ type CombatEnemyDefinition = battlecore.CombatEnemyDefinition
 type CombatEnemyLevel = battlecore.CombatEnemyLevel
 type CombatEnemyAction = battlecore.CombatEnemyAction
 type CombatEnemyAIOrder = battlecore.CombatEnemyAIOrder
-
-func ArthurJob(arthurType int) string { return battlecore.ArthurJob(arthurType) }
-func NativeClientUserParameters(member int, user [18]int32) (BattleResult, error) {
-	return battlecore.NativeClientUserParameters(member, user, false)
-}
-func NativeClientSkillInfo(wire []byte) ([250]int64, error) {
-	return battlecore.NativeClientSkillInfo(wire)
-}
 
 type cardPlaySubmission = battlecore.CardSelection
 type burstSkillSubmission = battlecore.BurstSelection

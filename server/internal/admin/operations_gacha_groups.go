@@ -3,9 +3,10 @@ package admin
 import (
 	"encoding/json"
 	"fmt"
-	"kairisei.local/server/internal/accountstore"
 	"slices"
 	"strconv"
+
+	"kairisei.local/server/internal/accountstore"
 )
 
 type gachaGroupChange struct {

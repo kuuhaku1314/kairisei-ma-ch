@@ -4,8 +4,9 @@ package multiplayer
 
 import (
 	"fmt"
-	"kairisei.local/server/battlecontent"
 	"maps"
+
+	"kairisei.local/server/battlecontent"
 )
 
 func WorkshopSupportFunctionSupported(function, mode string) bool {

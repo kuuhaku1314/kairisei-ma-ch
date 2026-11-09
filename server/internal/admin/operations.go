@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	operationservice "kairisei.local/server/internal/operations"
 	"slices"
 	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	operationservice "kairisei.local/server/internal/operations"
 
 	"kairisei.local/server/internal/accountstore"
 	"kairisei.local/server/internal/game"
@@ -30,10 +31,6 @@ type gachaPublication struct {
 	CatalogVersion   int   `json:"catalog_version,omitempty"`
 	ExpectedRevision *int  `json:"expected_revision,omitempty"`
 	GroupIDs         []int `json:"group_ids"`
-}
-
-func (operations *Operations) SetTeamBattlePublication(publication TeamBattlePublication) (accountstore.Document, error) {
-	return operations.setBattlePublication(teamBattlePublicationKey, publication)
 }
 
 // The tower catalog is written like the Boss catalogs, then applied to live

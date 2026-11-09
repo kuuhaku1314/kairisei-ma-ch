@@ -212,7 +212,7 @@ func (a *API) issueTeamBattleRoom(issue teamBattleRoomIssue) (multiplayer.Creden
 		return multiplayer.Credential{}, err
 	}
 	costInitial := replay.CostInitial
-	if policy := rewardProfile.ScorePolicy; policy != nil && policy.SourceState == "LOCAL_POLICY_DAMAGE_SCORE" {
+	if policy := rewardProfile.ScorePolicy; policy != nil && policy.IsDamageScore() {
 		costInitial = policy.TeamCostInitial
 		if costInitial == 0 {
 			costInitial = 3

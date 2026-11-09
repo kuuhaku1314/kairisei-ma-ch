@@ -1,8 +1,9 @@
 package game
 
 import (
-	"kairisei.local/server/internal/gamestate"
 	"time"
+
+	"kairisei.local/server/internal/gamestate"
 )
 
 func (s *Account) applyPlayerExperienceLocked(amount int) {

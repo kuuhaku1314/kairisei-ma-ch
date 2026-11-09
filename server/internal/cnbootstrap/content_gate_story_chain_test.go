@@ -1,9 +1,10 @@
 package cnbootstrap
 
 import (
+	"testing"
+
 	"kairisei.local/server/internal/gamestate"
 	"kairisei.local/server/internal/masterdata"
-	"testing"
 )
 
 func TestCNMainStoryGateUsesIndependentProgressionChains(t *testing.T) {

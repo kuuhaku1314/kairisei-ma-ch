@@ -190,7 +190,6 @@ func newCNBusinessHandler(config httpapi.Config, prepareRuntimeState func(gamest
 	)
 	runtimeState.SchemaVersion = 1
 	runtimeState.ReleaseID = "cn602-bootstrap"
-	runtimeState.SourceBuild = "cn-official-6.0.2"
 	runtimeState.CatalogVersion = cn602CatalogVersion
 	runtimeState.State = "LOCAL"
 	config.InitialState = runtimeState

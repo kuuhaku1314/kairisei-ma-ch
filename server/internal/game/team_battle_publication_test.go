@@ -442,3 +442,22 @@ func projectNormalQuestGroupForTest(group, progress json.RawMessage, tutorial bo
 	}
 	return lists["9"][0], nil
 }
+
+// projectCNTeamBattlePublication is the JSON boundary for callers that need the
+// complete stock DTO. Publication itself works on a single decoded catalog.
+func projectCNTeamBattlePublication(
+	configuration json.RawMessage,
+	stageQuests map[int]json.RawMessage,
+	limitedGroupIDs []int,
+	tutorialNormalQuest bool,
+	tutorialActivity bool,
+) (json.RawMessage, error) {
+	catalog, err := decodeTeamBattleCatalog(configuration)
+	if err != nil {
+		return nil, err
+	}
+	if err := catalog.project(stageQuests, limitedGroupIDs, tutorialNormalQuest, tutorialActivity); err != nil {
+		return nil, err
+	}
+	return catalog.MarshalJSON()
+}

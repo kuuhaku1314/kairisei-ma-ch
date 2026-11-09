@@ -1,8 +1,9 @@
 package game
 
 import (
-	"kairisei.local/server/internal/gamestate"
 	"testing"
+
+	"kairisei.local/server/internal/gamestate"
 )
 
 func TestBuddyGiftLevelExperienceAndRetry(t *testing.T) {

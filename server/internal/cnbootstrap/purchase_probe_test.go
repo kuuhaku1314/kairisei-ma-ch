@@ -104,14 +104,12 @@ func probeCompleteRuntimePurchase(t *testing.T, handler http.Handler, savePath, 
 	}
 	call("/HomeShow", "", "home-after", 0)
 	full := call("/TeamBattleSoloShow", `{"0":1}`, "quests-all", 0)
-	operations, err := adminapi.NewOperations(storage, nil)
-	if err != nil {
-		t.Fatal(err)
+	adminHandler, ok := handler.(interface{ AdminHandler() http.Handler })
+	if !ok {
+		t.Fatal("production Admin handler is unavailable")
 	}
-	revision := 0
-	if _, err := operations.SetTeamBattlePublication(adminapi.TeamBattlePublication{Mode: "allowlist", GroupIDs: []int{700300201}, ExpectedRevision: &revision}); err != nil {
-		t.Fatal(err)
-	}
+	testfixture.CallContentAdmin(t, adminHandler.AdminHandler(), "PUT", "/api/boss-policy",
+		map[string]any{"mode": "allowlist", "group_ids": []int{700300201}, "expected_revision": 0}, 200)
 	limited := call("/TeamBattleSoloShow", `{"0":1}`, "quests-ice-only", 0)
 	if !bytes.Equal(full["9"], limited["9"]) || len(limited["9"]) < 10 {
 		t.Fatal("BOSS publication removed normal quest progression")

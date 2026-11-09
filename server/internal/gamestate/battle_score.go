@@ -27,7 +27,6 @@ type BossScoreResult struct {
 // Display and claim slots follow the native nine-grade UI. Economic thresholds
 // and the multiplier are explicit local policy, not recovered official prices.
 type TeamBattleScorePolicy struct {
-	SourceState     string                 `json:"source_state"`
 	BaseScore       int64                  `json:"base_score"`
 	BestTurn        int                    `json:"best_turn"`
 	Grades          []TeamBattleScoreGrade `json:"grades"`
@@ -43,6 +42,10 @@ type TeamBattleScoreGrade struct {
 	Rewards []Reward `json:"rewards,omitempty"`
 }
 
+func (p *TeamBattleScorePolicy) IsDamageScore() bool {
+	return p != nil && p.Rate > 0
+}
+
 type TeamBattleScoreProgress struct {
 	HighScore int64  `json:"high_score"`
 	Claimed   uint16 `json:"claimed"`
@@ -52,7 +55,7 @@ type TeamBattleScoreProgress struct {
 // the actual score multiplication, shared by settlement and durable completion.
 func ValidateTeamBattleScoreDamage(p *TeamBattleScorePolicy, damage int64) error {
 	rate := 1
-	if p != nil && p.SourceState == "LOCAL_POLICY_DAMAGE_SCORE" {
+	if p != nil && p.IsDamageScore() {
 		rate = p.Rate
 	}
 	if damage < 0 || rate < 1 || damage > math.MaxInt64/int64(rate) {
@@ -65,7 +68,10 @@ func ValidateTeamBattleScorePolicy(p *TeamBattleScorePolicy) error {
 	if p == nil {
 		return nil
 	}
-	if p.SourceState == "LOCAL_POLICY_DAMAGE_SCORE" {
+	if p.Rate < 0 {
+		return errors.New("score rate must not be negative")
+	}
+	if p.IsDamageScore() {
 		if p.TeamCostInitial != 0 && (p.TeamCostInitial < 3 || p.TeamCostInitial > 10) {
 			return errors.New("起始COST须为3至10")
 		}
@@ -86,7 +92,7 @@ func ValidateTeamBattleScorePolicy(p *TeamBattleScorePolicy) error {
 		}
 		return nil
 	}
-	if p.SourceState != "PLACEHOLDER_LOCAL_CLEAR_TURN_SCORE" || p.BaseScore < 1 || p.BaseScore > 1000000000 || p.BestTurn < 1 || p.BestTurn > 100 || len(p.Grades) != 9 {
+	if p.BaseScore < 1 || p.BaseScore > 1000000000 || p.BestTurn < 1 || p.BestTurn > 100 || len(p.Grades) != 9 {
 		return errors.New("invalid local battle score policy")
 	}
 	for i, g := range p.Grades {

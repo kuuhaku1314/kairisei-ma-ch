@@ -49,7 +49,7 @@ func writeBossScoreResult(tx *sql.Tx, userID int, mode gamestate.BattleScoreMode
 // defeated; the battle's frozen policy and server damage are authoritative.
 func writeBossScoreRanking(tx *sql.Tx, completed multiplayer.CompletedBattle) error {
 	policy := completed.ScorePolicy
-	if policy == nil || policy.SourceState != "LOCAL_POLICY_DAMAGE_SCORE" || completed.ScoreDamage <= 0 {
+	if policy == nil || !policy.IsDamageScore() || completed.ScoreDamage <= 0 {
 		return nil
 	}
 	score, grade := game.VerifiedTeamBattleDamageScore(policy, completed.ScoreDamage)

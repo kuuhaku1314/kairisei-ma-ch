@@ -5,12 +5,6 @@ package battlecore
 // and ROLE_OP_COMBO's shift. Skill execution remains in the ordinary core.
 type npcFeatures [254]uint32
 
-func npcSkillFeatures(skill CombatSkillDefinition, roles []CombatSkillRole) npcFeatures {
-	var f npcFeatures
-	npcAccumulateFeatures(skill, roles, &f)
-	return f
-}
-
 func npcAccumulateFeatures(skill CombatSkillDefinition, roles []CombatSkillRole, f *npcFeatures) {
 	attack := npcAttackFeatures(skill, roles, f[103] != 0)
 	for i, value := range attack {

@@ -146,34 +146,26 @@ type Card struct {
 }
 
 // CardCategoryProfile and CardGroupProfile are immutable protocol-122 data.
-// MemberCardIDs and evidence are runtime-master gates only; the HTTP adapter
+// MemberCardIDs is a runtime-master gate only; the HTTP adapter
 // deliberately projects the five fields consumed by the original CN DTO.
 type CardCategoryProfile struct {
 	CategoryID int    `json:"categoryid"`
 	Name       string `json:"name"`
 	Order      int    `json:"order"`
 	ViewType   int    `json:"view_type"`
-	Evidence   string `json:"evidence"`
 }
 
 type CardGroupProfile struct {
+	DeckLimitBossID int    `json:"deck_limit_bossid"`
 	GroupID         int    `json:"groupid"`
 	CategoryID      int    `json:"categoryid"`
 	Name            string `json:"name"`
 	Order           int    `json:"order"`
-	DeckLimitBossID int    `json:"deck_limit_bossid"`
 	MemberCardIDs   []int  `json:"member_cardids"`
-	NameEvidence    string `json:"name_evidence"`
 }
 
 type CardGroupPolicy struct {
-	ConfigVersion                 int    `json:"config_version"`
-	ClientContract                string `json:"client_contract"`
-	GroupMembership               string `json:"group_membership"`
-	DisplayNames                  string `json:"display_names"`
-	CategoryProjection            string `json:"category_projection"`
-	DeckLimitBossID               string `json:"deck_limit_bossid"`
-	ClaimsOriginalServiceTopology bool   `json:"claims_original_service_topology"`
+	ConfigVersion int `json:"config_version"`
 }
 
 type CardParameter struct {
@@ -191,20 +183,6 @@ type CardProgressionPolicy struct {
 	FameMaterials                     map[int][5]int            `json:"fame_materials,omitempty"`
 	FameNormal                        CardParameter             `json:"fame_normal"`
 	FamePremium                       CardParameter             `json:"fame_premium"`
-	SourceState                       struct {
-		ExperienceTables               string `json:"experience_tables"`
-		ParameterFormula               string `json:"parameter_formula"`
-		FusionMaterialExperience       string `json:"fusion_material_experience"`
-		FusionGold                     string `json:"fusion_gold"`
-		FusionGoldConsumption          string `json:"fusion_gold_consumption"`
-		SellGoldConsumption            string `json:"sell_gold_consumption"`
-		OrdinaryCardMaterialExperience string `json:"ordinary_card_material_experience"`
-		MaterialSelection              string `json:"material_selection"`
-		SkillLevelMaximum              string `json:"skill_level_maximum"`
-		FameInheritance                string `json:"fame_inheritance"`
-		SuccessMultipliers             string `json:"success_multipliers"`
-		SuccessWeights                 string `json:"success_weights"`
-	} `json:"source_state"`
 }
 
 type CardFusionSuccessPolicy struct {
@@ -258,16 +236,6 @@ type SphereDefinition struct {
 type SphereProgressionPolicy struct {
 	ConfigVersion                      int `json:"config_version"`
 	MaterialLevelBonusPermillePerLevel int `json:"material_level_bonus_permille_per_level"`
-	SourceState                        struct {
-		ExperienceTables                 string `json:"experience_tables"`
-		MaterialBaseExperience           string `json:"material_base_experience"`
-		MaterialLevelBonus               string `json:"material_level_bonus"`
-		FusionGold                       string `json:"fusion_gold"`
-		EvolutionMaterialSelection       string `json:"evolution_material_selection"`
-		EvolutionLevelRequirement        string `json:"evolution_level_requirement"`
-		EvolutionProgressionPreservation string `json:"evolution_progression_preservation"`
-		AccountSeed                      string `json:"account_seed"`
-	} `json:"source_state"`
 }
 
 // Sphere is mutable account-owned inventory. The final five derived fields
@@ -349,12 +317,11 @@ type AvatarSeriesCompletion struct {
 // not contain the historical service lineup price/schedule, so this is kept
 // separate from the official definitions and is never described as official.
 type AvatarShopPolicy struct {
-	PayType      int    `json:"pay_type"`
-	PayTypeID    int    `json:"pay_typeid"`
-	Price        int    `json:"price"`
-	AppearEnd    int    `json:"appear_end"`
-	NewAppearEnd int    `json:"new_appear_end"`
-	Evidence     string `json:"evidence"`
+	PayType      int `json:"pay_type"`
+	PayTypeID    int `json:"pay_typeid"`
+	Price        int `json:"price"`
+	AppearEnd    int `json:"appear_end"`
+	NewAppearEnd int `json:"new_appear_end"`
 }
 
 type ExploreProgressState struct {
@@ -401,7 +368,6 @@ type CardDevelopmentPolicy struct {
 	TimeEveryFameSeconds int    `json:"time_every_fame_seconds"`
 	CoinEveryHour        int    `json:"coin_every_hour"`
 	HelpPath             string `json:"help_path"`
-	Evidence             string `json:"evidence"`
 }
 
 type CardFameTraining struct {
@@ -437,7 +403,6 @@ type EventPageProfile struct {
 	Buttons          []EventPageButton `json:"buttons"`
 	IsNewSolo        int8              `json:"is_new_solo"`
 	IsNewMulti       int8              `json:"is_new_multi"`
-	Evidence         string            `json:"evidence"`
 }
 
 // PopupProfile is immutable local publication policy for the original CN
@@ -460,7 +425,6 @@ type PopupProfile struct {
 	Gacha       []any  `json:"gacha"`
 	Mission     []any  `json:"mission"`
 	ItemIcon    []any  `json:"item_icon"`
-	Evidence    string `json:"evidence"`
 }
 
 // SupportDeckSlotUnlockRule is immutable official CN client master data. SlotIndex
@@ -553,19 +517,6 @@ type BuddyDefinition struct {
 type BuddyProgressionPolicy struct {
 	ConfigVersion        int `json:"config_version"`
 	MaximumMaterialCount int `json:"maximum_material_count"`
-	SourceState          struct {
-		ExperienceTables                 string `json:"experience_tables"`
-		MaterialExperienceConsumption    string `json:"material_experience_consumption"`
-		FusionGoldConsumption            string `json:"fusion_gold_consumption"`
-		OrdinaryBuddyMaterialExperience  string `json:"ordinary_buddy_material_experience"`
-		AncientMelodyExperience          string `json:"ancient_melody_experience"`
-		SuccessMultipliers               string `json:"success_multipliers"`
-		SuccessWeights                   string `json:"success_weights"`
-		EvolutionMaterialSelection       string `json:"evolution_material_selection"`
-		EvolutionLevelRequirement        string `json:"evolution_level_requirement"`
-		EvolutionProgressionPreservation string `json:"evolution_progression_preservation"`
-		AccountSeed                      string `json:"account_seed"`
-	} `json:"source_state"`
 }
 
 type Friend struct {
@@ -673,12 +624,11 @@ type StoryEvent struct {
 // topology but do not contain the retired service reward schedule, so these
 // values remain explicit operation policy rather than account state.
 type StoryRewardPolicy struct {
-	ConfigVersion   int               `json:"config_version"`
-	State           string            `json:"state"`
-	MainFirstClear  Reward            `json:"main_first_clear"`
-	SubFirstClear   Reward            `json:"sub_first_clear"`
-	EventFirstClear Reward            `json:"event_first_clear"`
-	SourceState     map[string]string `json:"source_state"`
+	ConfigVersion   int    `json:"config_version"`
+	State           string `json:"state"`
+	MainFirstClear  Reward `json:"main_first_clear"`
+	SubFirstClear   Reward `json:"sub_first_clear"`
+	EventFirstClear Reward `json:"event_first_clear"`
 }
 
 type StoryBattleReference struct {
@@ -939,7 +889,6 @@ type ItemShopLineup struct {
 	Interiors   []ItemShopInterior `json:"interiors"`
 	Hidden      bool               `json:"hidden,omitempty"`
 	Disabled    bool               `json:"disabled,omitempty"`
-	Evidence    string             `json:"evidence,omitempty"`
 }
 
 type ItemShopTab struct {
@@ -962,46 +911,45 @@ type ItemShopPeriodCounts struct {
 // card master. BannerKey selects an explicitly published loopback presentation
 // asset; the empty value retains the official cached default banner.
 type GachaProfile struct {
-	GachaID                   int              `json:"gachaid"`
-	Name                      string           `json:"gacha_name"`
-	BuyMessage                string           `json:"buymsg"`
-	OddsMessage               string           `json:"odds_msg,omitempty"`
-	SubMessage                string           `json:"submsg"`
-	CategoryNum               int              `json:"category_num"`
-	CategoryPictID            int              `json:"category_pictid"`
-	OrderNum                  int              `json:"order_num"`
-	GroupID                   int              `json:"groupid"`
-	GachaType                 int8             `json:"gacha_type"`
-	ArthurType                int8             `json:"arthur_type"`
-	PayType                   int              `json:"pay_type"`
-	PayTypeID                 int              `json:"pay_typeid"`
-	Price                     int              `json:"price"`
-	CardNum                   int              `json:"card_num"`
-	CardNumMax                int              `json:"card_num_max"`
-	UserSelectMax             int              `json:"user_select_max,omitempty"`
-	DailyFirstFree            bool             `json:"daily_first_free,omitempty"`
-	DailyFirstFreeSourceState string           `json:"daily_first_free_source_state,omitempty"`
-	DailyFirstAvailable       bool             `json:"-"`
-	EndTime                   int              `json:"end_time"`
-	PlayCount                 int              `json:"play_count"`
-	PlayCountMax              int              `json:"play_count_max,omitempty"`
-	GroupPlayCount            int              `json:"-"` // Derived from successful plays across the publication group.
-	DailyPlayMax              int              `json:"play_count_1day_max,omitempty"`
-	DailyGroupPlays           int              `json:"-"`
-	BannerKey                 string           `json:"banner_key,omitempty"`
-	PublicationKey            string           `json:"publication_key,omitempty"`
-	PoolSourceState           string           `json:"pool_source_state,omitempty"`
-	WeightSourceState         string           `json:"weight_source_state,omitempty"`
-	GuaranteedRarityRank      int              `json:"guaranteed_rarity_rank,omitempty"`
-	GuaranteedCount           int              `json:"guaranteed_count,omitempty"`
-	RemainderRarityRank       int              `json:"remainder_rarity_rank,omitempty"`
-	ResultPolicySourceState   string           `json:"result_policy_source_state,omitempty"`
-	CardIDs                   []int            `json:"cardids"`
-	CardWeights               []int            `json:"card_weights"`
-	RewardPool                []WeightedReward `json:"reward_pool,omitempty"`
-	Steps                     []GachaStep      `json:"steps,omitempty"`
-	Gifts                     []GachaGiftRule  `json:"gift_rules,omitempty"`
-	UnownedOnly               bool             `json:"unowned_only,omitempty"`
+	GachaID        int    `json:"gachaid"`
+	Name           string `json:"gacha_name"`
+	BuyMessage     string `json:"buymsg"`
+	OddsMessage    string `json:"odds_msg,omitempty"`
+	SubMessage     string `json:"submsg"`
+	CategoryNum    int    `json:"category_num"`
+	CategoryPictID int    `json:"category_pictid"`
+	OrderNum       int    `json:"order_num"`
+	GroupID        int    `json:"groupid"`
+	GachaType      int8   `json:"gacha_type"`
+	ArthurType     int8   `json:"arthur_type"`
+	PayType        int    `json:"pay_type"`
+	PayTypeID      int    `json:"pay_typeid"`
+	Price          int    `json:"price"`
+	CardNum        int    `json:"card_num"`
+	CardNumMax     int    `json:"card_num_max"`
+	UserSelectMax  int    `json:"user_select_max,omitempty"`
+	DailyFirstFree bool   `json:"daily_first_free,omitempty"`
+
+	DailyFirstAvailable bool   `json:"-"`
+	EndTime             int    `json:"end_time"`
+	PlayCount           int    `json:"play_count"`
+	PlayCountMax        int    `json:"play_count_max,omitempty"`
+	GroupPlayCount      int    `json:"-"` // Derived from successful plays across the publication group.
+	DailyPlayMax        int    `json:"play_count_1day_max,omitempty"`
+	DailyGroupPlays     int    `json:"-"`
+	BannerKey           string `json:"banner_key,omitempty"`
+	PublicationKey      string `json:"publication_key,omitempty"`
+
+	GuaranteedRarityRank int `json:"guaranteed_rarity_rank,omitempty"`
+	GuaranteedCount      int `json:"guaranteed_count,omitempty"`
+	RemainderRarityRank  int `json:"remainder_rarity_rank,omitempty"`
+
+	CardIDs     []int            `json:"cardids"`
+	CardWeights []int            `json:"card_weights"`
+	RewardPool  []WeightedReward `json:"reward_pool,omitempty"`
+	Steps       []GachaStep      `json:"steps,omitempty"`
+	Gifts       []GachaGiftRule  `json:"gift_rules,omitempty"`
+	UnownedOnly bool             `json:"unowned_only,omitempty"`
 	// CoverPath is an operator-uploaded cover suffix such as "gacha-covers/<sha256>.png" (LOCAL_POLICY); the
 	// client URL is built from the configured cover base. Empty keeps the banner resolved from BannerKey.
 	CoverPath string `json:"cover_path,omitempty"`
@@ -1059,14 +1007,13 @@ type GachaDailyClaim struct {
 	FreeClaimed bool   `json:"free_claimed,omitempty"`
 }
 
-// ItemGachaProfile is the static, evidence-scoped reward mapping used by the
+// ItemGachaProfile is the static reward mapping used by the
 // original client's inventory GACHA/GACHA_EXEC item flow. It is separate from
 // GachaProfile because these items do not consume crystals or gacha tickets.
 type ItemGachaProfile struct {
 	ItemID        int              `json:"item_id"`
 	FunctionValue int              `json:"function_value"`
 	Rewards       []Reward         `json:"rewards"`
-	Evidence      string           `json:"evidence"`
 	RewardPool    []WeightedReward `json:"reward_pool,omitempty"`
 }
 
@@ -1080,7 +1027,6 @@ type ItemExchangeProfile struct {
 	EventID       int    `json:"eventid"`
 	NeedNum       int    `json:"need_num"`
 	Reward        Reward `json:"reward"`
-	Evidence      string `json:"evidence"`
 }
 
 // ItemLackTipProfile is immutable text shown by the original shortage dialog.
@@ -1092,7 +1038,6 @@ type ItemLackTipProfile struct {
 	Description string            `json:"desc"`
 	Way         string            `json:"way"`
 	TextURLs    []ItemLackTipLink `json:"txt_url_info"`
-	Evidence    string            `json:"evidence"`
 }
 
 type ItemLackTipLink struct {
@@ -1118,7 +1063,6 @@ type EventShopLineupProfile struct {
 	StockType int8   `json:"stock_type"`
 	IsFeature int8   `json:"is_feature"`
 	Reward    Reward `json:"reward"`
-	Evidence  string `json:"evidence"`
 }
 
 // EventShopPurchase is account-owned stock consumption. Publication and
@@ -1144,7 +1088,6 @@ type TradeShopProfile struct {
 	IsNew     int                      `json:"is_new"`
 	PictID    int                      `json:"pictid"`
 	Lineups   []TradeShopLineupProfile `json:"lineups"`
-	Evidence  string                   `json:"evidence"`
 }
 
 type TradeShopLineupProfile struct {
@@ -1157,7 +1100,6 @@ type TradeShopLineupProfile struct {
 	PictID      int                     `json:"pictid"`
 	Prices      []TradeShopPointProfile `json:"prices"`
 	Rewards     []Reward                `json:"rewards"`
-	Evidence    string                  `json:"evidence"`
 }
 
 type TradeShopPointProfile struct {
@@ -1248,18 +1190,16 @@ type TeamBattleEnemyDrop struct {
 // the CN package; RewardSource therefore remains explicit instead of being
 // hidden in an HTTP handler.
 type TeamBattleFameBonusPolicy struct {
-	ConfigVersion                int               `json:"config_version"`
-	ChanceMaximum                int               `json:"chance_maximum"`
-	FullFameThreshold            int               `json:"full_fame_threshold"`
-	FullFameRewardCount          int               `json:"full_fame_reward_count"`
-	BonusFameAdd                 int               `json:"bonus_fame_add"`
-	RewardSource                 string            `json:"reward_source"`
-	EligibleRewardTypes          []int             `json:"eligible_reward_types"`
-	SoloMemberPolicy             string            `json:"solo_member_policy"`
-	MultiplayerMemberPolicy      string            `json:"multiplayer_member_policy"`
-	RollPolicy                   string            `json:"roll_policy"`
-	SourceState                  map[string]string `json:"source_state"`
-	OfficialServiceValuesClaimed bool              `json:"official_service_values_claimed"`
+	ConfigVersion           int    `json:"config_version"`
+	ChanceMaximum           int    `json:"chance_maximum"`
+	FullFameThreshold       int    `json:"full_fame_threshold"`
+	FullFameRewardCount     int    `json:"full_fame_reward_count"`
+	BonusFameAdd            int    `json:"bonus_fame_add"`
+	RewardSource            string `json:"reward_source"`
+	EligibleRewardTypes     []int  `json:"eligible_reward_types"`
+	SoloMemberPolicy        string `json:"solo_member_policy"`
+	MultiplayerMemberPolicy string `json:"multiplayer_member_policy"`
+	RollPolicy              string `json:"roll_policy"`
 }
 
 // TeamBattleHostBonusPolicy is the local publication policy for the original
@@ -1267,15 +1207,13 @@ type TeamBattleFameBonusPolicy struct {
 // the DTO and presentation contract, but the retired per-quest host pool is
 // absent from the package, so the selected reward source remains explicit.
 type TeamBattleHostBonusPolicy struct {
-	ConfigVersion                int               `json:"config_version"`
-	RewardCount                  int               `json:"reward_count"`
-	RewardKind                   int               `json:"reward_kind"`
-	RewardSource                 string            `json:"reward_source"`
-	EligibleRewardTypes          []int             `json:"eligible_reward_types"`
-	RecipientPolicy              string            `json:"recipient_policy"`
-	BattlePointPayerPolicy       string            `json:"battle_point_payer_policy"`
-	SourceState                  map[string]string `json:"source_state"`
-	OfficialServiceValuesClaimed bool              `json:"official_service_values_claimed"`
+	ConfigVersion          int    `json:"config_version"`
+	RewardCount            int    `json:"reward_count"`
+	RewardKind             int    `json:"reward_kind"`
+	RewardSource           string `json:"reward_source"`
+	EligibleRewardTypes    []int  `json:"eligible_reward_types"`
+	RecipientPolicy        string `json:"recipient_policy"`
+	BattlePointPayerPolicy string `json:"battle_point_payer_policy"`
 }
 
 // TowerQuestProfile is an immutable tower definition, separate from account
@@ -1544,7 +1482,6 @@ type State struct {
 	LocalShop                 LocalShopState                  `json:"local_shop,omitempty"`
 	SchemaVersion             int                             `json:"schema_version"`
 	ReleaseID                 string                          `json:"release_id"`
-	SourceBuild               string                          `json:"source_build"`
 	CatalogVersion            int                             `json:"catalog_version"`
 
 	User                           User                     `json:"user"`

@@ -1,6 +1,6 @@
 服务端运行脚本
 
-这些文件用于 2.0.2 服务端运行目录（2.0.0 完整包覆盖配套增量后）。Windows 使用 Kairisei-Launcher.exe 或
+这些文件用于包含完整资源的服务端运行目录。Windows 使用 Kairisei-Launcher.exe 或
 Start-Server.cmd，正常停止使用 Stop-Server.cmd。默认主端口 26040，战斗端口
 为主端口 +1，Admin 为主端口 +2，仅在本机监听。
 
@@ -9,8 +9,8 @@ Windows 从 deployment.json 读取连接设置和平台资源。Linux 示例：
   sh Start-Server-linux-arm64.sh 192.168.1.100 26040
 Linux 按 Ctrl+C 或发送 SIGTERM 正常停服。加 --dry-run 可查看参数而不启动。
 
-完整运行目录还需要对应平台的服务端程序、deployment.json、resource-set/、
-platform/ 和包内生成的 server-arguments.sh。源码工具目录不包含游戏资源，
+完整运行目录还需要对应平台的服务端程序、resource-set/、platform/ 和 deployment.json。
+固定资源从 resource-set/resource-set.json 读取。源码工具目录不包含游戏资源，
 请保留完整发布包中的这些文件。更新脚本时保留自己的部署、CDN 配置和存档。
 
 Windows 每次运行的 stdout.log、stderr.log 位于 _local/runtime/server-runs/。

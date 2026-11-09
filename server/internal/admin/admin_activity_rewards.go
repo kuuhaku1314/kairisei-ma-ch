@@ -54,7 +54,7 @@ func exploreRewardSlots(events []json.RawMessage) ([]exploreRewardSlot, error) {
 func (c *contentStore) activityDefaults() (activityRewards, error) {
 	result := activityRewards{Cups: map[int]*gamestate.TeamBattleScorePolicy{}}
 	for _, p := range c.base.TeamBattleRewards {
-		if p.ScorePolicy != nil && p.ScorePolicy.SourceState == "LOCAL_POLICY_DAMAGE_SCORE" && c.rewardBossID(p.BossID) == p.BossID {
+		if p.ScorePolicy != nil && p.ScorePolicy.IsDamageScore() && c.rewardBossID(p.BossID) == p.BossID {
 			result.Cups[p.BossID] = gamestate.CloneTeamBattleScorePolicy(p.ScorePolicy)
 		}
 	}
@@ -70,7 +70,7 @@ func (c *contentStore) projectActivityRewards(state *gamestate.State) error {
 	}
 	policies := defaults.Cups
 	for id, p := range c.activities.Cups {
-		if policies[id] == nil || p == nil || p.SourceState != "LOCAL_POLICY_DAMAGE_SCORE" {
+		if policies[id] == nil || p == nil || !p.IsDamageScore() {
 			return errors.New("计分副本身份或计分方式无效")
 		}
 		if err := gamestate.ValidateTeamBattleScorePolicy(p); err != nil {

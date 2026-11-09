@@ -92,7 +92,7 @@ func (r gachaPoolRule) validate() error {
 // this rule enum. Mixed, guaranteed and step mechanics all use regular DTOs.
 func (r gachaPoolRule) profile() gamestate.GachaProfile {
 	p := gamestate.GachaProfile{CardNum: r.DrawCount, CardNumMax: r.DrawCount, PayType: 3, Price: 50 * r.DrawCount,
-		CategoryNum: 4, CategoryPictID: 2, BannerKey: "local_standard", ResultPolicySourceState: "LOCAL_POLICY",
+		CategoryNum: 4, CategoryPictID: 2, BannerKey: "local_standard",
 		GuaranteedCount: r.GuaranteedCount, GuaranteedRarityRank: r.GuaranteedRarity, RemainderRarityRank: r.RemainderRarity,
 		UnownedOnly: r.Type == "unowned", UserSelectMax: r.UserSelectMax}
 	if r.Type == "friend" {
@@ -100,7 +100,6 @@ func (r gachaPoolRule) profile() gamestate.GachaProfile {
 		p.CategoryNum, p.CategoryPictID, p.BannerKey = 3, 5, "local_friend"
 		p.DailyFirstFree = r.DailyFirstFree
 		if p.DailyFirstFree {
-			p.DailyFirstFreeSourceState = "LOCAL_POLICY"
 		}
 	}
 	for i := 0; i < r.StepCount; i++ {

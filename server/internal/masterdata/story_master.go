@@ -1,7 +1,6 @@
 package masterdata
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -80,8 +79,6 @@ type storyEventMapping struct {
 	StoryIDs            []int    `json:"story_ids"`
 	PictID              int      `json:"pictid"`
 	PictCandidates      []int    `json:"pict_candidates"`
-	TopologyEvidence    string   `json:"topology_evidence"`
-	PictIDEvidence      string   `json:"pictid_evidence"`
 }
 
 type storyBattleReference struct {
@@ -102,13 +99,12 @@ type storySubSectionMapping struct {
 	CardName          string `json:"card_name"`
 	ScriptChapter     string `json:"script_chapter"`
 	StoryIDs          []int  `json:"story_ids"`
-	Evidence          string `json:"evidence"`
 }
 
 type storyRuntimeMaster struct {
-	SchemaVersion            int                         `json:"schema_version"`
-	ClientProfile            string                      `json:"client_profile"`
-	Source                   json.RawMessage             `json:"source"`
+	SchemaVersion int    `json:"schema_version"`
+	ClientProfile string `json:"client_profile"`
+
 	NormalParts              []storyMasterPart           `json:"normal_parts"`
 	CNParts                  []storyMasterPart           `json:"cn_parts"`
 	SubCharacters            []storyMasterSubCharacter   `json:"sub_characters"`
@@ -155,7 +151,6 @@ func LoadStoryRuntimeMaster(masterPath string) (storyRuntimeMaster, error) {
 		return storyRuntimeMaster{}, errors.New("CN story runtime master must be a non-empty regular JSON file within the size limit")
 	}
 	decoder := json.NewDecoder(io.LimitReader(file, maxStoryMasterBytes+1))
-	decoder.DisallowUnknownFields()
 	var master storyRuntimeMaster
 	if err := decoder.Decode(&master); err != nil {
 		return storyRuntimeMaster{}, fmt.Errorf("decode CN story runtime master: %w", err)
@@ -173,9 +168,7 @@ func validateStoryRuntimeMaster(master storyRuntimeMaster) error {
 	if master.SchemaVersion != 5 || master.ClientProfile != "cn602-bootstrap" {
 		return errors.New("CN story runtime master identity is invalid")
 	}
-	if len(master.Source) == 0 || bytes.Equal(master.Source, []byte("null")) {
-		return errors.New("CN story runtime master source is incomplete")
-	}
+
 	normalCount, err := validateStoryMasterParts(master.NormalParts, make(map[int]struct{}))
 	if err != nil {
 		return fmt.Errorf("validate normal story catalog: %w", err)
@@ -256,10 +249,7 @@ func validateStoryRuntimeMaster(master storyRuntimeMaster) error {
 
 func validateStoryRewardPolicy(master storyRuntimeMaster) error {
 	policy := master.RewardPolicy
-	if policy.ConfigVersion != 1 || policy.State != "PASS" ||
-		len(policy.SourceState) != 2 ||
-		policy.SourceState["client_contract"] != "CONFIRMED" ||
-		policy.SourceState["reward_schedule"] != "PLACEHOLDER" {
+	if policy.ConfigVersion != 1 || policy.State != "PASS" {
 		return errors.New("story first-clear policy identity is invalid")
 	}
 	for name, reward := range map[string]gamestate.Reward{
@@ -307,11 +297,7 @@ func validateStoryMasterEvents(
 		if event.StoryEventID <= 0 || event.Name == "" || event.PictID <= 0 || len(event.Stories) == 0 ||
 			mapping.StoryEventID != event.StoryEventID || mapping.PictID != event.PictID ||
 			len(mapping.ScriptChapterLabels) == 0 || len(mapping.StoryIDs) != len(event.Stories) ||
-			len(mapping.PictCandidates) == 0 ||
-			mapping.TopologyEvidence != "CONFIRMED_STORY_ID_PREFIX" ||
-			(mapping.PictIDEvidence != "INFERRED_FIRST_SCRIPT_CARD_PICT" &&
-				mapping.PictIDEvidence != "INFERRED_SCRIPT_CHARACTER_SELECTION" &&
-				mapping.PictIDEvidence != "CONFIRMED_OFFLINE_DIRECTORY") {
+			len(mapping.PictCandidates) == 0 {
 			return 0, fmt.Errorf("event story %d mapping is incomplete", event.StoryEventID)
 		}
 		if !slices.Contains(mapping.PictCandidates, event.PictID) {
@@ -504,8 +490,7 @@ func validateStoryMasterSubCharacters(
 		if mapping.StorySubSectionID <= 0 ||
 			mapping.CardName == "" ||
 			mapping.ScriptChapter == "" ||
-			len(mapping.StoryIDs) == 0 ||
-			(mapping.Evidence != "CONFIRMED" && mapping.Evidence != "INFERRED") {
+			len(mapping.StoryIDs) == 0 {
 			return 0, errors.New("sub story section mapping is incomplete")
 		}
 		if _, duplicate := mappingBySectionID[mapping.StorySubSectionID]; duplicate {
@@ -786,10 +771,6 @@ func ApplyStoryRuntimeMaster(state *gamestate.State, master storyRuntimeMaster) 
 	state.StoryRewardPolicy.MainFirstClear.CardSkillLevels = append([]int16{}, master.RewardPolicy.MainFirstClear.CardSkillLevels...)
 	state.StoryRewardPolicy.SubFirstClear.CardSkillLevels = append([]int16{}, master.RewardPolicy.SubFirstClear.CardSkillLevels...)
 	state.StoryRewardPolicy.EventFirstClear.CardSkillLevels = append([]int16{}, master.RewardPolicy.EventFirstClear.CardSkillLevels...)
-	state.StoryRewardPolicy.SourceState = make(map[string]string, len(master.RewardPolicy.SourceState))
-	for key, value := range master.RewardPolicy.SourceState {
-		state.StoryRewardPolicy.SourceState[key] = value
-	}
 	state.EventPageProfile = master.EventPageProfile
 	state.EventPageProfile.ItemIDs = append([]int{}, master.EventPageProfile.ItemIDs...)
 	state.EventPageProfile.Buttons = append([]gamestate.EventPageButton{}, master.EventPageProfile.Buttons...)

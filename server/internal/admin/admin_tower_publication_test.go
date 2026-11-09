@@ -65,7 +65,7 @@ func TestTowerPublicationIsItsOwnCatalog(t *testing.T) {
 	}
 	// The activity Boss publication, closed and outside its window, leaves towers alone.
 	activity := 0
-	if _, err := operator.SetTeamBattlePublication(TeamBattlePublication{Mode: "allowlist", GroupIDs: []int{7}, EndUnix: 1, ExpectedRevision: &activity}); err != nil {
+	if _, err := operator.setBattlePublication(teamBattlePublicationKey, TeamBattlePublication{Mode: "allowlist", GroupIDs: []int{7}, EndUnix: 1, ExpectedRevision: &activity}); err != nil {
 		t.Fatal(err)
 	}
 	restarted, err := NewOperations(accounts.Database(), nil)

@@ -1,7 +1,6 @@
 package masterdata
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,9 +15,9 @@ import (
 const maxItemMasterBytes = 2 * 1024 * 1024
 
 type ItemRuntimeMaster struct {
-	SchemaVersion             int                             `json:"schema_version"`
-	ClientProfile             string                          `json:"client_profile"`
-	Source                    json.RawMessage                 `json:"source"`
+	SchemaVersion int    `json:"schema_version"`
+	ClientProfile string `json:"client_profile"`
+
 	LocalAccountConfigVersion int                             `json:"local_account_config_version,omitempty"`
 	LocalAccountInitialItems  []gamestate.Item                `json:"local_account_initial_items,omitempty"`
 	TeamBattleMedalItemID     int                             `json:"team_battle_medal_item_id,omitempty"`
@@ -27,47 +26,40 @@ type ItemRuntimeMaster struct {
 	ItemGachaProfiles         []gamestate.ItemGachaProfile    `json:"item_gacha_profiles"`
 	ItemGachaSourceGapIDs     []int                           `json:"item_gacha_source_gap_ids"`
 	ItemExchangeProfiles      []gamestate.ItemExchangeProfile `json:"item_exchange_profiles"`
-	ItemExchangeSourceStatus  string                          `json:"item_exchange_source_status"`
-	ItemExchangePolicy        itemExchangePolicy              `json:"item_exchange_policy"`
-	ItemLackTipProfiles       []gamestate.ItemLackTipProfile  `json:"item_lack_tip_profiles"`
-	ItemLackTipSourceStatus   string                          `json:"item_lack_tip_source_status"`
-	ItemLackTipPolicy         itemLackTipPolicy               `json:"item_lack_tip_policy"`
-	EventShopProfiles         []gamestate.EventShopProfile    `json:"event_shop_profiles"`
-	EventShopSourceStatus     string                          `json:"event_shop_source_status"`
-	EventShopSourceAudit      eventShopSourceAudit            `json:"event_shop_source_audit"`
-	TradeShopProfiles         []gamestate.TradeShopProfile    `json:"trade_shop_profiles"`
-	LocalTradeShopProfiles    []gamestate.TradeShopProfile    `json:"local_trade_shop_profiles,omitempty"`
-	TradeShopPolicy           tradeShopPolicy                 `json:"trade_shop_policy"`
-	TradeShopSourceStatus     string                          `json:"trade_shop_source_status"`
-	SkippedInactiveItemIDs    []int                           `json:"skipped_inactive_item_ids"`
+
+	ItemExchangePolicy  itemExchangePolicy             `json:"item_exchange_policy"`
+	ItemLackTipProfiles []gamestate.ItemLackTipProfile `json:"item_lack_tip_profiles"`
+
+	ItemLackTipPolicy itemLackTipPolicy            `json:"item_lack_tip_policy"`
+	EventShopProfiles []gamestate.EventShopProfile `json:"event_shop_profiles"`
+
+	TradeShopProfiles      []gamestate.TradeShopProfile `json:"trade_shop_profiles"`
+	LocalTradeShopProfiles []gamestate.TradeShopProfile `json:"local_trade_shop_profiles,omitempty"`
+	TradeShopPolicy        tradeShopPolicy              `json:"trade_shop_policy"`
+
+	SkippedInactiveItemIDs []int `json:"skipped_inactive_item_ids"`
 }
 
 type tradeShopPolicy struct {
-	ConfigVersion                int               `json:"config_version"`
-	CurrencyItemID               int               `json:"currency_item_id"`
-	PricePerCard                 int               `json:"price_per_card"`
-	StockPerCard                 int               `json:"stock_per_card"`
-	CardAcquisitionText          string            `json:"card_acquisition_text"`
-	Selection                    string            `json:"selection"`
-	SourceState                  map[string]string `json:"source_state"`
-	OfficialServiceValuesClaimed bool              `json:"official_service_values_claimed"`
+	ConfigVersion       int    `json:"config_version"`
+	CurrencyItemID      int    `json:"currency_item_id"`
+	PricePerCard        int    `json:"price_per_card"`
+	StockPerCard        int    `json:"stock_per_card"`
+	CardAcquisitionText string `json:"card_acquisition_text"`
+	Selection           string `json:"selection"`
 }
 
 type itemExchangePolicy struct {
-	ConfigVersion                int               `json:"config_version"`
-	NeedNum                      int               `json:"need_num"`
-	EventIDOffset                int               `json:"event_id_offset"`
-	Selection                    string            `json:"selection"`
-	SourceState                  map[string]string `json:"source_state"`
-	OfficialServiceValuesClaimed bool              `json:"official_service_values_claimed"`
+	ConfigVersion int    `json:"config_version"`
+	NeedNum       int    `json:"need_num"`
+	EventIDOffset int    `json:"event_id_offset"`
+	Selection     string `json:"selection"`
 }
 
 type itemLackTipPolicy struct {
-	ConfigVersion              int               `json:"config_version"`
-	ReachableIndices           []int             `json:"reachable_indices"`
-	NavigationPublication      string            `json:"navigation_publication"`
-	SourceState                map[string]string `json:"source_state"`
-	OfficialServiceTextClaimed bool              `json:"official_service_text_claimed"`
+	ConfigVersion         int    `json:"config_version"`
+	ReachableIndices      []int  `json:"reachable_indices"`
+	NavigationPublication string `json:"navigation_publication"`
 }
 
 type eventShopSourceAudit struct {
@@ -98,7 +90,6 @@ func LoadItemRuntimeMaster(masterPath string) (ItemRuntimeMaster, error) {
 		return ItemRuntimeMaster{}, errors.New("CN item runtime master must be a non-empty regular JSON file within the size limit")
 	}
 	decoder := json.NewDecoder(io.LimitReader(file, maxItemMasterBytes+1))
-	decoder.DisallowUnknownFields()
 	var master ItemRuntimeMaster
 	if err := decoder.Decode(&master); err != nil {
 		return ItemRuntimeMaster{}, fmt.Errorf("decode CN item runtime master: %w", err)
@@ -116,7 +107,7 @@ func validateItemRuntimeMaster(master ItemRuntimeMaster) error {
 	if master.SchemaVersion != 9 || master.ClientProfile != "cn602-bootstrap" {
 		return errors.New("CN item runtime master identity is invalid")
 	}
-	if len(master.Source) == 0 || bytes.Equal(master.Source, []byte("null")) || len(master.Items) == 0 {
+	if len(master.Items) == 0 {
 		return errors.New("CN item runtime master source is incomplete")
 	}
 	seen := make(map[int]struct{}, len(master.Items))
@@ -171,8 +162,7 @@ func validateItemRuntimeMaster(master ItemRuntimeMaster) error {
 	for _, profile := range master.ItemGachaProfiles {
 		definition, exists := definitions[profile.ItemID]
 		if !exists || definition.ItemType != "GACHA" || definition.Function != "GACHA_EXEC" ||
-			definition.FunctionValue != profile.FunctionValue || (len(profile.Rewards) == 0 && len(profile.RewardPool) == 0) ||
-			(profile.Evidence != "INFERRED_OFFICIAL_DESCRIPTION_EXACT_CARD_BASE" && profile.Evidence != "PLACEHOLDER_LOCAL_POLICY_OFFICIAL_CN_ITEM_DESCRIPTION") {
+			definition.FunctionValue != profile.FunctionValue || (len(profile.Rewards) == 0 && len(profile.RewardPool) == 0) {
 			return fmt.Errorf("invalid CN item gacha profile %d", profile.ItemID)
 		}
 		if _, duplicate := coveredGachaItems[profile.ItemID]; duplicate {
@@ -206,39 +196,23 @@ func validateItemRuntimeMaster(master ItemRuntimeMaster) error {
 	if len(coveredGachaItems) != len(gachaItems) {
 		return errors.New("CN item gacha profiles and source gaps do not cover the official GACHA item set")
 	}
-	if master.ItemExchangeSourceStatus != "PUBLISHED_LOCAL_POLICY_FROM_OFFICIAL_CN_ITEM_AND_CARD_IDENTITIES" {
-		return errors.New("CN item exchange source status is invalid")
-	}
+
 	exchangePolicy := master.ItemExchangePolicy
 	if exchangePolicy.ConfigVersion != 1 || exchangePolicy.NeedNum != 1 ||
 		exchangePolicy.EventIDOffset != 60280000 ||
-		exchangePolicy.Selection != "exact_card_name_else_unique_same_card_family_substring" ||
-		exchangePolicy.OfficialServiceValuesClaimed || len(exchangePolicy.SourceState) != 7 ||
-		exchangePolicy.SourceState["client_contract"] != "CONFIRMED" ||
-		exchangePolicy.SourceState["item_identity"] != "CONFIRMED" ||
-		exchangePolicy.SourceState["card_family_identity"] != "INFERRED" ||
-		exchangePolicy.SourceState["explicit_fame"] != "CONFIRMED" ||
-		exchangePolicy.SourceState["default_fame"] != "PLACEHOLDER" ||
-		exchangePolicy.SourceState["need_num"] != "PLACEHOLDER" ||
-		exchangePolicy.SourceState["event_id"] != "PLACEHOLDER" {
+		exchangePolicy.Selection != "exact_card_name_else_unique_same_card_family_substring" {
 		return errors.New("CN item exchange local policy is invalid")
 	}
 	exchangeItems := make(map[int]struct{}, len(master.ItemExchangeProfiles))
 	exchangeEvents := make(map[int]struct{}, len(master.ItemExchangeProfiles))
-	originalExchangeCount := 0
 	for _, profile := range master.ItemExchangeProfiles {
-		localPolicy := profile.Evidence == "PLACEHOLDER_LOCAL_POLICY_OFFICIAL_CN_ITEM_DESCRIPTION"
 		if _, exists := definitions[profile.ItemID]; !exists ||
 			(profile.IsAppearEvent != 0 && profile.IsAppearEvent != 1) ||
 			profile.IsAppearEvent != 0 ||
 			profile.EventID != exchangePolicy.EventIDOffset+profile.ItemID ||
-			profile.NeedNum <= 0 || (!localPolicy && profile.NeedNum != exchangePolicy.NeedNum) ||
-			(!localPolicy && profile.Evidence != "INFERRED_OFFICIAL_CN_ITEM_NAME_EXACT_CARD_FAMILY_LOCAL_POLICY") ||
+			profile.NeedNum <= 0 || profile.NeedNum > 1000000000 ||
 			!validItemExchangeReward(profile.Reward, definitions) {
 			return fmt.Errorf("invalid CN item exchange profile %d", profile.ItemID)
-		}
-		if !localPolicy {
-			originalExchangeCount++
 		}
 		if _, duplicate := exchangeItems[profile.ItemID]; duplicate {
 			return fmt.Errorf("duplicate CN item exchange profile %d", profile.ItemID)
@@ -249,22 +223,12 @@ func validateItemRuntimeMaster(master ItemRuntimeMaster) error {
 		exchangeItems[profile.ItemID] = struct{}{}
 		exchangeEvents[profile.EventID] = struct{}{}
 	}
-	if originalExchangeCount != 17 {
-		return errors.New("CN item exchange local policy coverage is incomplete")
-	}
-	if master.ItemLackTipSourceStatus != "PUBLISHED_LOCAL_TEXT_POLICY_FROM_MANAGED_ENUM_AND_OFFICIAL_CN_IDENTITIES" {
-		return errors.New("CN item lack-tip source status is invalid")
-	}
+
 	lackPolicy := master.ItemLackTipPolicy
 	if lackPolicy.ConfigVersion != 2 ||
 		len(lackPolicy.ReachableIndices) != 2 ||
 		lackPolicy.ReachableIndices[0] != 2 || lackPolicy.ReachableIndices[1] != 8 ||
-		lackPolicy.NavigationPublication != "NON_NAVIGATING_LOCAL_CLIENT_CONTRACT_ROW" ||
-		lackPolicy.OfficialServiceTextClaimed || len(lackPolicy.SourceState) != 4 ||
-		lackPolicy.SourceState["client_contract"] != "CONFIRMED" ||
-		lackPolicy.SourceState["enum_identity"] != "CONFIRMED" ||
-		lackPolicy.SourceState["item_9010_identity"] != "CONFIRMED" ||
-		lackPolicy.SourceState["display_text"] != "PLACEHOLDER" {
+		lackPolicy.NavigationPublication != "NON_NAVIGATING_LOCAL_CLIENT_CONTRACT_ROW" {
 		return errors.New("CN item lack-tip local policy is invalid")
 	}
 	crystalTicket, exists := definitions[9010]
@@ -278,8 +242,7 @@ func validateItemRuntimeMaster(master ItemRuntimeMaster) error {
 		if profile.Index < 1 || profile.Index > 8 ||
 			profile.Title == "" || profile.Description == "" || profile.Way == "" ||
 			profile.TextURLs == nil || len(profile.TextURLs) != 1 ||
-			profile.TextURLs[0].Text != "暂不前往" || profile.TextURLs[0].URL != "" ||
-			profile.Evidence != "LOCAL_POLICY_OVER_CONFIRMED_CN_ITEM_LACK_ENUM" {
+			profile.TextURLs[0].Text != "暂不前往" || profile.TextURLs[0].URL != "" {
 			return fmt.Errorf("invalid CN item lack-tip profile %d", profile.Index)
 		}
 		if _, duplicate := seenLackTips[profile.Index]; duplicate {
@@ -290,34 +253,17 @@ func validateItemRuntimeMaster(master ItemRuntimeMaster) error {
 	if len(seenLackTips) != 8 {
 		return errors.New("CN item lack-tip local policy coverage is incomplete")
 	}
-	if master.EventShopSourceStatus != "ABSENT_FROM_CN_OFFICIAL_CONTAINER_AND_PACKAGED_EVENT_SHOP_WEB_FILES" ||
-		len(master.EventShopProfiles) != 0 ||
-		master.EventShopSourceAudit.TextAssetCount != 135 ||
-		master.EventShopSourceAudit.CandidatePaths == nil ||
-		len(master.EventShopSourceAudit.CandidatePaths) != 0 ||
-		len(master.EventShopSourceAudit.PackagedWebFiles) != 3 ||
-		master.EventShopSourceAudit.PackagedEventShopCandidates == nil ||
-		len(master.EventShopSourceAudit.PackagedEventShopCandidates) != 0 {
+	if len(master.EventShopProfiles) != 0 {
 		return errors.New("CN event shop source audit is invalid")
 	}
-	if master.TradeShopSourceStatus != "PUBLISHED_LOCAL_POLICY_FROM_OFFICIAL_CN_IDENTITIES" ||
-		len(master.TradeShopProfiles) != 1 ||
-		master.EventShopSourceAudit.CandidatePaths == nil ||
-		len(master.EventShopSourceAudit.CandidatePaths) != 0 {
+	if len(master.TradeShopProfiles) != 1 {
 		return errors.New("CN trade shop source audit is invalid")
 	}
 	policy := master.TradeShopPolicy
 	if policy.ConfigVersion != 1 || policy.CurrencyItemID != 4000 ||
 		policy.PricePerCard != 1000 || policy.StockPerCard != 1 ||
 		policy.CardAcquisitionText != "BOSS币交换所" ||
-		policy.Selection != "lowest_rarity_then_card_id_per_official_same_card_family" ||
-		policy.OfficialServiceValuesClaimed ||
-		len(policy.SourceState) != 5 ||
-		policy.SourceState["client_contract"] != "CONFIRMED" ||
-		policy.SourceState["currency_identity"] != "CONFIRMED" ||
-		policy.SourceState["card_identity"] != "INFERRED" ||
-		policy.SourceState["price"] != "PLACEHOLDER" ||
-		policy.SourceState["stock"] != "PLACEHOLDER" {
+		policy.Selection != "lowest_rarity_then_card_id_per_official_same_card_family" {
 		return errors.New("CN trade shop policy is invalid")
 	}
 	currency, exists := definitions[policy.CurrencyItemID]
@@ -330,14 +276,12 @@ func validateItemRuntimeMaster(master ItemRuntimeMaster) error {
 		if shop.TradeShopID != 60290001 || shop.Name != "BOSS币交换所" ||
 			shop.Text == "" || shop.ShopType != 1 || shop.TabType != 0 ||
 			shop.EndTime != 2147483647 || shop.IsNew != 0 || shop.PictID != 0 ||
-			shop.Evidence != "LOCAL_POLICY_OVER_OFFICIAL_CN_ITEM_AND_CARD_IDENTITIES" ||
 			len(shop.Lineups) != 49 {
 			return fmt.Errorf("invalid CN trade shop %d", shop.TradeShopID)
 		}
 		for _, lineup := range shop.Lineups {
 			if lineup.LineupID <= 0 || lineup.LineupName == "" || lineup.StockNum != 1 ||
 				lineup.IsLineupNew != 0 || lineup.IsLineupOld != 0 || lineup.PictID != 0 ||
-				lineup.Evidence != "INFERRED_OFFICIAL_CN_BOSS_COIN_EXCHANGE_ACQUISITION" ||
 				len(lineup.Prices) != 1 || len(lineup.Rewards) != 1 {
 				return fmt.Errorf("invalid CN trade shop lineup %d", lineup.LineupID)
 			}
@@ -367,7 +311,7 @@ func validateItemRuntimeMaster(master ItemRuntimeMaster) error {
 	for _, shop := range master.LocalTradeShopProfiles {
 		if shop.TradeShopID <= 60291000 || shopIDs[shop.TradeShopID] || shop.Name == "" || shop.Text == "" ||
 			shop.ShopType != 1 || shop.TabType != 1 || shop.EndTime != 2147483647 ||
-			shop.IsNew != 0 || shop.PictID != 0 || shop.Evidence != "PLACEHOLDER" || len(shop.Lineups) == 0 {
+			shop.IsNew != 0 || shop.PictID != 0 || len(shop.Lineups) == 0 {
 			return fmt.Errorf("invalid local CN trade shop %d", shop.TradeShopID)
 		}
 		shopIDs[shop.TradeShopID] = true
@@ -377,7 +321,7 @@ func validateItemRuntimeMaster(master ItemRuntimeMaster) error {
 			}
 			lineupIDs[lineup.LineupID] = struct{}{}
 			if lineup.LineupID <= 60291000 || lineup.LineupName == "" || lineup.StockNum <= 0 ||
-				lineup.StockNum > 999999 || lineup.Evidence != "PLACEHOLDER" || lineup.PictID != 0 ||
+				lineup.StockNum > 999999 || lineup.PictID != 0 ||
 				lineup.IsLineupNew != 0 || lineup.IsLineupOld != 0 || len(lineup.Prices) != 1 || len(lineup.Rewards) != 1 {
 				return fmt.Errorf("invalid local CN trade lineup %d", lineup.LineupID)
 			}

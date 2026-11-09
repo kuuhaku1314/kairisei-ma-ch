@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"kairisei.local/server/internal/gamestate"
 	"time"
+
+	"kairisei.local/server/internal/gamestate"
 )
 
 const DefaultAccountCreationDailyLimit = 10

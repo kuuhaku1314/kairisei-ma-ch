@@ -148,10 +148,6 @@ const stackRowColumns = "num,hp,attack,magic,mind,add_exp,base_add_price,materia
 
 const presentRowColumns = "history,issued_at_unix,add_elapsed_sec,limit_time,state,reason,title,comment,url,auto_fusion_used,auto_loveup_used,admin_key,rewards_json"
 
-func writeAccountRows(tx *sql.Tx, state gamestate.State) error {
-	return writeChangedAccountRows(tx, state, accountComponentHashes{}, accountComponentHashes{})
-}
-
 func writeSnapshotRows(tx *sql.Tx, state gamestate.State, content []byte) error {
 	before, after, err := changedAccountComponents(tx, state.User.UserID, content)
 	if err != nil {

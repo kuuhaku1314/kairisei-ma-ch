@@ -20,22 +20,17 @@ const (
 )
 
 type NormalQuestRuntimeMaster struct {
-	SchemaVersion                  int                                           `json:"schema_version"`
-	ConfigVersion                  int                                           `json:"config_version"`
-	ClientProfile                  string                                        `json:"client_profile"`
-	GeneratedUTC                   string                                        `json:"generated_utc"`
-	State                          string                                        `json:"state"`
-	Confidence                     string                                        `json:"confidence"`
-	Sources                        []json.RawMessage                             `json:"sources"`
-	SourceState                    map[string]string                             `json:"source_state"`
-	OfficialServiceTopologyClaimed bool                                          `json:"official_service_topology_claimed"`
-	MainQuestSection               *gamestate.MainQuestSectionDefinition         `json:"main_quest_section,omitempty"`
-	MainQuestReadingSections       []gamestate.MainQuestReadingSectionDefinition `json:"main_quest_reading_sections,omitempty"`
-	EntryGroups                    []json.RawMessage                             `json:"entry_groups"`
-	Areas                          []json.RawMessage                             `json:"areas"`
-	Replays                        []gamestate.TeamBattleReplay                  `json:"replays"`
-	Rewards                        []gamestate.TeamBattleRewardProfile           `json:"rewards"`
-	Summary                        struct {
+	SchemaVersion int    `json:"schema_version"`
+	ConfigVersion int    `json:"config_version"`
+	ClientProfile string `json:"client_profile"`
+
+	MainQuestSection         *gamestate.MainQuestSectionDefinition         `json:"main_quest_section,omitempty"`
+	MainQuestReadingSections []gamestate.MainQuestReadingSectionDefinition `json:"main_quest_reading_sections,omitempty"`
+	EntryGroups              []json.RawMessage                             `json:"entry_groups"`
+	Areas                    []json.RawMessage                             `json:"areas"`
+	Replays                  []gamestate.TeamBattleReplay                  `json:"replays"`
+	Rewards                  []gamestate.TeamBattleRewardProfile           `json:"rewards"`
+	Summary                  struct {
 		Areas                    int            `json:"areas"`
 		EntryGroups              int            `json:"entry_groups"`
 		Quests                   int            `json:"quests"`
@@ -44,7 +39,6 @@ type NormalQuestRuntimeMaster struct {
 		RewardContexts           int            `json:"reward_contexts"`
 		SegmentCountDistribution map[string]int `json:"segment_count_distribution"`
 	} `json:"summary"`
-	NotClaimed string `json:"not_claimed"`
 }
 
 type normalQuestAreaIdentity struct {
@@ -88,7 +82,6 @@ func LoadNormalQuestRuntimeMaster(masterPath string) (NormalQuestRuntimeMaster, 
 		return NormalQuestRuntimeMaster{}, errors.New("CN normal quest runtime master must be a non-empty regular JSON file within the size limit")
 	}
 	decoder := json.NewDecoder(io.LimitReader(file, maxNormalQuestRuntimeBytes+1))
-	decoder.DisallowUnknownFields()
 	var master NormalQuestRuntimeMaster
 	if err := decoder.Decode(&master); err != nil {
 		return NormalQuestRuntimeMaster{}, fmt.Errorf("decode CN normal quest runtime master: %w", err)
@@ -104,9 +97,7 @@ func LoadNormalQuestRuntimeMaster(masterPath string) (NormalQuestRuntimeMaster, 
 
 func validateNormalQuestRuntimeMaster(master NormalQuestRuntimeMaster) error {
 	if master.SchemaVersion != 1 || master.ConfigVersion != 7 ||
-		master.ClientProfile != "cn602-bootstrap" || master.GeneratedUTC == "" ||
-		master.State != "PASS" || master.Confidence != "CONFIRMED_OFFICIAL_IDS_WITH_INFERRED_VALUES_AND_PLACEHOLDER_TOPOLOGY" ||
-		master.OfficialServiceTopologyClaimed || len(master.Sources) < 5 || master.NotClaimed == "" ||
+		master.ClientProfile != "cn602-bootstrap" ||
 		len(master.EntryGroups) != 18 || len(master.Areas) != 18 ||
 		len(master.Replays) != 50 || len(master.Rewards) != 100 {
 		return errors.New("CN normal quest runtime master identity or coverage is invalid")
@@ -117,24 +108,6 @@ func validateNormalQuestRuntimeMaster(master NormalQuestRuntimeMaster) error {
 	}
 	if err := validateMainQuestReadingSections(master); err != nil {
 		return err
-	}
-	expectedStates := map[string]string{
-		"area_stage_party_enemy_identity":           "CONFIRMED",
-		"client_dto_and_stage_entry_contract":       "CONFIRMED",
-		"area_quest_names_bp_and_player_exp":        "INFERRED",
-		"ordered_segment_selection":                 "PLACEHOLDER",
-		"map_coordinates_and_background_assignment": "PLACEHOLDER_OFFICIAL_CN_ASSET",
-		"gold_stack_count_and_first_clear_reward":   "PLACEHOLDER",
-		"stack_card_identity":                       "CONFIRMED",
-		"enemy_drop_placement":                      "INFERRED",
-	}
-	if len(master.SourceState) != len(expectedStates) {
-		return errors.New("CN normal quest source-state coverage is invalid")
-	}
-	for key, expected := range expectedStates {
-		if master.SourceState[key] != expected {
-			return fmt.Errorf("CN normal quest source state %s is invalid", key)
-		}
 	}
 
 	entryBosses := make(map[int][2]int, len(master.Replays))

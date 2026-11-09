@@ -1,8 +1,9 @@
 package httpapi
 
 import (
-	"kairisei.local/server/internal/gamestate"
 	"net/http"
+
+	"kairisei.local/server/internal/gamestate"
 )
 
 func (a *API) popupExec(writer http.ResponseWriter, request *http.Request) {

@@ -1,9 +1,10 @@
 package httpapi
 
 import (
+	"strings"
+
 	"kairisei.local/server/battlecodec"
 	"kairisei.local/server/internal/gamestate"
-	"strings"
 )
 
 func (a *API) scoreBossID(bossID int) int {

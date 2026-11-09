@@ -1,8 +1,10 @@
 package battlecore
 
-import "kairisei.local/server/battlecontent"
+import (
+	"testing"
 
-import "testing"
+	"kairisei.local/server/battlecontent"
+)
 
 func TestEnemyMasterResistanceUsesNativeStatusIndices(t *testing.T) {
 	row := make([]string, 313)

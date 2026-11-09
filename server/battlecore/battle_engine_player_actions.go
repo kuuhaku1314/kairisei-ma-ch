@@ -1169,10 +1169,6 @@ func (engine *BattleEngine) executeSelfScaledParameter(action battleAction, role
 	})
 }
 
-func (engine *BattleEngine) applyPlayerParameter(action battleAction, role CombatSkillRole, value int) ([]BattleResult, error) {
-	return engine.applyPlayerParameterValue(action, role, func() int { return value })
-}
-
 func (engine *BattleEngine) applyPlayerParameterValue(action battleAction, role CombatSkillRole, currentValue func() int) ([]BattleResult, error) {
 	buffCode, exists := battleBuffCodes[role.Function]
 	if !exists {

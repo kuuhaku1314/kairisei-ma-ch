@@ -262,11 +262,6 @@ func cloneTeamBattleFameBonusPolicy(
 	policy gamestate.TeamBattleFameBonusPolicy,
 ) gamestate.TeamBattleFameBonusPolicy {
 	policy.EligibleRewardTypes = append([]int(nil), policy.EligibleRewardTypes...)
-	clonedSourceState := make(map[string]string, len(policy.SourceState))
-	for key, value := range policy.SourceState {
-		clonedSourceState[key] = value
-	}
-	policy.SourceState = clonedSourceState
 	return policy
 }
 
@@ -274,11 +269,6 @@ func cloneTeamBattleHostBonusPolicy(
 	policy gamestate.TeamBattleHostBonusPolicy,
 ) gamestate.TeamBattleHostBonusPolicy {
 	policy.EligibleRewardTypes = append([]int(nil), policy.EligibleRewardTypes...)
-	clonedSourceState := make(map[string]string, len(policy.SourceState))
-	for key, value := range policy.SourceState {
-		clonedSourceState[key] = value
-	}
-	policy.SourceState = clonedSourceState
 	return policy
 }
 
@@ -293,11 +283,6 @@ func cloneStoryRewardPolicy(policy gamestate.StoryRewardPolicy) gamestate.StoryR
 	policy.MainFirstClear = cloneReward(policy.MainFirstClear)
 	policy.SubFirstClear = cloneReward(policy.SubFirstClear)
 	policy.EventFirstClear = cloneReward(policy.EventFirstClear)
-	clonedSourceState := make(map[string]string, len(policy.SourceState))
-	for key, value := range policy.SourceState {
-		clonedSourceState[key] = value
-	}
-	policy.SourceState = clonedSourceState
 	return policy
 }
 
@@ -959,7 +944,7 @@ func New(state gamestate.State, options ...AccountOption) (*Account, error) {
 	if result.cardDevelopmentPolicy.TimeEveryFameSeconds <= 0 ||
 		result.cardDevelopmentPolicy.CoinEveryHour <= 0 ||
 		result.cardDevelopmentPolicy.HelpPath == "" || result.cardDevelopmentPolicy.HelpPath[0] != '/' ||
-		result.cardDevelopmentPolicy.Evidence != "PLACEHOLDER" || result.stive < 0 {
+		result.stive < 0 {
 		return nil, errors.New("card store requires a valid card development policy and state")
 	}
 	if result.cardFameTraining != nil {
@@ -1029,8 +1014,7 @@ func New(state gamestate.State, options ...AccountOption) (*Account, error) {
 	for itemID, profile := range result.itemGachaProfiles {
 		definition, exists := result.itemDefinitions[itemID]
 		if !exists || definition.ItemType != "GACHA" || definition.Function != "GACHA_EXEC" ||
-			definition.FunctionValue != profile.FunctionValue || (len(profile.Rewards) == 0 && len(profile.RewardPool) == 0) ||
-			(profile.Evidence != "INFERRED_OFFICIAL_DESCRIPTION_EXACT_CARD_BASE" && profile.Evidence != "PLACEHOLDER_LOCAL_POLICY_OFFICIAL_CN_ITEM_DESCRIPTION") {
+			definition.FunctionValue != profile.FunctionValue || (len(profile.Rewards) == 0 && len(profile.RewardPool) == 0) {
 			return nil, fmt.Errorf("item gacha profile %d is invalid", itemID)
 		}
 		for _, reward := range profile.Rewards {
@@ -1056,9 +1040,7 @@ func New(state gamestate.State, options ...AccountOption) (*Account, error) {
 	}
 	for itemID, profile := range result.itemExchangeProfiles {
 		if itemID != profile.ItemID || profile.EventID <= 0 || profile.NeedNum <= 0 ||
-			(profile.IsAppearEvent != 0 && profile.IsAppearEvent != 1) ||
-			(profile.Evidence != "INFERRED_OFFICIAL_CN_ITEM_NAME_EXACT_CARD_FAMILY_LOCAL_POLICY" &&
-				profile.Evidence != "PLACEHOLDER_LOCAL_POLICY_OFFICIAL_CN_ITEM_DESCRIPTION") {
+			(profile.IsAppearEvent != 0 && profile.IsAppearEvent != 1) {
 			return nil, fmt.Errorf("item exchange profile %d is invalid", itemID)
 		}
 		if _, exists := result.itemDefinitions[itemID]; !exists {
@@ -1079,8 +1061,7 @@ func New(state gamestate.State, options ...AccountOption) (*Account, error) {
 		for _, lineup := range profile.Lineups {
 			if lineup.LineupID <= 0 || lineup.Name == "" || lineup.ImageURL == "" || lineup.Price <= 0 ||
 				lineup.StockNum == 0 || lineup.StockType < 0 ||
-				(lineup.IsFeature != 0 && lineup.IsFeature != 1) ||
-				lineup.Evidence != "CONFIRMED_CN_OFFICIAL_EVENT_SHOP_MASTER" {
+				(lineup.IsFeature != 0 && lineup.IsFeature != 1) {
 				return nil, fmt.Errorf("event shop lineup %d is invalid", lineup.LineupID)
 			}
 			if _, duplicate := lineupStocks[lineup.LineupID]; duplicate {

@@ -1,7 +1,6 @@
 package masterdata
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,43 +17,39 @@ const maxNaviMasterBytes = 1024 * 1024
 const naviPresentationLive2D = 0
 
 type naviDefinition struct {
-	PresentationKind  int    `json:"presentation_kind,omitempty"`
-	NaviID            int    `json:"navi_id"`
-	Name              string `json:"name"`
-	PictID            int    `json:"pict_id"`
-	ItemPictID        int    `json:"item_pict_id"`
-	Live2DFolder      string `json:"live2d_folder"`
-	Live2DBundle      string `json:"live2d_bundle"`
-	Live2DSourceState string `json:"live2d_source_state"`
-	VoiceID           int    `json:"voice_id"`
-	ClientPublished   bool   `json:"client_published"`
+	PresentationKind int    `json:"presentation_kind,omitempty"`
+	NaviID           int    `json:"navi_id"`
+	Name             string `json:"name"`
+	PictID           int    `json:"pict_id"`
+	ItemPictID       int    `json:"item_pict_id"`
+	Live2DFolder     string `json:"live2d_folder"`
+	Live2DBundle     string `json:"live2d_bundle"`
+
+	VoiceID         int  `json:"voice_id"`
+	ClientPublished bool `json:"client_published"`
 }
 
 type naviLocalPurchase struct {
-	Evidence string `json:"evidence"`
 	Currency string `json:"currency"`
 	Price    int    `json:"price"`
 }
 
 type naviPublicationPolicy struct {
-	Evidence             string `json:"evidence"`
 	Live2DBundleRequired *bool  `json:"live2d_bundle_required"`
 	VoiceSourceRequired  *bool  `json:"voice_source_required"`
 	VoiceFallback        string `json:"voice_fallback"`
 }
 
 type naviSummary struct {
-	OfficialNavigatorRows    int   `json:"official_navigator_rows"`
-	ImportedNavigatorRows    int   `json:"imported_navigator_rows,omitempty"`
 	ClientPublished          int   `json:"client_published"`
 	ExcludedMissingLive2D    int   `json:"excluded_missing_live2d"`
 	ExcludedMissingLive2DIDs []int `json:"excluded_missing_live2d_ids"`
 }
 
 type naviRuntimeMaster struct {
-	SchemaVersion int                   `json:"schema_version"`
-	ClientProfile string                `json:"client_profile"`
-	Source        json.RawMessage       `json:"source"`
+	SchemaVersion int    `json:"schema_version"`
+	ClientProfile string `json:"client_profile"`
+
 	Publication   naviPublicationPolicy `json:"publication_policy"`
 	LocalPurchase naviLocalPurchase     `json:"local_purchase"`
 	Summary       naviSummary           `json:"summary"`
@@ -82,7 +77,6 @@ func LoadNaviRuntimeMaster(masterPath string) (naviRuntimeMaster, error) {
 		return naviRuntimeMaster{}, errors.New("CN navigator runtime master must be a non-empty regular JSON file within the size limit")
 	}
 	decoder := json.NewDecoder(io.LimitReader(file, maxNaviMasterBytes+1))
-	decoder.DisallowUnknownFields()
 	var master naviRuntimeMaster
 	if err := decoder.Decode(&master); err != nil {
 		return naviRuntimeMaster{}, fmt.Errorf("decode CN navigator runtime master: %w", err)
@@ -100,27 +94,22 @@ func validateNaviRuntimeMaster(master naviRuntimeMaster) error {
 	if master.SchemaVersion != 3 || master.ClientProfile != "cn602-bootstrap" {
 		return errors.New("CN navigator runtime master identity is invalid")
 	}
-	if master.LocalPurchase.Evidence != "PLACEHOLDER_LOCAL_PROFILE" ||
-		master.LocalPurchase.Currency != "CRYSTAL" || master.LocalPurchase.Price <= 0 {
+	if master.LocalPurchase.Currency != "CRYSTAL" || master.LocalPurchase.Price <= 0 {
 		return errors.New("CN navigator local purchase profile is invalid")
 	}
-	if (master.Publication.Evidence != "CONFIRMED_CN_OFFICIAL_ASSET_MAP" && master.Publication.Evidence != "INFERRED") ||
-		master.Publication.Live2DBundleRequired == nil || !*master.Publication.Live2DBundleRequired ||
+	if master.Publication.Live2DBundleRequired == nil || !*master.Publication.Live2DBundleRequired ||
 		master.Publication.VoiceSourceRequired == nil || *master.Publication.VoiceSourceRequired ||
 		master.Publication.VoiceFallback != "OPTIONAL_SILENT_FALLBACK" {
 		return errors.New("CN navigator publication policy is invalid")
 	}
-	if len(master.Source) == 0 || bytes.Equal(master.Source, []byte("null")) || len(master.Navigators) == 0 {
+	if len(master.Navigators) == 0 {
 		return errors.New("CN navigator runtime master source is incomplete")
 	}
 	seen := make(map[int]struct{}, len(master.Navigators))
 	published := 0
-	imported := 0
 	excluded := make([]int, 0)
 	for _, navigator := range master.Navigators {
-		if navigator.Live2DSourceState == "PRESENT_IN_JP_DERIVED_OVERLAY" || navigator.Live2DSourceState == "PRESENT_IN_WORKSHOP_OVERLAY" || navigator.Live2DSourceState == "PRESENT_IN_USER_DERIVED_OVERLAY" {
-			imported++
-		}
+
 		if navigator.PresentationKind != naviPresentationLive2D ||
 			navigator.NaviID < 0 || navigator.NaviID > 127 || navigator.Name == "" ||
 			navigator.PictID <= 0 || navigator.ItemPictID <= 0 ||
@@ -132,28 +121,19 @@ func validateNaviRuntimeMaster(master naviRuntimeMaster) error {
 		}
 		expectedBundle := fmt.Sprintf("live2d/live2d_%s.dat", navigator.Live2DFolder)
 		if navigator.ClientPublished {
-			validSource := navigator.Live2DSourceState == "PRESENT_IN_CN_OFFICIAL_ASSET_MAP" ||
-				(master.Publication.Evidence == "INFERRED" &&
-					(navigator.Live2DSourceState == "PRESENT_IN_PRIVATE_DERIVED_OVERLAY" ||
-						navigator.Live2DSourceState == "PRESENT_IN_JP_DERIVED_OVERLAY" ||
-						navigator.Live2DSourceState == "PRESENT_IN_WORKSHOP_OVERLAY" ||
-						navigator.Live2DSourceState == "PRESENT_IN_USER_DERIVED_OVERLAY"))
-			if navigator.Live2DBundle != expectedBundle || !validSource {
+			if navigator.Live2DBundle != expectedBundle {
 				return fmt.Errorf("published CN navigator %d has no presentation resource closure", navigator.NaviID)
 			}
 			published++
 		} else {
-			if navigator.Live2DBundle != "" || navigator.Live2DSourceState != "ABSENT_FROM_CN_OFFICIAL_ASSET_MAP" {
-				return fmt.Errorf("excluded CN navigator %d has an invalid source state", navigator.NaviID)
+			if navigator.Live2DBundle != "" {
+				return fmt.Errorf("excluded CN navigator %d must not publish a bundle", navigator.NaviID)
 			}
 			excluded = append(excluded, navigator.NaviID)
 		}
 		seen[navigator.NaviID] = struct{}{}
 	}
-	if master.Summary.OfficialNavigatorRows < 0 || master.Summary.ImportedNavigatorRows < 0 ||
-		master.Summary.OfficialNavigatorRows+master.Summary.ImportedNavigatorRows != len(master.Navigators) ||
-		master.Summary.ImportedNavigatorRows != imported ||
-		master.Summary.ClientPublished != published || published == 0 ||
+	if master.Summary.ClientPublished != published || published == 0 ||
 		master.Summary.ExcludedMissingLive2D != len(excluded) ||
 		!slices.Equal(master.Summary.ExcludedMissingLive2DIDs, excluded) {
 		return errors.New("CN navigator runtime master summary is inconsistent")

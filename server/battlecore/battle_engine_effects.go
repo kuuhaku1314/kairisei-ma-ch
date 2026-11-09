@@ -318,15 +318,6 @@ func enchantRoleValueScaled(role CombatSkillRole, level, chainCount int, scale b
 	return int(value)
 }
 
-func persistentEffectTargetsPlayers(function string) bool {
-	switch function {
-	case "ATTR_DEF_DOWN", "ATK_BREAK_FIXED", "ATK_BREAK_BY_SELF_PARAM", "GUARD_BREAK_FIXED", "BURN", "POISON", "FREEZE", "BLEED", "ELECTRIC", "WEAKNESS", "STAN", "DAMAGE_DOWN":
-		return false
-	default:
-		return true
-	}
-}
-
 func combatTargetIsPlayer(target string) bool {
 	if fixedUserSideArthurType(target) != 0 {
 		return true

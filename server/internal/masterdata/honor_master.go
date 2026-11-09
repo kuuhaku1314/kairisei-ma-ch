@@ -1,7 +1,6 @@
 package masterdata
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,10 +23,10 @@ type honorDefinition struct {
 }
 
 type honorRuntimeMaster struct {
-	SchemaVersion int               `json:"schema_version"`
-	ClientProfile string            `json:"client_profile"`
-	Source        json.RawMessage   `json:"source"`
-	Honors        []honorDefinition `json:"honors"`
+	SchemaVersion int    `json:"schema_version"`
+	ClientProfile string `json:"client_profile"`
+
+	Honors []honorDefinition `json:"honors"`
 }
 
 func LoadHonorRuntimeMaster(masterPath string) (honorRuntimeMaster, error) {
@@ -51,7 +50,6 @@ func LoadHonorRuntimeMaster(masterPath string) (honorRuntimeMaster, error) {
 		return honorRuntimeMaster{}, errors.New("CN honor runtime master must be a non-empty regular JSON file within the size limit")
 	}
 	decoder := json.NewDecoder(io.LimitReader(file, maxHonorMasterBytes+1))
-	decoder.DisallowUnknownFields()
 	var master honorRuntimeMaster
 	if err := decoder.Decode(&master); err != nil {
 		return honorRuntimeMaster{}, fmt.Errorf("decode CN honor runtime master: %w", err)
@@ -69,7 +67,7 @@ func validateHonorRuntimeMaster(master honorRuntimeMaster) error {
 	if master.SchemaVersion != 1 || master.ClientProfile != "cn602-bootstrap" {
 		return errors.New("CN honor runtime master identity is invalid")
 	}
-	if len(master.Source) == 0 || bytes.Equal(master.Source, []byte("null")) || len(master.Honors) == 0 {
+	if len(master.Honors) == 0 {
 		return errors.New("CN honor runtime master source is incomplete")
 	}
 	seen := make(map[int]struct{}, len(master.Honors))

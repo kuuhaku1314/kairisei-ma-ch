@@ -1,8 +1,10 @@
 package multiplayer
 
-import "kairisei.local/server/battlecontent"
+import (
+	"path/filepath"
 
-import "path/filepath"
+	"kairisei.local/server/battlecontent"
+)
 
 // LoadOperationsEnemyCatalog reuses the combat parsers without loading skills
 // or building an engine. Editors must offer real occupied slots, not guess that

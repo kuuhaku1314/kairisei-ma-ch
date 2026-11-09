@@ -284,3 +284,9 @@ func TestNPCNativeFeaturesReceipt(t *testing.T) {
 		}
 	}
 }
+
+func npcSkillFeatures(skill CombatSkillDefinition, roles []CombatSkillRole) npcFeatures {
+	var f npcFeatures
+	npcAccumulateFeatures(skill, roles, &f)
+	return f
+}

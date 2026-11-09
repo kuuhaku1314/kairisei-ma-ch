@@ -62,3 +62,10 @@ func TestConfiguredFamePoolKeepsTriggerAndFrozenRewards(t *testing.T) {
 		t.Fatal("default fame reward changed")
 	}
 }
+
+func (s *Account) planTeamBattleFameAwardsLocked(
+	profile gamestate.TeamBattleRewardProfile,
+	context TeamBattleContext,
+) ([]teamBattleFameAwardPlan, error) {
+	return planTeamBattleFameAwards(profile, context, s.teamBattleFameBonus)
+}

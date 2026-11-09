@@ -36,7 +36,10 @@ func TestModernCardPresentationUsesNativeColumnsAndKeepsFirstRow(t *testing.T) {
 	if err := os.WriteFile(assetMap, []byte(`{"catalog_assets":[{"name":"chr10_10001234"},{"name":"chr20_10001234"}]}`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	master := masterdata.CardRuntimeMaster{Source: source, CardTemplates: []gamestate.Card{{CardID: 10001}}}
+	master := masterdata.CardRuntimeMaster{CardTemplates: []gamestate.Card{{CardID: 10001}}}
+	if err := json.Unmarshal(source, &master.Source); err != nil {
+		t.Fatal(err)
+	}
 	resources, err := loadAdminCardResources(master, filepath.Join(root, "runtime.json"), assetMap)
 	if err != nil || len(resources) != 1 || resources[10001].PictID != 10001234 || !resources[10001].Ready {
 		t.Fatalf("modern first row or PictID: %v %v", resources, err)

@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"kairisei.local/server/internal/accountstore"
-	"kairisei.local/server/internal/httpapi"
-	"kairisei.local/server/internal/testfixture"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"kairisei.local/server/internal/accountstore"
+	"kairisei.local/server/internal/httpapi"
+	"kairisei.local/server/internal/testfixture"
 )
 
 func adaptCNCardShow2Response(content []byte) ([]byte, error) {

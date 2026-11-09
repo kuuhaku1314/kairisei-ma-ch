@@ -8,13 +8,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/crc32"
-	"kairisei.local/server/internal/accountstore"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"kairisei.local/server/internal/accountstore"
 
 	"github.com/go-chi/chi/v5"
 

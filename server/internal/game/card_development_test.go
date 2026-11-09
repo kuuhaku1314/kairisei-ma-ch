@@ -1,9 +1,10 @@
 package game
 
 import (
-	"kairisei.local/server/internal/gamestate"
 	"testing"
 	"time"
+
+	"kairisei.local/server/internal/gamestate"
 )
 
 func TestFameTrainingFinishesAtDeadlineWithoutRead(t *testing.T) {

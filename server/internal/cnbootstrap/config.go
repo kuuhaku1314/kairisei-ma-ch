@@ -34,14 +34,12 @@ type PersistenceConfig struct {
 
 type ResourcesConfig struct {
 	// AssetMap supplies logical names for Admin card presentation.
-	AssetMap            string
-	CPKRoot             string
-	ImageRoot           string
-	CPKAliases          string
-	PlatformDeliveries  []string
-	GachaBanner         string
-	FiveStarGachaBanner string
-	HomeBanner          string
+	AssetMap           string
+	CPKRoot            string
+	ImageRoot          string
+	CPKAliases         string
+	PlatformDeliveries []string
+	Banners            map[string]string
 }
 
 type MastersConfig struct {

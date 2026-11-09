@@ -1,7 +1,6 @@
 package masterdata
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,18 +20,19 @@ import (
 const maxCardMasterBytes = 32 * 1024 * 1024
 
 type CardRuntimeMaster struct {
-	SchemaVersion                     int                                   `json:"schema_version"`
-	ClientProfile                     string                                `json:"client_profile"`
-	CardProgressionConfigVersion      int                                   `json:"card_progression_config_version"`
-	CardProgressionPolicy             gamestate.CardProgressionPolicy       `json:"card_progression_policy"`
-	CardExperienceTables              map[int][]int                         `json:"card_experience_tables"`
-	SphereConfigVersion               int                                   `json:"sphere_config_version"`
-	SphereProgressionPolicy           gamestate.SphereProgressionPolicy     `json:"sphere_progression_policy"`
-	BuddyConfigVersion                int                                   `json:"buddy_config_version"`
-	BuddyProgressionPolicy            gamestate.BuddyProgressionPolicy      `json:"buddy_progression_policy"`
-	SupportDeckConfigVersion          int                                   `json:"support_deck_config_version"`
-	SupportDeckSetCardNum             int                                   `json:"support_deck_set_card_num"`
-	Source                            json.RawMessage                       `json:"source"`
+	Source                       CardMasterIdentity                `json:"source"`
+	SchemaVersion                int                               `json:"schema_version"`
+	ClientProfile                string                            `json:"client_profile"`
+	CardProgressionConfigVersion int                               `json:"card_progression_config_version"`
+	CardProgressionPolicy        gamestate.CardProgressionPolicy   `json:"card_progression_policy"`
+	CardExperienceTables         map[int][]int                     `json:"card_experience_tables"`
+	SphereConfigVersion          int                               `json:"sphere_config_version"`
+	SphereProgressionPolicy      gamestate.SphereProgressionPolicy `json:"sphere_progression_policy"`
+	BuddyConfigVersion           int                               `json:"buddy_config_version"`
+	BuddyProgressionPolicy       gamestate.BuddyProgressionPolicy  `json:"buddy_progression_policy"`
+	SupportDeckConfigVersion     int                               `json:"support_deck_config_version"`
+	SupportDeckSetCardNum        int                               `json:"support_deck_set_card_num"`
+
 	CardTemplates                     []gamestate.Card                      `json:"card_templates"`
 	CardSellExtract                   *gamestate.CardSellExtractPolicy      `json:"card_sell_extract,omitempty"`
 	CardCollectionPages               [][]int                               `json:"card_collection_pages"`
@@ -59,6 +59,21 @@ type CardRuntimeMaster struct {
 	SupportDeckSlotUnlockRules        []gamestate.SupportDeckSlotUnlockRule `json:"support_deck_slot_unlock_rules"`
 }
 
+// CardMasterIdentity retains only identities used by the catalog and CSV validation.
+type CardMasterIdentity struct {
+	Files []struct {
+		Path   string `json:"path"`
+		Bytes  int    `json:"bytes"`
+		SHA256 string `json:"sha256"`
+	} `json:"files"`
+	Imports []struct {
+		Region string `json:"region"`
+		IDs    struct {
+			Cards []int `json:"card"`
+		} `json:"ids"`
+	} `json:"imported_inventory"`
+}
+
 func LoadCardRuntimeMaster(masterPath string) (CardRuntimeMaster, error) {
 	if masterPath == "" {
 		return CardRuntimeMaster{}, errors.New("CN card runtime master path is required")
@@ -80,7 +95,6 @@ func LoadCardRuntimeMaster(masterPath string) (CardRuntimeMaster, error) {
 		return CardRuntimeMaster{}, errors.New("CN card runtime master must be a non-empty regular JSON file within the size limit")
 	}
 	decoder := json.NewDecoder(io.LimitReader(file, maxCardMasterBytes+1))
-	decoder.DisallowUnknownFields()
 	var master CardRuntimeMaster
 	if err := decoder.Decode(&master); err != nil {
 		return CardRuntimeMaster{}, fmt.Errorf("decode CN card runtime master: %w", err)
@@ -116,8 +130,7 @@ func validateCardRuntimeMaster(master CardRuntimeMaster) error {
 		master.SupportDeckSetCardNum > 10 {
 		return errors.New("CN card runtime master identity is invalid")
 	}
-	if len(master.Source) == 0 || bytes.Equal(master.Source, []byte("null")) ||
-		len(master.CardTemplates) == 0 || len(master.StackCardTemplates) == 0 ||
+	if len(master.CardTemplates) == 0 || len(master.StackCardTemplates) == 0 ||
 		len(master.CardCategoryProfiles) == 0 || len(master.CardGroupProfiles) == 0 ||
 		len(master.CardExperienceTables) == 0 ||
 		len(master.EvolutionTransitions) == 0 || len(master.SphereDefinitions) == 0 ||
@@ -132,22 +145,14 @@ func validateCardRuntimeMaster(master CardRuntimeMaster) error {
 	if err := validateCardGroupProfiles(master); err != nil {
 		return err
 	}
-	if !validCardProgressionSourceState(master.CardProgressionPolicy) {
-		return errors.New("CN card progression source state is invalid")
-	}
+
 	if err := validateCardFusionSuccessPolicy(master.CardProgressionPolicy); err != nil {
 		return err
 	}
-	if !validSphereProgressionSourceState(master.SphereProgressionPolicy) {
-		return errors.New("CN sphere progression source state is invalid")
-	}
-	if !validBuddyProgressionSourceState(master.BuddyProgressionPolicy) {
-		return errors.New("CN Buddy progression source state is invalid")
-	}
+
 	if master.CardDevelopmentPolicy.TimeEveryFameSeconds <= 0 ||
 		master.CardDevelopmentPolicy.CoinEveryHour <= 0 ||
-		master.CardDevelopmentPolicy.HelpPath == "" || master.CardDevelopmentPolicy.HelpPath[0] != '/' ||
-		master.CardDevelopmentPolicy.Evidence != "PLACEHOLDER" {
+		master.CardDevelopmentPolicy.HelpPath == "" || master.CardDevelopmentPolicy.HelpPath[0] != '/' {
 		return errors.New("CN card development local policy is invalid")
 	}
 	for index, rule := range master.SupportDeckSlotUnlockRules {
@@ -442,51 +447,6 @@ func validateCardRuntimeMaster(master CardRuntimeMaster) error {
 		}
 	}
 	return nil
-}
-
-func validCardProgressionSourceState(policy gamestate.CardProgressionPolicy) bool {
-	return len(policy.SourceState.ExperienceTables) > len("CONFIRMED:") &&
-		policy.SourceState.ExperienceTables[:len("CONFIRMED:")] == "CONFIRMED:" &&
-		len(policy.SourceState.ParameterFormula) > len("CONFIRMED:") &&
-		policy.SourceState.ParameterFormula[:len("CONFIRMED:")] == "CONFIRMED:" &&
-		len(policy.SourceState.FusionMaterialExperience) > len("INFERRED:") &&
-		policy.SourceState.FusionMaterialExperience[:len("INFERRED:")] == "INFERRED:" &&
-		len(policy.SourceState.FusionGold) > len("INFERRED:") &&
-		policy.SourceState.FusionGold[:len("INFERRED:")] == "INFERRED:" &&
-		strings.HasPrefix(policy.SourceState.FusionGoldConsumption, "CONFIRMED:") &&
-		strings.HasPrefix(policy.SourceState.SellGoldConsumption, "CONFIRMED:") &&
-		len(policy.SourceState.OrdinaryCardMaterialExperience) > len("PLACEHOLDER:") &&
-		policy.SourceState.OrdinaryCardMaterialExperience[:len("PLACEHOLDER:")] == "PLACEHOLDER:" &&
-		strings.HasPrefix(policy.SourceState.MaterialSelection, "CONFIRMED:") &&
-		strings.HasPrefix(policy.SourceState.SkillLevelMaximum, "CONFIRMED:") &&
-		strings.HasPrefix(policy.SourceState.FameInheritance, "CONFIRMED:") &&
-		strings.HasPrefix(policy.SourceState.SuccessMultipliers, "INFERRED:") &&
-		strings.HasPrefix(policy.SourceState.SuccessWeights, "PLACEHOLDER:")
-}
-
-func validSphereProgressionSourceState(policy gamestate.SphereProgressionPolicy) bool {
-	return strings.HasPrefix(policy.SourceState.ExperienceTables, "CONFIRMED:") &&
-		strings.HasPrefix(policy.SourceState.MaterialBaseExperience, "INFERRED:") &&
-		strings.HasPrefix(policy.SourceState.MaterialLevelBonus, "INFERRED:") &&
-		strings.HasPrefix(policy.SourceState.FusionGold, "PLACEHOLDER:") &&
-		strings.HasPrefix(policy.SourceState.EvolutionMaterialSelection, "CONFIRMED:") &&
-		strings.HasPrefix(policy.SourceState.EvolutionLevelRequirement, "CONFIRMED:") &&
-		strings.HasPrefix(policy.SourceState.EvolutionProgressionPreservation, "INFERRED:") &&
-		strings.HasPrefix(policy.SourceState.AccountSeed, "PLACEHOLDER:")
-}
-
-func validBuddyProgressionSourceState(policy gamestate.BuddyProgressionPolicy) bool {
-	return strings.HasPrefix(policy.SourceState.ExperienceTables, "CONFIRMED:") &&
-		strings.HasPrefix(policy.SourceState.MaterialExperienceConsumption, "CONFIRMED:") &&
-		strings.HasPrefix(policy.SourceState.FusionGoldConsumption, "CONFIRMED:") &&
-		strings.HasPrefix(policy.SourceState.OrdinaryBuddyMaterialExperience, "PLACEHOLDER:") &&
-		strings.HasPrefix(policy.SourceState.AncientMelodyExperience, "INFERRED:") &&
-		strings.HasPrefix(policy.SourceState.SuccessMultipliers, "INFERRED:") &&
-		strings.HasPrefix(policy.SourceState.SuccessWeights, "PLACEHOLDER:") &&
-		strings.HasPrefix(policy.SourceState.EvolutionMaterialSelection, "CONFIRMED:") &&
-		strings.HasPrefix(policy.SourceState.EvolutionLevelRequirement, "CONFIRMED:") &&
-		strings.HasPrefix(policy.SourceState.EvolutionProgressionPreservation, "INFERRED:") &&
-		strings.HasPrefix(policy.SourceState.AccountSeed, "PLACEHOLDER:")
 }
 
 func validateCardFusionSuccessPolicy(policy gamestate.CardProgressionPolicy) error {
@@ -786,12 +746,7 @@ func ApplyCardRuntimeMaster(state *gamestate.State, master CardRuntimeMaster) (b
 
 func validateCardGroupProfiles(master CardRuntimeMaster) error {
 	policy := master.CardGroupPolicy
-	if policy.ConfigVersion != 2 || policy.ClaimsOriginalServiceTopology ||
-		!strings.HasPrefix(policy.ClientContract, "CONFIRMED:") ||
-		!strings.HasPrefix(policy.GroupMembership, "CONFIRMED:") ||
-		!strings.HasPrefix(policy.DisplayNames, "INFERRED:") ||
-		!strings.HasPrefix(policy.CategoryProjection, "PLACEHOLDER:") ||
-		!strings.HasPrefix(policy.DeckLimitBossID, "CONFIRMED:") {
+	if policy.ConfigVersion != 2 {
 		return errors.New("CN card group policy is invalid")
 	}
 	// Dynamic directory keys continue the sourced packaged base inventory.
@@ -804,12 +759,9 @@ func validateCardGroupProfiles(master CardRuntimeMaster) error {
 	}
 	categories := make(map[int]struct{}, len(master.CardCategoryProfiles))
 	for index, category := range master.CardCategoryProfiles {
-		evidence := strings.HasPrefix(category.Evidence, "CONFIRMED:") ||
-			strings.HasPrefix(category.Evidence, "INFERRED:") ||
-			strings.HasPrefix(category.Evidence, "PLACEHOLDER:")
 		if category.CategoryID <= 0 || category.CategoryID == 1 || category.CategoryID == 1000 ||
 			strings.TrimSpace(category.Name) == "" || category.Order != categoryOrder+index ||
-			category.ViewType != 0 || !evidence {
+			category.ViewType != 0 {
 			return errors.New("CN card category profile is invalid")
 		}
 		if _, duplicate := categories[category.CategoryID]; duplicate {
@@ -827,11 +779,9 @@ func validateCardGroupProfiles(master CardRuntimeMaster) error {
 	groups := make(map[int]struct{}, len(master.CardGroupProfiles))
 	for index, group := range master.CardGroupProfiles {
 		_, categoryExists := categories[group.CategoryID]
-		nameEvidence := strings.HasPrefix(group.NameEvidence, "CONFIRMED:") ||
-			strings.HasPrefix(group.NameEvidence, "INFERRED:")
 		if group.GroupID <= 0 || !categoryExists || strings.TrimSpace(group.Name) == "" ||
 			group.Order != groupOrder+index || group.DeckLimitBossID < 0 ||
-			len(group.MemberCardIDs) == 0 || !nameEvidence {
+			len(group.MemberCardIDs) == 0 {
 			return fmt.Errorf("CN card group profile %d is invalid", group.GroupID)
 		}
 		if _, duplicate := groups[group.GroupID]; duplicate {

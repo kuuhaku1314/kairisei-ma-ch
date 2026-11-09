@@ -1,9 +1,10 @@
 package battlecore
 
 import (
-	"kairisei.local/server/battlecontent"
 	"reflect"
 	"testing"
+
+	"kairisei.local/server/battlecontent"
 )
 
 func TestCardCallFieldFlowsThroughUserAttackToIndependentBlessPayload(t *testing.T) {

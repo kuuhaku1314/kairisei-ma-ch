@@ -29,25 +29,6 @@ type stageQuestPublicationProgress struct {
 	} `json:"stage_quest"`
 }
 
-// projectCNTeamBattlePublication is the JSON boundary for callers that need the
-// complete stock DTO. Publication itself works on a single decoded catalog.
-func projectCNTeamBattlePublication(
-	configuration json.RawMessage,
-	stageQuests map[int]json.RawMessage,
-	limitedGroupIDs []int,
-	tutorialNormalQuest bool,
-	tutorialActivity bool,
-) (json.RawMessage, error) {
-	catalog, err := decodeTeamBattleCatalog(configuration)
-	if err != nil {
-		return nil, err
-	}
-	if err := catalog.project(stageQuests, limitedGroupIDs, tutorialNormalQuest, tutorialActivity); err != nil {
-		return nil, err
-	}
-	return catalog.MarshalJSON()
-}
-
 // Keep the stock client's four list contracts distinct: account-progression
 // normal quests, 3D activities, limited/key 2D activities and ordinary 2D
 // activities. Assemble and validate the plan before changing catalog contents.

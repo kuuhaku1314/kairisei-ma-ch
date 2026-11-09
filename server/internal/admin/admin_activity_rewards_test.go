@@ -15,7 +15,7 @@ func TestActivityRewardsAtomicSaveRestartAndNativeSlots(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := &gamestate.TeamBattleScorePolicy{SourceState: "LOCAL_POLICY_DAMAGE_SCORE", EndTurn: 5, Rate: 100, MemberDeadEnd: true}
+	p := &gamestate.TeamBattleScorePolicy{EndTurn: 5, Rate: 100, MemberDeadEnd: true}
 	for i := range 9 {
 		p.Grades = append(p.Grades, gamestate.TeamBattleScoreGrade{Score: int64(i+1) * 100, Rewards: []gamestate.Reward{{Type: 10, Num: 10, CardSkillLevels: []int16{}}}})
 	}

@@ -9,12 +9,6 @@ import (
 	"kairisei.local/server/internal/gamestate"
 )
 
-// Historical reward identities and gifts are fixed by the audited preset;
-// operators can tune each step's price and weights, plus its publication window.
-func ValidateMixedGachaConfig(catalog map[string]AdminCatalogEntry, base gamestate.GachaProfile, config AdminGachaConfig) (map[string]any, error) {
-	return validateMixedGachaConfig(catalog, base, config, false)
-}
-
 func validateMixedGachaConfig(catalog map[string]AdminCatalogEntry, base gamestate.GachaProfile, config AdminGachaConfig, editable bool) (map[string]any, error) {
 	if err := validateAdminGachaPayment(catalog, config); err != nil {
 		return nil, err

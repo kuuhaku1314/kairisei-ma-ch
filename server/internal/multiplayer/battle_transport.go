@@ -2,11 +2,12 @@ package multiplayer
 
 import (
 	"errors"
-	"kairisei.local/server/battlecodec"
-	"kairisei.local/server/battlecore"
 	"strconv"
 	"sync"
 	"time"
+
+	"kairisei.local/server/battlecodec"
+	"kairisei.local/server/battlecore"
 )
 
 type battleFrame struct {
@@ -80,25 +81,6 @@ func roomStartResult(current *room, results []BattleResult) (string, error) {
 		return "", err
 	}
 	return battlecodec.EncodeStart(results, identities)
-}
-
-func roomDeckRows(current *room) ([]string, error) {
-	if current == nil {
-		return nil, errors.New("battle room party is incomplete")
-	}
-	identities, err := battlecore.DeckIdentityResults(roomBattleParticipants(current.Members))
-	if err != nil {
-		return nil, err
-	}
-	rows := make([]string, 0, len(identities))
-	for _, result := range identities {
-		row, err := battlecodec.EncodeRow(result)
-		if err != nil {
-			return nil, err
-		}
-		rows = append(rows, row)
-	}
-	return rows, nil
 }
 
 func broadcastRoomFrames(server *Server, roomID int64, deliveries []frameDelivery) {

@@ -1147,10 +1147,6 @@ func absInt(value int) int {
 	return value
 }
 
-func (engine *BattleEngine) playerHasEffect(player *battlePlayer, function string) bool {
-	return combatEffectCount(player.Effects, function, "") > 0
-}
-
 func (engine *BattleEngine) playerEffectValue(player *battlePlayer, function string) int {
 	value := 0
 	for _, effect := range player.Effects {

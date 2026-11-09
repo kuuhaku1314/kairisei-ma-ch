@@ -1,10 +1,11 @@
 package httpapi
 
 import (
-	"kairisei.local/server/internal/game"
-	"kairisei.local/server/internal/gamestate"
 	"testing"
 	"time"
+
+	"kairisei.local/server/internal/game"
+	"kairisei.local/server/internal/gamestate"
 )
 
 func TestCommittedPVPPolicyResultCannotBeRejudged(t *testing.T) {

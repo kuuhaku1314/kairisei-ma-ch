@@ -53,9 +53,19 @@ var cn602GachaBannerFiles = map[string]string{
 	"lucky_bag_yalin":       "https___ma43_gdl_netease_com_web_netease_GONGGAO_20180409_shuijing_fudaina_png",
 }
 
-func resolveCN602GachaBannerPaths(defaultPath string, fiveStarPath string) (map[string]string, error) {
-	result := map[string]string{"five_star_ticket": fiveStarPath}
-	root := filepath.Dir(defaultPath)
+func resolveCN602BannerPaths(paths map[string]string) (map[string]string, error) {
+	result := make(map[string]string, len(cn602GachaBannerFiles)+3)
+	for _, key := range []string{"", "five_star_ticket", "home"} {
+		if paths[key] == "" {
+			return nil, fmt.Errorf("missing resource-set banner %q", key)
+		}
+		var err error
+		result[key], err = resolveBanner(paths[key], key)
+		if err != nil {
+			return nil, err
+		}
+	}
+	root := filepath.Dir(result[""])
 	for key, fileName := range cn602GachaBannerFiles {
 		candidate := filepath.Join(root, fileName)
 		absolute, err := filepath.Abs(candidate)

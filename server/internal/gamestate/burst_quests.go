@@ -20,15 +20,6 @@ func BurstQuests() [4]BurstQuest {
 	}
 }
 
-func FindBurstQuest(arthurType int8) (BurstQuest, bool) {
-	for _, quest := range BurstQuests() {
-		if quest.ArthurType == arthurType {
-			return quest, true
-		}
-	}
-	return BurstQuest{}, false
-}
-
 func FindBurstStory(storyID int) (BurstQuest, int, bool) {
 	for _, quest := range BurstQuests() {
 		for index, id := range quest.StoryIDs {

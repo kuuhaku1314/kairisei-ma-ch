@@ -97,14 +97,12 @@ func newTestHandler(t *testing.T, root string, logPath string) http.Handler {
 			SeedPath:   savePath,
 		},
 		Resources: ResourcesConfig{
-			AssetMap:            assetMapPath,
-			GachaBanner:         assetMapPath,
-			FiveStarGachaBanner: assetMapPath,
-			HomeBanner:          assetMapPath,
-			CPKRoot:             cpkRoot,
-			ImageRoot:           writeTestCardImages(t, root),
-			CPKAliases:          writeTestCPKAliases(t, root),
-			PlatformDeliveries:  []string{profile},
+			AssetMap:           assetMapPath,
+			Banners:            map[string]string{"": assetMapPath, "five_star_ticket": assetMapPath, "home": assetMapPath},
+			CPKRoot:            cpkRoot,
+			ImageRoot:          writeTestCardImages(t, root),
+			CPKAliases:         writeTestCPKAliases(t, root),
+			PlatformDeliveries: []string{profile},
 		},
 		Masters: MastersConfig{
 			Cards:             cardMasterPath,
@@ -212,7 +210,6 @@ func writeTestAssetMap(t *testing.T, root string, version []byte, catalogAssets 
 			"unresolved_bundle_dependency_count": 0,
 			"scrambled_bundle_count":             len(bundles),
 			"plain_bundle_count":                 0,
-			"surviving_official_catalog_overlay": testSurvivingOfficialCatalogOverlay(),
 		},
 		"bundles":        bundles,
 		"catalog_assets": catalogAssets,
@@ -226,21 +223,6 @@ func writeTestAssetMap(t *testing.T, root string, version []byte, catalogAssets 
 		t.Fatal(err)
 	}
 	return assetMapPath
-}
-
-func testSurvivingOfficialCatalogOverlay() map[string]any {
-	return map[string]any{
-		"path":                                "_local/extracted/cn-official-cdn/ma43-update-2018-final/catalog.dat",
-		"bytes":                               cn602SurvivingCatalogBytes,
-		"sha256":                              cn602SurvivingCatalogSHA256,
-		"catalog_version":                     cn602SurvivingCatalogVersion,
-		"scope":                               []string{"eelbinary"},
-		"candidate_rows_in_available_bundles": cn602SurvivingCatalogLogicalRows,
-		"physically_verified_rows":            cn602SurvivingCatalogLogicalRows,
-		"physically_absent_rows":              0,
-		"added_rows":                          cn602SurvivingCatalogLogicalRows,
-		"verification":                        "same logical row, bundle owner and physical container path",
-	}
 }
 
 func testAsset(directory string, name string, extension string, bundle string) map[string]any {
@@ -805,7 +787,7 @@ func TestCN602NoPaymentProductsAndLocalBanners(t *testing.T) {
 		nil,
 	))
 	if intro.Code != http.StatusOK || intro.Header().Get("Content-Type") != "image/png" ||
-		intro.Header().Get("X-Kairisei-Source-State") != "PLACEHOLDER" ||
+		intro.Header().Get("X-Kairisei-Source-State") != "" ||
 		!bytes.HasPrefix(intro.Body.Bytes(), []byte("\x89PNG\r\n\x1a\n")) {
 		t.Fatalf("intro placeholder: status=%d headers=%v body=%x", intro.Code, intro.Header(), intro.Body.Bytes())
 	}

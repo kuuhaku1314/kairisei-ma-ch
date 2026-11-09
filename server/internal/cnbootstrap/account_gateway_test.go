@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"kairisei.local/server/internal/accountstore"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +14,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"kairisei.local/server/internal/accountstore"
 
 	"kairisei.local/server/internal/testfixture"
 )

@@ -54,7 +54,6 @@ func newCNIntroHandler(gachaBannerPath string) (http.HandlerFunc, error) {
 		writer.Header().Set("Content-Type", "image/png")
 		writer.Header().Set("Cache-Control", "no-cache")
 		writer.Header().Set("ETag", tags[index])
-		writer.Header().Set("X-Kairisei-Source-State", "PLACEHOLDER")
 		writer.Header().Set("X-Kairisei-Presentation", "local-game-guide")
 		http.ServeContent(writer, request, fmt.Sprintf("Intro_%d.png", index), time.Time{}, bytes.NewReader(slides[index]))
 	}, nil

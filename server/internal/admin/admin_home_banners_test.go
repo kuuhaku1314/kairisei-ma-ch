@@ -115,7 +115,7 @@ func TestHomeBannersUploadPolicyConflictRestartAndPublication(t *testing.T) {
 	}
 	bossID := 37010101
 	o.content = &contentStore{base: gamestate.State{TeamBattleRewards: []gamestate.TeamBattleRewardProfile{{
-		BossID: bossID, ScorePolicy: &gamestate.TeamBattleScorePolicy{SourceState: "LOCAL_POLICY_DAMAGE_SCORE"},
+		BossID: bossID, ScorePolicy: &gamestate.TeamBattleScorePolicy{Rate: 1},
 	}}}, bosses: map[int]DropBoss{bossID: {BossID: bossID, Name: "海景房", Difficulty: "圣剑杯"}}}
 	bossBanner := operations.HomeBannerPolicy{Custom: true, Items: []operations.HomeBannerEntry{{
 		Title: "海景房排行榜", Enabled: true, CoverPath: path, Target: "boss_score_rank", TargetID: bossID,
@@ -128,7 +128,7 @@ func TestHomeBannersUploadPolicyConflictRestartAndPublication(t *testing.T) {
 		t.Fatal("banner accepted a non-score boss")
 	}
 	o.content.configuration = game.ContentConfiguration{Revision: 1, State: gamestate.State{
-		TeamBattleRewards:         []gamestate.TeamBattleRewardProfile{{BossID: bossID, ScorePolicy: &gamestate.TeamBattleScorePolicy{SourceState: "LOCAL_POLICY_DAMAGE_SCORE"}}},
+		TeamBattleRewards:         []gamestate.TeamBattleRewardProfile{{BossID: bossID, ScorePolicy: &gamestate.TeamBattleScorePolicy{Rate: 1}}},
 		DisabledTeamBattleBossIDs: map[int]bool{bossID: true},
 	}}
 	bossBanner.Items[0].TargetID = bossID

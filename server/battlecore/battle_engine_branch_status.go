@@ -140,10 +140,6 @@ func (engine *BattleEngine) branchTargetAttributeMatches(target int, parameters 
 	return false
 }
 
-func branchDebuffKindCount(effects []battleEffect) int {
-	return branchStatusKindCount(effects, false)
-}
-
 // d6374/d4768 count (typed kind, primary attribute) pairs in NORMAL only.
 // cf940 excludes native fields and non-counting control states; a recognized
 // zero-delta parameter state retains its NULL kind rather than disappearing.

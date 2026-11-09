@@ -59,18 +59,19 @@ case "$ARCH:$(uname -m)" in
     *) echo "Wrong architecture: requested $ARCH, detected $(uname -m)." >&2; exit 2 ;;
 esac
 SERVER="$ROOT/kairi-server-linux-$ARCH"
-if [ ! -f "$SERVER" ] || [ ! -f server-arguments.sh ]; then
+if [ ! -f "$SERVER" ] || [ ! -f deployment.json ] || [ ! -f resource-set/resource-set.json ]; then
     echo 'Incomplete package. Extract all release files first.' >&2; exit 1
 fi
-if [ -e "$ROOT/Clean-RetiredResources.sh" ] || [ -L "$ROOT/Clean-RetiredResources.sh" ]; then
-    if [ "$DRY_RUN" = true ]; then
-        sh "$ROOT/Clean-RetiredResources.sh" --dry-run
-    else
-        sh "$ROOT/Clean-RetiredResources.sh"
-    fi
-fi
-. "$ROOT/server-arguments.sh"
-set -- "$@" -cdn-sync-config "$ROOT/cdn-sync.json"
+set -- \
+    -resource-set "$ROOT/resource-set/resource-set.json" \
+    -platform-content-config "$ROOT/deployment.json" \
+    -request-log "$ROOT/_local/runtime/requests.jsonl" \
+    -cn-save-path "$ROOT/_local/data/cn602-save.json" \
+    -cdn-config "$ROOT/cdn.json" \
+    -cdn-sync-config "$ROOT/cdn-sync.json" \
+    -listen-host '0.0.0.0' -advertise-host "$ADVERTISE_HOST" \
+    -port "$PORT" -battle-port "$BATTLE_PORT" \
+    -admin-listen-host '127.0.0.1' -admin-port "$ADMIN_PORT"
 if [ "$DRY_RUN" = true ]; then
     echo 'Dry run: no server started and no account data written.'
     printf '%s\n' "$SERVER" "$@"

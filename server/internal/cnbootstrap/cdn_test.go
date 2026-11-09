@@ -1,9 +1,10 @@
 package cnbootstrap
 
 import (
-	"kairisei.local/server/internal/cpk"
 	"strings"
 	"testing"
+
+	"kairisei.local/server/internal/cpk"
 )
 
 func TestCPKSphereMoviesUseBattleCategory(t *testing.T) {

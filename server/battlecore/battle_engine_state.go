@@ -3,8 +3,9 @@ package battlecore
 import (
 	"errors"
 	"fmt"
-	"kairisei.local/server/battlemodel"
 	"math/bits"
+
+	"kairisei.local/server/battlemodel"
 )
 
 // JP8 sizeof_SKILL_ROLE_KIND_BUFF, shared by execution/release/AI statistics.

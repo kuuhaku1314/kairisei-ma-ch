@@ -2,8 +2,9 @@ package game
 
 import (
 	"encoding/json"
-	"kairisei.local/server/internal/gamestate"
 	"testing"
+
+	"kairisei.local/server/internal/gamestate"
 )
 
 func TestTowerContentUpdateKeepsProgressAndFirstClearOnce(t *testing.T) {

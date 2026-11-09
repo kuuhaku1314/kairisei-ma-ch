@@ -8,12 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"kairisei.local/server/battlemodel"
-	"kairisei.local/server/cnformat"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"kairisei.local/server/battlemodel"
+	"kairisei.local/server/cnformat"
 )
 
 const maxCombatMasterBytes = 16 * 1024 * 1024

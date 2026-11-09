@@ -496,13 +496,6 @@ func (s *Account) ContinueTeamBattle(report TeamBattleContinueReport, base games
 	return s.coin, s.coinFree, nil
 }
 
-func (s *Account) planTeamBattleFameAwardsLocked(
-	profile gamestate.TeamBattleRewardProfile,
-	context TeamBattleContext,
-) ([]teamBattleFameAwardPlan, error) {
-	return planTeamBattleFameAwards(profile, context, s.teamBattleFameBonus)
-}
-
 func planTeamBattleFameAwards(profile gamestate.TeamBattleRewardProfile, context TeamBattleContext, policy gamestate.TeamBattleFameBonusPolicy) ([]teamBattleFameAwardPlan, error) {
 	if policy.ConfigVersion == 0 {
 		return nil, nil
@@ -663,11 +656,11 @@ func (s *Account) completeTeamBattleLocked(context TeamBattleContext, profile ga
 	if report.ScorePolicy != nil {
 		profile.ScorePolicy = report.ScorePolicy
 	}
-	if context.ScorePolicy == nil && report.ScorePolicy == nil && profile.ScorePolicy != nil && profile.ScorePolicy.SourceState == "LOCAL_POLICY_DAMAGE_SCORE" {
+	if context.ScorePolicy == nil && report.ScorePolicy == nil && profile.ScorePolicy != nil && profile.ScorePolicy.IsDamageScore() {
 		// A pre-upgrade ordinary fight has no accepted score contract.
 		profile.ScorePolicy = nil
 	}
-	if profile.ScorePolicy != nil && profile.ScorePolicy.SourceState == "LOCAL_POLICY_DAMAGE_SCORE" {
+	if profile.ScorePolicy != nil && profile.ScorePolicy.IsDamageScore() {
 		if err := gamestate.ValidateTeamBattleScoreDamage(profile.ScorePolicy, report.ScoreDamage); err != nil {
 			return teamBattleSettlement{}, err
 		}
@@ -686,7 +679,7 @@ func (s *Account) completeTeamBattleLocked(context TeamBattleContext, profile ga
 				return teamBattleSettlement{}, err
 			}
 		}
-		if report.ScoreVerified && profile.ScorePolicy != nil && profile.ScorePolicy.SourceState == "LOCAL_POLICY_DAMAGE_SCORE" {
+		if report.ScoreVerified && profile.ScorePolicy != nil && profile.ScorePolicy.IsDamageScore() {
 			progress, rewards, info := planTeamBattleScore(profile.ScorePolicy, scores[scoreBossID], report)
 			if err := s.validateSettlementRewardsLocked(rewards); err != nil {
 				return teamBattleSettlement{}, err

@@ -8,7 +8,7 @@ import (
 )
 
 func TestScoreSettlementKeepsBestAndDoesNotRepeatAwards(t *testing.T) {
-	p := &gamestate.TeamBattleScorePolicy{SourceState: "PLACEHOLDER_LOCAL_CLEAR_TURN_SCORE", BaseScore: 1000000, BestTurn: 4}
+	p := &gamestate.TeamBattleScorePolicy{BaseScore: 1000000, BestTurn: 4}
 	for i := 0; i < 9; i++ {
 		p.Grades = append(p.Grades, gamestate.TeamBattleScoreGrade{Score: 1000000 * int64(i+1), Crystal: 50})
 	}
@@ -57,7 +57,7 @@ func TestScoreSettlementKeepsBestAndDoesNotRepeatAwards(t *testing.T) {
 }
 
 func TestDamageScoreTimeoutFreezesPolicyAndAwardsOnlyNewGrades(t *testing.T) {
-	p := &gamestate.TeamBattleScorePolicy{SourceState: "LOCAL_POLICY_DAMAGE_SCORE", EndTurn: 5, Rate: 100}
+	p := &gamestate.TeamBattleScorePolicy{EndTurn: 5, Rate: 100}
 	for i := range 9 {
 		p.Grades = append(p.Grades, gamestate.TeamBattleScoreGrade{Score: int64(i+1) * 100, Rewards: []gamestate.Reward{{Type: 10, Num: 10, CardSkillLevels: []int16{}}}})
 	}
@@ -101,7 +101,7 @@ func TestDamageScoreTimeoutFreezesPolicyAndAwardsOnlyNewGrades(t *testing.T) {
 }
 
 func TestSoloDamageScoreSeparatesGradesAndExcludesRentalRank(t *testing.T) {
-	p := &gamestate.TeamBattleScorePolicy{SourceState: "LOCAL_POLICY_DAMAGE_SCORE", EndTurn: 5, Rate: 150}
+	p := &gamestate.TeamBattleScorePolicy{EndTurn: 5, Rate: 150}
 	for i := range 9 {
 		p.Grades = append(p.Grades, gamestate.TeamBattleScoreGrade{Score: int64(i+1) * 100, Rewards: []gamestate.Reward{{Type: 10, Num: 10, CardSkillLevels: []int16{}}}})
 	}

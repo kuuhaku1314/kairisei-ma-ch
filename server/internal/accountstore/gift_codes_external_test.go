@@ -1,13 +1,14 @@
 package accountstore_test
 
 import (
+	"sync"
+	"testing"
+	"time"
+
 	"kairisei.local/server/internal/accountstore"
 	"kairisei.local/server/internal/game"
 	"kairisei.local/server/internal/gamestate"
 	"kairisei.local/server/internal/testfixture"
-	"sync"
-	"testing"
-	"time"
 )
 
 func TestGiftCodeConcurrentClaimAndFailedSaveAreAtomic(t *testing.T) {

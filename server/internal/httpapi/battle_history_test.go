@@ -35,7 +35,7 @@ func (h *historyFixture) PersistSoloBattle(_ gamestate.State, result game.SoloBa
 
 func TestSoloScoreContractFreezesRulesAndCommitsOwnDeckRankOnce(t *testing.T) {
 	const boss, ownBoss = 30010102, 130010102
-	policy := &gamestate.TeamBattleScorePolicy{SourceState: "LOCAL_POLICY_DAMAGE_SCORE", Rate: 150, EndTurn: 5, TeamCostInitial: 6, MemberDeadEnd: true}
+	policy := &gamestate.TeamBattleScorePolicy{Rate: 150, EndTurn: 5, TeamCostInitial: 6, MemberDeadEnd: true}
 	for i := range 9 {
 		policy.Grades = append(policy.Grades, gamestate.TeamBattleScoreGrade{Score: int64(i+1) * 100, Rewards: []gamestate.Reward{{Type: 10, Num: 10, CardSkillLevels: []int16{}}}})
 	}

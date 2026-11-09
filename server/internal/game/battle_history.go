@@ -2,8 +2,9 @@ package game
 
 import (
 	"errors"
-	"kairisei.local/server/internal/gamestate"
 	"time"
+
+	"kairisei.local/server/internal/gamestate"
 )
 
 // SoloBattleCommit is one accepted outcome: inventory, receipt, optional clear

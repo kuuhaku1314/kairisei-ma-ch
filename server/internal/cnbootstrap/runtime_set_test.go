@@ -79,11 +79,11 @@ func TestCompleteRuntimeSetConstruction(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "requests.jsonl"), nil, 0600); err != nil {
 		t.Fatal(err)
 	}
-	resources := ResourcesConfig{
-		AssetMap:    p("cn-asset-map"),
-		GachaBanner: p("cn-gacha-banner"), FiveStarGachaBanner: p("cn-five-star-gacha-banner"), HomeBanner: p("cn-home-banner"),
-		CPKRoot: p("cn-cpk-root"), ImageRoot: p("cn-image-root"), CPKAliases: p("cn-cpk-aliases"),
+	inputs, err := LoadRuntimeInputs(filepath.Join(root, "resource-set.json"))
+	if err != nil {
+		t.Fatal(err)
 	}
+	resources := inputs.Resources
 	profiles := os.Getenv("CN602_PLATFORM_CONTENT")
 	if profiles == "" {
 		t.Fatal("CN602_PLATFORM_CONTENT must select built target profiles")
@@ -392,13 +392,9 @@ func TestCompleteRuntimeSetConstruction(t *testing.T) {
 		}
 		count++
 		config := adminapi.AdminGachaConfigFromProfile(base)
-		if _, err := adminapi.ValidateMixedGachaConfig(catalog, base, config); err != nil {
-			t.Fatalf("preset %d: %v", base.GachaID, err)
-		}
+		testfixture.CallContentAdmin(t, admin, "POST", "/api/gacha-editor/preview", map[string]any{"config": config}, 200)
 		config.RewardPool[0].Reward.Num++
-		if _, err := adminapi.ValidateMixedGachaConfig(catalog, base, config); err == nil {
-			t.Fatal("operator could replace locked reward quantity")
-		}
+		testfixture.CallContentAdmin(t, admin, "POST", "/api/gacha-editor/preview", map[string]any{"config": config}, 400)
 	}
 	if count != 4 {
 		t.Fatalf("mixed presets=%d", count)

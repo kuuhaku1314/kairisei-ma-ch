@@ -55,10 +55,6 @@ func (player *battlePlayer) cardInHand(cardType int) (BattleCard, bool) {
 	return BattleCard{}, false
 }
 
-func baseParameterArgs(memberType int, hp int, attack int, magic int, recovery int, defense int, magicDefense int) []int64 {
-	return baseParameterArgsWithLimit(memberType, hp, attack, magic, recovery, defense, magicDefense, 99999)
-}
-
 func initialParameterLimit(alchemist bool) int {
 	if alchemist {
 		return 999999

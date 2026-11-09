@@ -2,9 +2,10 @@ package battlecore
 
 import (
 	"encoding/json"
-	"kairisei.local/server/battlecontent"
 	"os"
 	"testing"
+
+	"kairisei.local/server/battlecontent"
 )
 
 func TestRoleTargetCSVMaskAndNativePlayerAttribute(t *testing.T) {

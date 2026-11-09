@@ -36,42 +36,19 @@ type options struct {
 	cdnConfig         string
 	cdnManifestOutput string
 	resourceSet       string
-	clientProfile     string
 
-	requestLog                string
-	adminLogFile              string
-	cnSavePath                string
-	cnSaveSeedPath            string
-	cnAssetMapPath            string
-	cnCardMasterPath          string
-	cnExploreMasterPath       string
-	cnStoryMasterPath         string
-	cnBattleMasterPath        string
-	cnCombatCardPath          string
-	cnCombatMasterRoot        string
-	cnNaviMasterPath          string
-	cnItemMasterPath          string
-	cnAvatarMasterPath        string
-	cnGachaBannerPath         string
-	cnFiveStarGachaBannerPath string
-	cnHomeBannerPath          string
-	cnStampMasterPath         string
-	cnHonorMasterPath         string
-	cnPVPMasterPath           string
-	cnPlayerProgressionPath   string
-	cnLoginBonusPath          string
-	cnCPKRoot                 string
-	cnImageRoot               string
-	cnCPKAliasPath            string
-	platformContent           stringListFlag
-	platformContentConfig     string
-	listenHost                string
-	advertiseHost             string
-	port                      int
-	battlePort                int
-	adminListenHost           string
-	adminPort                 int
-	shutdownEvent             string
+	requestLog            string
+	adminLogFile          string
+	cnSavePath            string
+	platformContent       stringListFlag
+	platformContentConfig string
+	listenHost            string
+	advertiseHost         string
+	port                  int
+	battlePort            int
+	adminListenHost       string
+	adminPort             int
+	shutdownEvent         string
 }
 
 type stringListFlag []string
@@ -147,35 +124,12 @@ func run(arguments []string, logger *slog.Logger) error {
 	flags.StringVar(&opts.cdnSyncConfig, "sync-cdn", "", "sync client resources using this JSON config, then enable CDN and exit; no game service or database")
 	flags.BoolVar(&opts.cdnSyncDryRun, "cdn-sync-dry-run", false, "check sync inputs locally without network or writes")
 	flags.StringVar(&opts.imageStorage, "cdn-sync-config", "", "optional cdn-sync.json whose storage keys let Admin sync operational images; missing or unfilled keeps it off")
-	flags.StringVar(&opts.resourceSet, "resource-set", "", "complete resource-set.json used for CDN export/sync")
+	flags.StringVar(&opts.resourceSet, "resource-set", "resource-set/resource-set.json", "complete resource-set.json for server resources and CDN export/sync")
 	flags.StringVar(&opts.shutdownEvent, "shutdown-event", "", "Windows local graceful shutdown event")
-	flags.StringVar(&opts.clientProfile, "client-profile", "", "explicit client profile")
 
 	flags.StringVar(&opts.requestLog, "request-log", "", "CN JSONL request capture")
 	flags.StringVar(&opts.adminLogFile, "admin-log-file", "", "current server JSON log file for read-only Admin search")
-	flags.StringVar(&opts.cnSavePath, "cn-save-path", "", "editable local CN character save")
-	flags.StringVar(&opts.cnSaveSeedPath, "cn-save-seed", "", "versioned local CN save migration seed")
-	flags.StringVar(&opts.cnAssetMapPath, "cn-asset-map", "", "CN logical asset metadata for Admin card presentation")
-	flags.StringVar(&opts.cnCardMasterPath, "cn-card-master", "", "normalized official CN card runtime master")
-	flags.StringVar(&opts.cnExploreMasterPath, "cn-explore-master", "", "normalized official CN Explore runtime master")
-	flags.StringVar(&opts.cnStoryMasterPath, "cn-story-master", "", "normalized official CN story runtime master")
-	flags.StringVar(&opts.cnBattleMasterPath, "cn-battle-master", "", "asset-closed CN TeamBattle local runtime master")
-	flags.StringVar(&opts.cnCombatCardPath, "cn-combat-card-master", "", "extracted official CN card CSV used by the Go combat engine")
-	flags.StringVar(&opts.cnCombatMasterRoot, "cn-combat-master-root", "", "extracted official CN battle CSV directory used by the Go combat engine")
-	flags.StringVar(&opts.cnNaviMasterPath, "cn-navi-master", "", "normalized official CN navigator runtime master")
-	flags.StringVar(&opts.cnItemMasterPath, "cn-item-master", "", "normalized official CN item runtime master")
-	flags.StringVar(&opts.cnAvatarMasterPath, "cn-avatar-master", "", "normalized official CN Avatar runtime master")
-	flags.StringVar(&opts.cnGachaBannerPath, "cn-gacha-banner", "", "read-only official CN cached gacha banner")
-	flags.StringVar(&opts.cnFiveStarGachaBannerPath, "cn-five-star-gacha-banner", "", "read-only local-policy five-star gacha banner")
-	flags.StringVar(&opts.cnHomeBannerPath, "cn-home-banner", "", "read-only official CN cached Home banner")
-	flags.StringVar(&opts.cnStampMasterPath, "cn-stamp-master", "", "normalized official CN stamp runtime master")
-	flags.StringVar(&opts.cnHonorMasterPath, "cn-honor-master", "", "normalized official CN honor runtime master")
-	flags.StringVar(&opts.cnPVPMasterPath, "cn-pvp-master", "", "CN PVP fields, ranks and local settlement rules")
-	flags.StringVar(&opts.cnPlayerProgressionPath, "cn-player-progression", "", "CN player EXP, cap and base-job progression policy")
-	flags.StringVar(&opts.cnLoginBonusPath, "cn-login-bonus", "", "CN local daily login bonus policy")
-	flags.StringVar(&opts.cnCPKRoot, "cn-cpk-root", "", "read-only official CN CPK root")
-	flags.StringVar(&opts.cnImageRoot, "cn-image-root", "", "read-only enlarged card image root")
-	flags.StringVar(&opts.cnCPKAliasPath, "cn-cpk-aliases", "", "generated CN CPK logical alias manifest")
+	flags.StringVar(&opts.cnSavePath, "cn-save-path", "", "local account database path prefix")
 	flags.Var(&opts.platformContent, "platform-content", "target/Unity delivery.json; repeat per platform")
 	flags.StringVar(&opts.platformContentConfig, "platform-content-config", "", "assembled deployment.json; read platform_contents relative to its directory instead of -platform-content")
 	flags.StringVar(&opts.listenHost, "listen-host", "0.0.0.0", "local listen address")
@@ -185,6 +139,9 @@ func run(arguments []string, logger *slog.Logger) error {
 	flags.StringVar(&opts.adminListenHost, "admin-listen-host", "127.0.0.1", "loopback-only Admin Web listen address")
 	flags.IntVar(&opts.adminPort, "admin-port", 0, "loopback-only Admin Web port; zero disables it")
 	if err := flags.Parse(arguments); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
 	}
 	if flags.NArg() != 0 {
@@ -224,9 +181,6 @@ func run(arguments []string, logger *slog.Logger) error {
 	if opts.cdnManifestOutput != "" {
 		return cnbootstrap.ExportCDNManifest(opts.resourceSet, opts.cdnManifestOutput, opts.platformContent...)
 	}
-	if opts.resourceSet != "" {
-		return errors.New("-resource-set requires -export-cdn-manifest or -sync-cdn")
-	}
 	cdn, cdnErr := cnbootstrap.LoadCDNConfig(opts.cdnConfig)
 	// The game service never depends on upload keys: a faulty file only disables the Admin image sync.
 	imageStorage := cdnsync.LoadImageStorage(opts.imageStorage)
@@ -235,9 +189,6 @@ func run(arguments []string, logger *slog.Logger) error {
 	}
 	if cdnErr != nil {
 		return cdnErr
-	}
-	if cdn.BaseURL != "" && opts.clientProfile != "cn602-bootstrap" {
-		return errors.New("CDN requires cn602-bootstrap")
 	}
 	if opts.port < 1 || opts.port > 65535 {
 		return errors.New("-port must be 1 through 65535")
@@ -274,28 +225,12 @@ func run(arguments []string, logger *slog.Logger) error {
 	defer closeEvent()
 	baseURL := "http://" + opts.advertiseHost + ":" + strconv.Itoa(opts.port)
 	networkMetrics := &netstats.Counters{}
-	if opts.clientProfile != "cn602-bootstrap" {
-		return fmt.Errorf("unsupported client profile %q", opts.clientProfile)
+	inputs, err := cnbootstrap.LoadRuntimeInputs(opts.resourceSet)
+	if err != nil {
+		return err
 	}
-	if opts.cnBattleMasterPath == "" {
-		return errors.New("-cn-battle-master is required for cn602-bootstrap")
-	}
-	if opts.cnCombatCardPath == "" || opts.cnCombatMasterRoot == "" {
-		return errors.New("-cn-combat-card-master and -cn-combat-master-root are required for cn602-bootstrap")
-	}
-	if opts.cnPVPMasterPath == "" {
-		return errors.New("-cn-pvp-master is required for cn602-bootstrap")
-	}
-	if opts.cnPlayerProgressionPath == "" {
-		return errors.New("-cn-player-progression is required for cn602-bootstrap")
-	}
-	if opts.cnLoginBonusPath == "" {
-		return errors.New("-cn-login-bonus is required for cn602-bootstrap")
-	}
-	if opts.cnGachaBannerPath == "" || opts.cnFiveStarGachaBannerPath == "" || opts.cnHomeBannerPath == "" {
-		return errors.New("-cn-gacha-banner, -cn-five-star-gacha-banner and -cn-home-banner are required for cn602-bootstrap")
-	}
-	combatCatalog, catalogErr := multiplayer.LoadCombatCatalog(opts.cnCombatCardPath, opts.cnCombatMasterRoot)
+	inputs.Resources.PlatformDeliveries = []string(opts.platformContent)
+	combatCatalog, catalogErr := multiplayer.LoadCombatCatalog(inputs.CombatCardMaster, inputs.CombatMasterRoot)
 	if catalogErr != nil {
 		return fmt.Errorf("load CN combat catalog: %w", catalogErr)
 	}
@@ -314,33 +249,10 @@ func run(arguments []string, logger *slog.Logger) error {
 		Persistence: cnbootstrap.PersistenceConfig{
 			RequestLog: opts.requestLog,
 			SavePath:   opts.cnSavePath,
-			SeedPath:   opts.cnSaveSeedPath,
+			SeedPath:   inputs.SeedPath,
 		},
-		Resources: cnbootstrap.ResourcesConfig{
-			AssetMap:            opts.cnAssetMapPath,
-			GachaBanner:         opts.cnGachaBannerPath,
-			FiveStarGachaBanner: opts.cnFiveStarGachaBannerPath,
-			HomeBanner:          opts.cnHomeBannerPath,
-			CPKRoot:             opts.cnCPKRoot,
-			ImageRoot:           opts.cnImageRoot,
-			CPKAliases:          opts.cnCPKAliasPath,
-
-			PlatformDeliveries: []string(opts.platformContent),
-		},
-		Masters: cnbootstrap.MastersConfig{
-			Cards:             opts.cnCardMasterPath,
-			Explore:           opts.cnExploreMasterPath,
-			Story:             opts.cnStoryMasterPath,
-			Battle:            opts.cnBattleMasterPath,
-			Navi:              opts.cnNaviMasterPath,
-			Items:             opts.cnItemMasterPath,
-			Avatar:            opts.cnAvatarMasterPath,
-			Stamps:            opts.cnStampMasterPath,
-			Honors:            opts.cnHonorMasterPath,
-			PVP:               opts.cnPVPMasterPath,
-			PlayerProgression: opts.cnPlayerProgressionPath,
-			LoginBonus:        opts.cnLoginBonusPath,
-		},
+		Resources: inputs.Resources,
+		Masters:   inputs.Masters,
 		Network: cnbootstrap.NetworkConfig{
 			AdvertiseHost: opts.advertiseHost,
 			HTTPPort:      opts.port,
@@ -409,7 +321,7 @@ func run(arguments []string, logger *slog.Logger) error {
 		return fmt.Errorf("activate account service: %w", err)
 	}
 	attributes := []any{"listen", server.Addr, "advertise_base_url", baseURL}
-	attributes = append(attributes, "client_profile", opts.clientProfile, "request_log", opts.requestLog, "battle_listen", battleListener.Addr().String(), "battle_advertise", net.JoinHostPort(opts.advertiseHost, strconv.Itoa(opts.battlePort)))
+	attributes = append(attributes, "client_profile", "cn602-bootstrap", "request_log", opts.requestLog, "battle_listen", battleListener.Addr().String(), "battle_advertise", net.JoinHostPort(opts.advertiseHost, strconv.Itoa(opts.battlePort)))
 	if adminListener != nil {
 		attributes = append(attributes, "admin_listen", adminListener.Addr().String(), "admin_image_sync", imageStorage.Credentials != nil)
 	}

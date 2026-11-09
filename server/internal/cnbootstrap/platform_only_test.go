@@ -40,7 +40,7 @@ func TestPlatformOnlyResourcesAndCDN(t *testing.T) {
 	}
 	resources, err := loadClientResources(ResourcesConfig{
 		PlatformDeliveries: profiles, CPKRoot: cpkRoot, CPKAliases: aliases, ImageRoot: images,
-		GachaBanner: aliases, FiveStarGachaBanner: aliases, HomeBanner: aliases,
+		Banners: map[string]string{"": aliases, "five_star_ticket": aliases, "home": aliases},
 	})
 	if err != nil {
 		t.Fatal(err)

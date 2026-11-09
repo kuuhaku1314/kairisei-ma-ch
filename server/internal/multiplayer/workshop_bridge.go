@@ -4,9 +4,10 @@ package multiplayer
 
 import (
 	"fmt"
+	"maps"
+
 	"kairisei.local/server/battlecontent"
 	"kairisei.local/server/battlecore"
-	"maps"
 )
 
 // WorkshopSnapshot describes an explicit test situation, not a saved account.

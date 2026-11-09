@@ -155,3 +155,7 @@ func TestResumeCommitsOnlyPublishedDisplayCaches(t *testing.T) {
 		t.Fatal("failed snapshot changed display/gameplay state")
 	}
 }
+
+func baseParameterArgs(memberType int, hp int, attack int, magic int, recovery int, defense int, magicDefense int) []int64 {
+	return baseParameterArgsWithLimit(memberType, hp, attack, magic, recovery, defense, magicDefense, 99999)
+}

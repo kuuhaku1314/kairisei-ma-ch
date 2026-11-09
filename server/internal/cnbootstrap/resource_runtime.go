@@ -4,10 +4,7 @@ import "kairisei.local/server/internal/cpk"
 
 // clientResources is a validated, read-only inventory shared by every account.
 type clientResources struct {
-	GachaBanner         string
-	FiveStarGachaBanner string
-	HomeBanner          string
-	GachaBanners        map[string]string
+	Banners             map[string]string
 	GachaBannerVersions map[string]string
 	CPK                 []cpk.File
 	Images              cardImages
@@ -26,23 +23,11 @@ func loadClientResources(config ResourcesConfig) (*clientResources, error) {
 	if err != nil {
 		return nil, err
 	}
-	absoluteGachaBanner, err := resolveBanner(config.GachaBanner, "gacha")
+	bannerPaths, err := resolveCN602BannerPaths(config.Banners)
 	if err != nil {
 		return nil, err
 	}
-	absoluteFiveStarGachaBanner, err := resolveBanner(config.FiveStarGachaBanner, "five-star gacha")
-	if err != nil {
-		return nil, err
-	}
-	absoluteHomeBanner, err := resolveBanner(config.HomeBanner, "Home")
-	if err != nil {
-		return nil, err
-	}
-	gachaBannerPaths, err := resolveCN602GachaBannerPaths(absoluteGachaBanner, absoluteFiveStarGachaBanner)
-	if err != nil {
-		return nil, err
-	}
-	bannerVersions, err := gachaBannerVersions(absoluteGachaBanner, gachaBannerPaths)
+	bannerVersions, err := gachaBannerVersions(bannerPaths[""], bannerPaths)
 	if err != nil {
 		return nil, err
 	}
@@ -57,10 +42,7 @@ func loadClientResources(config ResourcesConfig) (*clientResources, error) {
 	cpkFileList := cpk.FileList(cpkDelivery)
 	cpkPatchState := cpk.PatchState(cpkDelivery)
 	return &clientResources{
-		GachaBanner:         absoluteGachaBanner,
-		FiveStarGachaBanner: absoluteFiveStarGachaBanner,
-		HomeBanner:          absoluteHomeBanner,
-		GachaBanners:        gachaBannerPaths,
+		Banners:             bannerPaths,
 		GachaBannerVersions: bannerVersions,
 		CPK:                 cpkDelivery,
 		Images:              images,
@@ -69,4 +51,15 @@ func loadClientResources(config ResourcesConfig) (*clientResources, error) {
 		AvailableBundles:    platforms.availableBundles(),
 		Platforms:           platforms,
 	}, nil
+}
+
+// Admin receives only pool artwork; Home and the generic fallback are not pool choices.
+func (resources *clientResources) gachaBanners() map[string]string {
+	result := make(map[string]string, len(resources.Banners))
+	for key, filename := range resources.Banners {
+		if key != "" && key != "home" {
+			result[key] = filename
+		}
+	}
+	return result
 }

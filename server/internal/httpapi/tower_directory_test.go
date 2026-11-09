@@ -2,10 +2,6 @@ package httpapi
 
 import (
 	"encoding/json"
-	"kairisei.local/server/internal/game"
-	"kairisei.local/server/internal/gamestate"
-	"kairisei.local/server/internal/masterdata"
-	"kairisei.local/server/internal/testfixture"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,6 +9,11 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"kairisei.local/server/internal/game"
+	"kairisei.local/server/internal/gamestate"
+	"kairisei.local/server/internal/masterdata"
+	"kairisei.local/server/internal/testfixture"
 )
 
 // Opt-in integration of the actual selected catalog, using disposable fixture

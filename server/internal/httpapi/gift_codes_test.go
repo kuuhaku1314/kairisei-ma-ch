@@ -1,16 +1,17 @@
 package httpapi
 
 import (
-	"kairisei.local/server/internal/accounthttp"
-	"kairisei.local/server/internal/game"
-	"kairisei.local/server/internal/gamestate"
-	"kairisei.local/server/internal/testfixture"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"kairisei.local/server/internal/accounthttp"
+	"kairisei.local/server/internal/game"
+	"kairisei.local/server/internal/gamestate"
+	"kairisei.local/server/internal/testfixture"
 )
 
 type rejectedGift struct{}

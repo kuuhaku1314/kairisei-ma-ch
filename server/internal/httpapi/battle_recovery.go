@@ -1,8 +1,9 @@
 package httpapi
 
 import (
-	"kairisei.local/server/internal/multiplayer"
 	"net/http"
+
+	"kairisei.local/server/internal/multiplayer"
 )
 
 func (a *API) battleRecoveryShow(writer http.ResponseWriter, request *http.Request) {

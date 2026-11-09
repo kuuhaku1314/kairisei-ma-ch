@@ -664,10 +664,6 @@ func (a *API) saveExchangeEditor(w http.ResponseWriter, r *http.Request) {
 	for k, v := range c.shops {
 		next[k] = v
 	}
-	body.Shop.Evidence = "LOCAL_POLICY_ADMIN"
-	for i := range body.Shop.Lineups {
-		body.Shop.Lineups[i].Evidence = "LOCAL_POLICY_ADMIN"
-	}
 	next[id] = exchangeShop{TradeShopProfile: body.Shop}
 	state, err := c.project(c.drops, next, c.rules)
 	if err != nil {

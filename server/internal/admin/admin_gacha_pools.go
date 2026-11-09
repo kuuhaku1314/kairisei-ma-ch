@@ -69,11 +69,10 @@ func customGachaBase(template gamestate.GachaProfile, pool customGachaPool) game
 	}
 	base.PublicationKey = "operator"
 	if pool.RuleVersion == 0 {
-		base.DailyFirstFree, base.DailyFirstFreeSourceState = false, ""
+		base.DailyFirstFree = false
 		base.Gifts = nil
 	}
 	base.PlayCount = 0
-	base.PoolSourceState, base.WeightSourceState = "LOCAL_POLICY", "LOCAL_POLICY"
 	return base
 }
 
@@ -116,7 +115,7 @@ func (operations *Operations) registerCustomGacha(pool customGachaPool) error {
 		}
 		base = pool.Rule.profile()
 		base.GachaID, base.GroupID, base.Name, base.ArthurType = pool.GachaID, pool.GroupID, pool.Name, pool.ArthurType
-		base.PublicationKey, base.PoolSourceState, base.WeightSourceState = "operator", "LOCAL_POLICY", "LOCAL_POLICY"
+		base.PublicationKey = "operator"
 	} else {
 		// Existing records retain the rules they were created with. New writes
 		// never create a template reference or introduce another rule version.

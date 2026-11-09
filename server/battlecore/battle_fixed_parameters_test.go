@@ -78,3 +78,7 @@ func TestNativeFixedParameterBinaryReceipt(t *testing.T) {
 		}
 	}
 }
+
+func fixedBuffRoleSegments(role CombatSkillRole, level int) (int32, int32) {
+	return fixedBuffRoleSegmentsScaled(role, level, battleRoleScale{percent: 100})
+}

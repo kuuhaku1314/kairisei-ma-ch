@@ -1,8 +1,10 @@
 package battlecore
 
-import "kairisei.local/server/battlecontent"
+import (
+	"testing"
 
-import "testing"
+	"kairisei.local/server/battlecontent"
+)
 
 func TestNativeDisplayUsesConfiguredRoleAndRestoresPreviewRandomState(t *testing.T) {
 	row := make([]string, 50)

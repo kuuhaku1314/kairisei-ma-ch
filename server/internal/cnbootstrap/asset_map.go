@@ -23,29 +23,10 @@ type cnAssetMapManifest struct {
 		UnresolvedBundleDependencyCount int    `json:"unresolved_bundle_dependency_count"`
 		ScrambledBundleCount            int    `json:"scrambled_bundle_count"`
 		PlainBundleCount                int    `json:"plain_bundle_count"`
-		SurvivingOfficialCatalogOverlay struct {
-			Path                            string   `json:"path"`
-			Bytes                           int64    `json:"bytes"`
-			SHA256                          string   `json:"sha256"`
-			CatalogVersion                  int      `json:"catalog_version"`
-			Scope                           []string `json:"scope"`
-			CandidateRowsInAvailableBundles int      `json:"candidate_rows_in_available_bundles"`
-			PhysicallyVerifiedRows          int      `json:"physically_verified_rows"`
-			PhysicallyAbsentRows            int      `json:"physically_absent_rows"`
-			AddedRows                       int      `json:"added_rows"`
-			Verification                    string   `json:"verification"`
-		} `json:"surviving_official_catalog_overlay"`
 	} `json:"source"`
 	Bundles       []cnAssetMapBundle `json:"bundles"`
 	CatalogAssets []cnAssetMapEntry  `json:"catalog_assets"`
 }
-
-const (
-	cn602SurvivingCatalogVersion     = 791
-	cn602SurvivingCatalogBytes       = 2930614
-	cn602SurvivingCatalogLogicalRows = 970
-	cn602SurvivingCatalogSHA256      = "e32e75083a5f0cbca558fc8d18c2e0bd76d5bdf394bdf482d0ba4abb8ffead11"
-)
 
 type cnAssetMapBundle struct {
 	Bundle        string   `json:"bundle"`
@@ -104,18 +85,6 @@ func loadCNAssetMap(
 	}
 	if manifest.Source.CatalogVersion != cn602CatalogVersion {
 		return nil, nil, fmt.Errorf("official CN asset map has unexpected catalog version %d", manifest.Source.CatalogVersion)
-	}
-	overlay := manifest.Source.SurvivingOfficialCatalogOverlay
-	if overlay.Bytes != cn602SurvivingCatalogBytes ||
-		!strings.EqualFold(overlay.SHA256, cn602SurvivingCatalogSHA256) ||
-		overlay.CatalogVersion != cn602SurvivingCatalogVersion ||
-		len(overlay.Scope) != 1 || !strings.EqualFold(overlay.Scope[0], "eelbinary") ||
-		overlay.CandidateRowsInAvailableBundles != cn602SurvivingCatalogLogicalRows ||
-		overlay.PhysicallyVerifiedRows != cn602SurvivingCatalogLogicalRows ||
-		overlay.PhysicallyAbsentRows != 0 ||
-		overlay.AddedRows != cn602SurvivingCatalogLogicalRows ||
-		overlay.Verification != "same logical row, bundle owner and physical container path" {
-		return nil, nil, errors.New("official CN asset map is missing the verified surviving catalog logical overlay")
 	}
 	if !strings.EqualFold(manifest.Source.VersionDATSHA256, versionDATSHA256) {
 		return nil, nil, errors.New("official CN asset map was generated from a different version.dat")

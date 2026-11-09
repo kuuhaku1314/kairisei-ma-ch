@@ -2,10 +2,11 @@ package battlecore
 
 import (
 	"encoding/json"
-	"kairisei.local/server/battlecontent"
 	"os"
 	"strconv"
 	"testing"
+
+	"kairisei.local/server/battlecontent"
 )
 
 func TestCardProfileTagsDriveEnhancedUserAttack(t *testing.T) {

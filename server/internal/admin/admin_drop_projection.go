@@ -2,9 +2,10 @@ package admin
 
 import (
 	"fmt"
+	"slices"
+
 	"kairisei.local/server/internal/gamestate"
 	"kairisei.local/server/internal/multiplayer"
-	"slices"
 )
 
 func dropTargetsForReplay(r gamestate.TeamBattleReplay, parties map[int]multiplayer.CombatEnemyParty, enemies map[int]multiplayer.CombatEnemyDefinition) []dropTarget {

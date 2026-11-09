@@ -3,14 +3,15 @@ package multiplayer
 import (
 	"errors"
 	"io"
-	"kairisei.local/server/battlecore"
-	"kairisei.local/server/internal/gamestate"
 	"log/slog"
 	"net"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"kairisei.local/server/battlecore"
+	"kairisei.local/server/internal/gamestate"
 )
 
 func TestAwakeInheritsUnreleasedBodyDrops(t *testing.T) {

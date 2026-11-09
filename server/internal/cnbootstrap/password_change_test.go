@@ -3,11 +3,12 @@ package cnbootstrap
 import (
 	"context"
 	"encoding/json"
-	"kairisei.local/server/internal/accountstore"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
+
+	"kairisei.local/server/internal/accountstore"
 
 	"kairisei.local/server/internal/testfixture"
 )

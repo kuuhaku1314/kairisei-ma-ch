@@ -18,7 +18,7 @@ func TestBossScoreRankingFirstBestAndAtomicCompletion(t *testing.T) {
 	accounts := testfixture.NewFriendCapacityTestAccounts(t)
 	_ = testfixture.CreateNamedFriendCapacityAccount(t, accounts, 0x866)
 	other := testfixture.CreateNamedFriendCapacityAccount(t, accounts, 0x867)
-	policy := &gamestate.TeamBattleScorePolicy{SourceState: "LOCAL_POLICY_DAMAGE_SCORE", Rate: 1000,
+	policy := &gamestate.TeamBattleScorePolicy{Rate: 1000,
 		Grades: make([]gamestate.TeamBattleScoreGrade, 9)}
 	for i := range policy.Grades {
 		policy.Grades[i].Score = int64(i+1) * 100

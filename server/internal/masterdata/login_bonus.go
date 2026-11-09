@@ -43,7 +43,6 @@ func LoadLoginBonusRuntimeMaster(path string) (gamestate.LoginBonusPolicy, error
 		return gamestate.LoginBonusPolicy{}, errors.New("CN login bonus runtime must be a non-empty regular JSON file within the size limit")
 	}
 	decoder := json.NewDecoder(io.LimitReader(file, maxLoginBonusRuntimeBytes+1))
-	decoder.DisallowUnknownFields()
 	var master loginBonusRuntimeMaster
 	if err := decoder.Decode(&master); err != nil {
 		return gamestate.LoginBonusPolicy{}, fmt.Errorf("decode CN login bonus runtime: %w", err)

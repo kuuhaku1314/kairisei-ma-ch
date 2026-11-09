@@ -389,3 +389,7 @@ func TestCurrentSchemaIsValidatedAtStartupNotRepaired(t *testing.T) {
 		t.Fatalf("missing table was recreated: %d %v", count, err)
 	}
 }
+
+func writeAccountRows(tx *sql.Tx, state gamestate.State) error {
+	return writeChangedAccountRows(tx, state, accountComponentHashes{}, accountComponentHashes{})
+}

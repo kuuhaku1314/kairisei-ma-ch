@@ -26,7 +26,6 @@ func TestLoadCNAssetMapDeliveryCRC32(t *testing.T) {
 			"unresolved_bundle_dependency_count": 0,
 			"scrambled_bundle_count":             1,
 			"plain_bundle_count":                 0,
-			"surviving_official_catalog_overlay": testSurvivingOfficialCatalogOverlay(),
 		},
 		"bundles": []map[string]any{{
 			"bundle":         cn602MenuBundle,
@@ -65,20 +64,20 @@ func TestLoadCNAssetMapDeliveryCRC32(t *testing.T) {
 	if len(assets) != 1 || assets[0].baseDir != "Assets/Plugins/rhyme/EeL/Resources/" {
 		t.Fatalf("catalog base directory = %#v, want preserved nonstandard base directory", assets)
 	}
-	delete(manifest["source"].(map[string]any), "surviving_official_catalog_overlay")
+	manifest["source"].(map[string]any)["version_dat_sha256"] = "0000000000000000000000000000000000000000000000000000000000000000"
 	contents, err = json.Marshal(manifest)
 	if err != nil {
 		t.Fatal(err)
 	}
-	missingOverlayPath := filepath.Join(root, "asset-map-missing-overlay.json")
-	if err := os.WriteFile(missingOverlayPath, contents, 0o600); err != nil {
+	invalidIdentityPath := filepath.Join(root, "asset-map-wrong-version.json")
+	if err := os.WriteFile(invalidIdentityPath, contents, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := loadCNAssetMap(
-		missingOverlayPath,
+		invalidIdentityPath,
 		fmt.Sprintf("%x", digest),
 		map[string]struct{}{cn602MenuBundle: {}},
 	); err == nil {
-		t.Fatal("asset map without verified surviving catalog overlay was accepted")
+		t.Fatal("asset map for a different version.dat was accepted")
 	}
 }

@@ -1,7 +1,6 @@
 package masterdata
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,9 +21,9 @@ type exploreMap struct {
 }
 
 type exploreRuntimeMaster struct {
-	SchemaVersion      int                      `json:"schema_version"`
-	ClientProfile      string                   `json:"client_profile"`
-	Source             json.RawMessage          `json:"source"`
+	SchemaVersion int    `json:"schema_version"`
+	ClientProfile string `json:"client_profile"`
+
 	Maps               []exploreMap             `json:"maps"`
 	ExcludedTestMapIDs []int                    `json:"excluded_test_map_ids"`
 	Stage              gamestate.ExploreStage   `json:"stage"`
@@ -54,7 +53,6 @@ func LoadExploreRuntimeMaster(masterPath string) (exploreRuntimeMaster, error) {
 		return exploreRuntimeMaster{}, errors.New("CN Explore runtime master must be a non-empty regular JSON file within the size limit")
 	}
 	decoder := json.NewDecoder(io.LimitReader(file, maxExploreMasterBytes+1))
-	decoder.DisallowUnknownFields()
 	var master exploreRuntimeMaster
 	if err := decoder.Decode(&master); err != nil {
 		return exploreRuntimeMaster{}, fmt.Errorf("decode CN Explore runtime master: %w", err)
@@ -72,7 +70,7 @@ func validateExploreRuntimeMaster(master exploreRuntimeMaster) error {
 	if master.SchemaVersion != 1 || master.ClientProfile != "cn602-bootstrap" {
 		return errors.New("CN Explore runtime master identity is invalid")
 	}
-	if len(master.Source) == 0 || bytes.Equal(master.Source, []byte("null")) || len(master.Maps) == 0 {
+	if len(master.Maps) == 0 {
 		return errors.New("CN Explore runtime master source is incomplete")
 	}
 	maps := make(map[int]struct{}, len(master.Maps))

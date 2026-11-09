@@ -13,20 +13,14 @@ import (
 )
 
 type AliasManifest struct {
-	SchemaVersion         int          `json:"schema_version"`
-	ClientProfile         string       `json:"client_profile"`
-	GeneratedUTC          string       `json:"generated_utc"`
-	Evidence              string       `json:"evidence"`
-	SourceInventory       string       `json:"source_inventory"`
-	SourceInventorySchema int          `json:"source_inventory_schema,omitempty"`
-	Aliases               []AliasEntry `json:"aliases"`
+	SchemaVersion int          `json:"schema_version"`
+	ClientProfile string       `json:"client_profile"`
+	Aliases       []AliasEntry `json:"aliases"`
 }
 
 type AliasEntry struct {
 	AliasCPKName  string `json:"alias_cpk_name"`
 	SourceCPKName string `json:"source_cpk_name"`
-	NaviIDs       []int  `json:"navi_ids"`
-	Evidence      string `json:"evidence"`
 }
 
 type Alias struct {
@@ -63,7 +57,6 @@ func LoadAliases(cpkRoot string, manifestPath string) ([]Alias, error) {
 	}
 	var manifest AliasManifest
 	decoder := json.NewDecoder(bytes.NewReader(content))
-	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&manifest); err != nil {
 		return nil, fmt.Errorf("decode CN CPK alias manifest: %w", err)
 	}

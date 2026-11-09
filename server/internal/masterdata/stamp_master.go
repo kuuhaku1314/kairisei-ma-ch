@@ -1,7 +1,6 @@
 package masterdata
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,9 +26,9 @@ type stampDefinition struct {
 }
 
 type stampRuntimeMaster struct {
-	SchemaVersion int               `json:"schema_version"`
-	ClientProfile string            `json:"client_profile"`
-	Source        json.RawMessage   `json:"source"`
+	SchemaVersion int    `json:"schema_version"`
+	ClientProfile string `json:"client_profile"`
+
 	CategoryOrder []int             `json:"category_order"`
 	Stamps        []stampDefinition `json:"stamps"`
 }
@@ -55,7 +54,6 @@ func LoadStampRuntimeMaster(masterPath string) (stampRuntimeMaster, error) {
 		return stampRuntimeMaster{}, errors.New("CN stamp runtime master must be a non-empty regular JSON file within the size limit")
 	}
 	decoder := json.NewDecoder(io.LimitReader(file, maxStampMasterBytes+1))
-	decoder.DisallowUnknownFields()
 	var master stampRuntimeMaster
 	if err := decoder.Decode(&master); err != nil {
 		return stampRuntimeMaster{}, fmt.Errorf("decode CN stamp runtime master: %w", err)
@@ -73,7 +71,7 @@ func validateStampRuntimeMaster(master stampRuntimeMaster) error {
 	if master.SchemaVersion != 1 || master.ClientProfile != "cn602-bootstrap" {
 		return errors.New("CN stamp runtime master identity is invalid")
 	}
-	if len(master.Source) == 0 || bytes.Equal(master.Source, []byte("null")) || len(master.Stamps) == 0 {
+	if len(master.Stamps) == 0 {
 		return errors.New("CN stamp runtime master source is incomplete")
 	}
 	categories := make(map[int]struct{}, len(master.CategoryOrder))

@@ -26,16 +26,6 @@ type adminCardResource struct {
 // Catalog visibility and gameplay resource closure are separate from the
 // loopback-only thumbnail manifest. Recovered cards may have no web thumbnail.
 func loadAdminCardResources(master masterdata.CardRuntimeMaster, masterPath, assetMapPath string) (map[int]adminCardResource, error) {
-	var provenance struct {
-		Files []struct {
-			Path   string `json:"path"`
-			Bytes  int    `json:"bytes"`
-			SHA256 string `json:"sha256"`
-		} `json:"files"`
-	}
-	if err := json.Unmarshal(master.Source, &provenance); err != nil {
-		return nil, err
-	}
 	file, err := os.Open(assetMapPath)
 	if err != nil {
 		return nil, err
@@ -65,7 +55,7 @@ func loadAdminCardResources(master masterdata.CardRuntimeMaster, masterPath, ass
 		}
 		digest := sha256.Sum256(content)
 		verified := false
-		for _, source := range provenance.Files {
+		for _, source := range master.Source.Files {
 			if filepath.Base(filepath.FromSlash(source.Path)) == name && source.Bytes == len(content) && source.SHA256 == hex.EncodeToString(digest[:]) {
 				verified = true
 			}

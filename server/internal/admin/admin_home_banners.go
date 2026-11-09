@@ -107,7 +107,7 @@ func (a *API) scoreRankingBossesLocked() map[int]string {
 			continue
 		}
 		if profile.StageQuestAreaID != 0 || profile.TowerID != 0 || profile.ScorePolicy == nil ||
-			profile.ScorePolicy.SourceState != "LOCAL_POLICY_DAMAGE_SCORE" {
+			!profile.ScorePolicy.IsDamageScore() {
 			continue
 		}
 		if boss, ok := content.bosses[id]; ok {

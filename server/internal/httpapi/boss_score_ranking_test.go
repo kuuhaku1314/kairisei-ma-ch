@@ -28,7 +28,7 @@ func TestBossScoreRankingRouteAndBannerTarget(t *testing.T) {
 	state := testfixture.RuntimeState(t)
 	state.Onboarding = gamestate.OnboardingState{ConfigVersion: 2, Step: 9}
 	state.TeamBattleRewards = append(state.TeamBattleRewards, gamestate.TeamBattleRewardProfile{
-		BossID: 37010101, ScorePolicy: &gamestate.TeamBattleScorePolicy{SourceState: "LOCAL_POLICY_DAMAGE_SCORE"},
+		BossID: 37010101, ScorePolicy: &gamestate.TeamBattleScorePolicy{Rate: 1},
 	})
 	fixture := &scoreRankingFixture{}
 	a := &API{initialState: state, account: testAccount(t, func(s *gamestate.State) {
