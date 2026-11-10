@@ -130,7 +130,7 @@ func NewOperations(storage *accountstore.Database, gachas []gamestate.GachaProfi
 	defaults := make(map[int]struct{})
 	publicationKeys := make(map[int]string)
 	for _, gacha := range gachas {
-		if gacha.GachaID == 90000100 || gacha.GachaID == 90000200 || gacha.GroupID <= 0 {
+		if gamestate.IsOnboardingGachaID(gacha.GachaID) || gacha.GroupID <= 0 {
 			continue
 		}
 		if previous, exists := publicationKeys[gacha.GroupID]; exists && previous != gacha.PublicationKey {
@@ -145,7 +145,7 @@ func NewOperations(storage *accountstore.Database, gachas []gamestate.GachaProfi
 	}
 	bases := make(map[int]gamestate.GachaProfile)
 	for _, profile := range gachas {
-		if profile.GachaID != 90000200 && profile.GachaID != 90000100 {
+		if !gamestate.IsOnboardingGachaID(profile.GachaID) {
 			bases[profile.GachaID] = profile
 		}
 	}

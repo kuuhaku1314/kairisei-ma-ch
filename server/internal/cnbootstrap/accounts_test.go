@@ -18,7 +18,6 @@ import (
 	"kairisei.local/server/internal/accountstore"
 	"kairisei.local/server/internal/game"
 	"kairisei.local/server/internal/gamestate"
-	"kairisei.local/server/internal/masterdata"
 	"kairisei.local/server/internal/testfixture"
 )
 
@@ -397,7 +396,7 @@ func TestSystemPartnerAccountsArePersistentFriendTargetsAndDoNotConsumePlayerIDs
 		}
 		if state.User.LeaderCardID != expectedLeader.CardID ||
 			state.User.LeaderCardUniqueID != expectedLeader.UniqueID ||
-			state.Onboarding.Step != masterdata.OnboardingStepCount {
+			state.Onboarding.Step != gamestate.OnboardingStepCount {
 			t.Fatalf(
 				"system partner %d leader/tutorial = (%d, %d, %+v)",
 				arthurType,

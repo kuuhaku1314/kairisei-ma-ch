@@ -5,7 +5,7 @@
 | `cn602-save-template.json` | 新账号初始化原料、四职业系统助战卡组，以及默认卡池／商店等业务目录 |
 | `cn602-player-progression-runtime.json` | 经验／等级、BP／好友上限、职业基础属性和助战友情点 |
 | `cn602-login-bonus-runtime.json` | 登录日界及每日、新手、累计奖励的默认表 |
-| `cn602-pvp-runtime.json` | PVP 场地、段位、挑战和结算规则；`client_native_local` 与 `server_replay` 分别采用对应模式的规则 |
+| `cn602-pvp-runtime.json` | PVP 场地、段位、挑战和结算数据；开战提交结果，结束上报只确认已提交记录 |
 
 升级补满 AP／BP 并重置恢复计时。`config_version` 控制业务数据更新。
 签到／抽卡奖励和经验曲线采用本地运营策略。

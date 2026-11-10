@@ -17,11 +17,9 @@ import (
 // Portable movies are independently pinned build outputs, not Unity bundles.
 // Only public names enter content identity; private file locations may move.
 type platformMovieProfile struct {
-	Format         int                     `json:"format"`
-	TargetPlatform string                  `json:"target_platform"`
-	ArtifactRoot   string                  `json:"artifact_root"`
-	Index          platformDeliveryCatalog `json:"index"`
-	Files          []platformMovieArtifact `json:"files"`
+	ArtifactRoot string                  `json:"artifact_root"`
+	Index        platformDeliveryCatalog `json:"index"`
+	Files        []platformMovieArtifact `json:"files"`
 }
 type platformMovieArtifact struct {
 	Name   string `json:"name"`
@@ -83,7 +81,7 @@ func loadPlatformMovies(directory string, ref platformDeliveryCatalog) (*platfor
 	if err = json.Unmarshal(body, &profile); err != nil {
 		return nil, err
 	}
-	if profile.Format != 1 || profile.TargetPlatform != "Portable" || profile.ArtifactRoot == "" || len(profile.Files) == 0 {
+	if profile.ArtifactRoot == "" || len(profile.Files) == 0 {
 		return nil, errors.New("invalid portable movie profile")
 	}
 	directory = filepath.Dir(filename)

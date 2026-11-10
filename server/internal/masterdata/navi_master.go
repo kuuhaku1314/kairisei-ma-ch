@@ -13,16 +13,13 @@ import (
 
 const maxNaviMasterBytes = 1024 * 1024
 
-const naviPresentationLive2D = 0
-
 type naviDefinition struct {
-	PresentationKind int    `json:"presentation_kind,omitempty"`
-	NaviID           int    `json:"navi_id"`
-	Name             string `json:"name"`
-	PictID           int    `json:"pict_id"`
-	ItemPictID       int    `json:"item_pict_id"`
-	Live2DFolder     string `json:"live2d_folder"`
-	Live2DBundle     string `json:"live2d_bundle"`
+	NaviID       int    `json:"navi_id"`
+	Name         string `json:"name"`
+	PictID       int    `json:"pict_id"`
+	ItemPictID   int    `json:"item_pict_id"`
+	Live2DFolder string `json:"live2d_folder"`
+	Live2DBundle string `json:"live2d_bundle"`
 
 	VoiceID         int  `json:"voice_id"`
 	ClientPublished bool `json:"client_published"`
@@ -82,8 +79,7 @@ func validateNaviRuntimeMaster(master naviRuntimeMaster) error {
 	published := 0
 	for _, navigator := range master.Navigators {
 
-		if navigator.PresentationKind != naviPresentationLive2D ||
-			navigator.NaviID < 0 || navigator.NaviID > 127 || navigator.Name == "" ||
+		if navigator.NaviID < 0 || navigator.NaviID > 127 || navigator.Name == "" ||
 			navigator.PictID <= 0 || navigator.ItemPictID <= 0 ||
 			navigator.Live2DFolder == "" || navigator.VoiceID < 0 {
 			return fmt.Errorf("invalid CN navigator %d", navigator.NaviID)

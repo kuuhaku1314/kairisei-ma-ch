@@ -68,7 +68,7 @@ func RuntimeState(t *testing.T) gamestate.State {
 	if err = masterdata.ApplyLoginBonusRuntimeMaster(&state, login); err != nil {
 		t.Fatal(err)
 	}
-	state.Onboarding.Step = masterdata.OnboardingStepCount
+	state.Onboarding.Step = gamestate.OnboardingStepCount
 	return state
 }
 

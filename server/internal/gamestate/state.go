@@ -95,7 +95,6 @@ type PlayerProgressionPolicy struct {
 		HelperReward         struct {
 			OtherPerPartner  int `json:"other_per_partner"`
 			FriendPerPartner int `json:"friend_per_partner"`
-			MaximumPartners  int `json:"maximum_partners"`
 		} `json:"helper_reward"`
 	} `json:"friends"`
 	JobParameters struct {
@@ -172,7 +171,6 @@ type CardParameter struct {
 
 type CardProgressionPolicy struct {
 	FusionGoldPerMaterialPerBaseLevel int                       `json:"fusion_gold_per_material_per_base_level"`
-	MaximumCardMaterialCount          int                       `json:"maximum_card_material_count"`
 	FusionSuccessTypes                []CardFusionSuccessPolicy `json:"fusion_success_types"`
 	FameMaterials                     map[int][5]int            `json:"fame_materials,omitempty"`
 	FameNormal                        CardParameter             `json:"fame_normal"`
@@ -1171,22 +1169,6 @@ type TeamBattleEnemyDrop struct {
 	ChancePerMillion *int   `json:"chance_per_million,omitempty"`
 }
 
-// TeamBattleFameBonusPolicy configures fame chances and eligible rewards.
-type TeamBattleFameBonusPolicy struct {
-	ChanceMaximum       int   `json:"chance_maximum"`
-	FullFameThreshold   int   `json:"full_fame_threshold"`
-	FullFameRewardCount int   `json:"full_fame_reward_count"`
-	BonusFameAdd        int   `json:"bonus_fame_add"`
-	EligibleRewardTypes []int `json:"eligible_reward_types"`
-}
-
-// TeamBattleHostBonusPolicy configures the multiplayer room owner reward.
-type TeamBattleHostBonusPolicy struct {
-	RewardCount         int   `json:"reward_count"`
-	RewardKind          int   `json:"reward_kind"`
-	EligibleRewardTypes []int `json:"eligible_reward_types"`
-}
-
 // TowerQuestProfile is an immutable tower definition, separate from account
 // progress. Operator publication controls runtime admission by tower ID.
 type TowerQuestProfile struct {
@@ -1285,7 +1267,6 @@ type PVPPlayerState struct {
 	NextBattleID         int                `json:"next_battle_id"`
 	DefenseUpdatedAtUnix int64              `json:"defense_updated_at_unix,omitempty"`
 	DefenseDecks         []PVPDeckSelection `json:"defense_decks"`
-	ActiveMatch          *PVPMatch          `json:"active_match,omitempty"`
 	History              []PVPMatch         `json:"history"`
 }
 
@@ -1538,8 +1519,6 @@ type State struct {
 	TeamBattleSolo               json.RawMessage                     `json:"team_battle_solo_show"`
 	TeamBattleReplays            []TeamBattleReplay                  `json:"team_battle_replays"`
 	TeamBattleRewards            []TeamBattleRewardProfile           `json:"team_battle_rewards"`
-	TeamBattleFameBonusPolicy    TeamBattleFameBonusPolicy           `json:"-"`
-	TeamBattleHostBonusPolicy    TeamBattleHostBonusPolicy           `json:"-"`
 	TeamBattleRecommendations    []TeamBattleRecommendation          `json:"-"`
 	TeamBattlePastBossGroups     []json.RawMessage                   `json:"-"`
 	TeamBattleScheduleGroupIDs   []int                               `json:"-"`

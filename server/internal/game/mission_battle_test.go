@@ -22,7 +22,7 @@ func TestMultiplayerMissionUsesCompletionDayWithoutRewindingProgress(t *testing.
 		missionCatalog: missionCatalogFixture(t, map[int]gamestate.MissionDefinition{1: definition}),
 	}
 	s.SetMissionRequestTime(afterMidnight)
-	context := TeamBattleContext{BossID: bossID, StageType: gamestate.BattleStageEvent, EntryRole: gamestate.BattleEntryMultiplayerGuest}
+	context := TeamBattleContext{FameSeed: "mission", FameSources: []TeamBattleFameSource{{MemberType: 1}}, BossID: bossID, StageType: gamestate.BattleStageEvent, EntryRole: gamestate.BattleEntryMultiplayerGuest}
 	plan := gamestate.TeamBattleSettlementPlan{Profile: gamestate.TeamBattleRewardProfile{BossID: bossID}, EnemyTypes: []int8{1}}
 	complete := func(at time.Time) {
 		t.Helper()
@@ -58,7 +58,7 @@ func TestQuestMissionsRespectScoreDefeatAndKeepScriptedVictoryRewards(t *testing
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			const boss = 30010102
-			s := &Account{onboarding: completedTestOnboarding(), activeBattle: &TeamBattleContext{BossID: boss, StageType: tc.stage, EntryRole: gamestate.BattleEntrySolo, BattleEnemyTypes: []int8{1}},
+			s := &Account{onboarding: completedTestOnboarding(), activeBattle: &TeamBattleContext{FameSeed: "mission", FameSources: []TeamBattleFameSource{{MemberType: 1}}, BossID: boss, StageType: tc.stage, EntryRole: gamestate.BattleEntrySolo, BattleEnemyTypes: []int8{1}},
 				teamBattleSolo: battleCatalogFixture(t, json.RawMessage(`{"9":[],"10":[{"0":300101,"9":0,"10":[{"0":30010102,"10":0}]}],"11":[],"12":[]}`)),
 				missions:       map[int]gamestate.MissionProgress{}, missionCatalog: missionCatalogFixture(t, map[int]gamestate.MissionDefinition{
 					1: {MissionID: 1, Published: true, Title: "通关", Rule: &gamestate.MissionRule{Event: gamestate.MissionQuestClear, Target: 1}},

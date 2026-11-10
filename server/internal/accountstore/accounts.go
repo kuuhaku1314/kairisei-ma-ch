@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"kairisei.local/server/internal/gamestate"
-	"kairisei.local/server/internal/masterdata"
 )
 
 const (
@@ -327,7 +326,7 @@ func (accounts *Accounts) ensureSystemPartnerAccounts(transaction *sql.Tx) error
 		)
 		state.User.TutorialFlag = (int64(1) << gamestate.TutorialFlagCount) - 1
 		state.Onboarding = gamestate.OnboardingState{
-			Step: masterdata.OnboardingStepCount,
+			Step: gamestate.OnboardingStepCount,
 		}
 		content, err := EncodeAccountMetadata(state)
 		if err != nil {

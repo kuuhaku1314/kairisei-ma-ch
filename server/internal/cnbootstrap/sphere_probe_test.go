@@ -45,7 +45,7 @@ func auditCompleteSpheres(t *testing.T, handler http.Handler, savePath, seedPath
 	if err := masterdata.ApplyCardRuntimeMaster(&state, cards); err != nil {
 		t.Fatal(err)
 	}
-	state.Onboarding.Step = masterdata.OnboardingStepCount
+	state.Onboarding.Step = gamestate.OnboardingStepCount
 	state.User.CardContainerMax = 200 // Existing accounts migrate on handler preparation.
 	state.User.Gold = 1000000
 	state.Items = append(state.Items, gamestate.Item{ItemID: 7025, Num: 550})
@@ -210,7 +210,7 @@ func auditCompleteSpheres(t *testing.T, handler http.Handler, savePath, seedPath
 	if err = masterdata.ApplyCardRuntimeMaster(&state, cards); err != nil {
 		t.Fatal(err)
 	}
-	state.Onboarding.Step = masterdata.OnboardingStepCount
+	state.Onboarding.Step = gamestate.OnboardingStepCount
 	state.User.Name = "InventoryTest"
 	state.User.CardContainerMax = 4000 // An existing larger capacity must survive.
 	// This account tests capacity, not equipped-item consumption. The seed's

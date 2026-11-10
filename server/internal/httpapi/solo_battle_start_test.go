@@ -22,7 +22,7 @@ func TestModernSoloStartRetainsIdentityAcrossReloadAndStartsAfterAbandon(t *test
 		state.User.Name = "入场测试"
 		state.User.BP = 100
 		helper := &state.PlayerProgressionPolicy.Friends.HelperReward
-		helper.OtherPerPartner, helper.FriendPerPartner, helper.MaximumPartners = 5, 10, 3
+		helper.OtherPerPartner, helper.FriendPerPartner = 5, 10
 		state.TeamBattleSolo = json.RawMessage(`{"9":[],"10":[{"0":300101,"4":"活动","9":0,"10":[{"0":30010102,"1":0,"4":"超级","5":1,"6":1,"10":0,"16":0}]}],"11":[],"12":[]}`)
 		initial = *state
 	})

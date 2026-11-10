@@ -33,7 +33,7 @@ func TestQuestFirstClearCrystalsAreGrantedOncePerDifficulty(t *testing.T) {
 				{firstBoss, true, false, 57},
 				{secondBoss, true, true, 107},
 			} {
-				context := TeamBattleContext{BossID: step.boss}
+				context := TeamBattleContext{FameSeed: "first-clear", FameSources: []TeamBattleFameSource{{MemberType: 1}}, BossID: step.boss}
 				profile := gamestate.TeamBattleRewardProfile{BossID: step.boss, FirstClearRewards: []gamestate.Reward{{Type: 10, Num: 50, CardSkillLevels: []int16{}}}}
 				if stageQuest {
 					context.StageQuestAreaID, context.StageQuestStageID = area, step.boss

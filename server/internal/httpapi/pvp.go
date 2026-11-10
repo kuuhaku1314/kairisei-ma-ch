@@ -125,10 +125,6 @@ func (a *API) pvpStart(writer http.ResponseWriter, request *http.Request) {
 		writeError(writer, http.StatusServiceUnavailable, "local PVP account repository is unavailable")
 		return
 	}
-	if a.pvpConfig.EngineMode == game.PvpEngineServerReplay && len(a.pvpConfig.ResultCommands) == 0 {
-		writeError(writer, http.StatusServiceUnavailable, "local PVP replay is not configured")
-		return
-	}
 	a.clientResultMu.Lock()
 	defer a.clientResultMu.Unlock()
 	if !a.refreshPVPChallenges(writer, time.Now()) {
@@ -194,7 +190,7 @@ func (a *API) pvpStart(writer http.ResponseWriter, request *http.Request) {
 	}
 	myHonorIDs, _ := a.account.HonorState()
 	resultCommands := append([]game.PVPResultCommand{}, a.pvpConfig.ResultCommands...)
-	if a.pvpConfig.EngineMode == game.PvpEngineClientNativeLocal && len(resultCommands) == 0 {
+	if len(resultCommands) == 0 {
 		// The CN 6.0.2 deserializer leaves result_cmds null when the JSON array
 		// is empty, while PvPMgr.onPvpStart unconditionally reads its Length.
 		// Native-local PVP does not consume playback commands; an unknown no-op
@@ -241,16 +237,14 @@ func (a *API) pvpEnd(writer http.ResponseWriter, request *http.Request) {
 		a.writeExpiredBattleReport(writer)
 		return
 	}
-	if a.pvpConfig.EngineMode == game.PvpEngineClientNativeLocal {
-		if len(payload.InputCmd) != 1 {
-			a.writeExpiredBattleReport(writer)
-			return
-		}
-		commandRequired := payload.IsRetire == 0
-		if err := game.ValidateNativeBattleCommandStart(payload.InputCmd[0], commandRequired, game.NativePVPCommandStartOpcode); err != nil {
-			a.writeExpiredBattleReport(writer)
-			return
-		}
+	if len(payload.InputCmd) != 1 {
+		a.writeExpiredBattleReport(writer)
+		return
+	}
+	commandRequired := payload.IsRetire == 0
+	if err := game.ValidateNativeBattleCommandStart(payload.InputCmd[0], commandRequired, game.NativePVPCommandStartOpcode); err != nil {
+		a.writeExpiredBattleReport(writer)
+		return
 	}
 	canonicalRequest, err := json.Marshal(payload)
 	if err != nil {
@@ -270,7 +264,6 @@ func (a *API) pvpEnd(writer http.ResponseWriter, request *http.Request) {
 	}
 	match, challenge, result, err := a.account.FinishPVP(
 		payload.BattleID, payload.IsWin == 1, payload.IsRetire == 1,
-		a.pvpConfig, time.Now(),
 	)
 	if err != nil {
 		a.writeExpiredBattleReport(writer)

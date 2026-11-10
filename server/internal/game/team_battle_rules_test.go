@@ -61,7 +61,7 @@ func TestSoloEntryFreezesContinueRuleWithDebit(t *testing.T) {
 		teamBattleSolo: battleCatalogFixture(t, json.RawMessage(`{"9":[],"10":[{"0":300101,"9":0,"10":[{"0":30010102,"5":15,"7":1,"10":0,"24":3}]}],"11":[],"12":[]}`)),
 	}
 	helper := &s.playerProgression.Friends.HelperReward
-	helper.OtherPerPartner, helper.FriendPerPartner, helper.MaximumPartners = 5, 10, 3
+	helper.OtherPerPartner, helper.FriendPerPartner = 5, 10
 	profiles := []gamestate.TeamBattleRewardProfile{{BossID: boss, ResultRewards: []gamestate.Reward{{Type: 4, Num: 10}}}}
 	startID := "solo:offline"
 	start := func() error {

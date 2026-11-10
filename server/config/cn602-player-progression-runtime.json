@@ -18,8 +18,7 @@
     "maximum": 200,
     "helper_reward": {
       "other_per_partner": 10,
-      "friend_per_partner": 20,
-      "maximum_partners": 3
+      "friend_per_partner": 20
     },
     "follower_display_limit": 200,
     "base": 100,

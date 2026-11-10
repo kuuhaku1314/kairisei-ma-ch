@@ -30,7 +30,7 @@ func TestMultiplayerCompletionCommitsInventoryBeforeResultQuery(t *testing.T) {
 	const boss = 30010102
 	runtime := testfixture.RuntimeState(t)
 	helper := &runtime.PlayerProgressionPolicy.Friends.HelperReward
-	helper.OtherPerPartner, helper.FriendPerPartner, helper.MaximumPartners = 5, 10, 3
+	helper.OtherPerPartner, helper.FriendPerPartner = 5, 10
 	runtime.TeamBattleSolo = json.RawMessage(`{"9":[],"10":[{"0":300101,"9":0,"10":[{"0":30010102,"5":15,"10":0}]}],"11":[],"12":[]}`)
 	runtime.TeamBattleReplays = []gamestate.TeamBattleReplay{{BossID: boss, EnemyPartyID: 1, HoldMax: 5}}
 	runtime.TeamBattleRewards = []gamestate.TeamBattleRewardProfile{{BossID: boss, ResultRewards: []gamestate.Reward{{Type: 4, Num: 10, CardSkillLevels: []int16{}}}}}
@@ -49,7 +49,7 @@ func TestMultiplayerCompletionCommitsInventoryBeforeResultQuery(t *testing.T) {
 		CompletedAtUnix: now.Unix(), OnlineUserIDs: users}
 	completed.EnemyDeadBits = []int{1}
 	completed.ReleasedDrops = []gamestate.TeamBattleEnemyDrop{{Reward: runtime.TeamBattleRewards[0].ResultRewards[0]}}
-	completed.SettlementPlan = gamestate.TeamBattleSettlementPlan{Profile: runtime.TeamBattleRewards[0], EnemyTypes: []int8{0}, FameBonus: runtime.TeamBattleFameBonusPolicy, HostBonus: runtime.TeamBattleHostBonusPolicy}
+	completed.SettlementPlan = gamestate.TeamBattleSettlementPlan{Profile: runtime.TeamBattleRewards[0], EnemyTypes: []int8{0}}
 	for i := 1; i <= 4; i++ {
 		id := 1900000000 + i
 		if i <= 2 {

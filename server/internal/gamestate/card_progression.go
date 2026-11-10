@@ -12,6 +12,9 @@ type CardExperienceState struct {
 	NextLevelExperience int
 }
 
+// CardFusionMaterialLimit is the original CN selector limit per inventory group.
+const CardFusionMaterialLimit = 100
+
 func (policy CardProgressionPolicy) FusionGoldPerMaterial(level int) (int, error) {
 	if policy.FusionGoldPerMaterialPerBaseLevel <= 0 || level <= 0 ||
 		level > math.MaxInt/policy.FusionGoldPerMaterialPerBaseLevel {

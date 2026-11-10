@@ -18,7 +18,7 @@ func TestScoreSettlementKeepsBestAndDoesNotRepeatAwards(t *testing.T) {
 	profiles := []gamestate.TeamBattleRewardProfile{{BossID: 123, ScorePolicy: p}}
 	play := func(turns int) teamBattleSettlement {
 		t.Helper()
-		s.activeBattle = &TeamBattleContext{BossID: 123}
+		s.activeBattle = &TeamBattleContext{FameSeed: "score", FameSources: []TeamBattleFameSource{{MemberType: 1}}, BossID: 123}
 		r, err := s.CompleteTeamBattle(123, true, profiles, TeamBattleDropReport{Turns: turns})
 		if err != nil {
 			t.Fatal(err)
@@ -64,7 +64,7 @@ func TestDamageScoreTimeoutFreezesPolicyAndAwardsOnlyNewGrades(t *testing.T) {
 	s := onboardingTestStore()
 	s.teamBattleScores = map[int]gamestate.TeamBattleScoreProgress{}
 	profiles := []gamestate.TeamBattleRewardProfile{{BossID: 123, ScorePolicy: gamestate.CloneTeamBattleScorePolicy(p), ResultRewards: []gamestate.Reward{{Type: 4, Num: 100}}}}
-	s.activeBattle = &TeamBattleContext{BossID: 123, ScorePolicy: gamestate.CloneTeamBattleScorePolicy(p)}
+	s.activeBattle = &TeamBattleContext{FameSeed: "score", FameSources: []TeamBattleFameSource{{MemberType: 1}}, BossID: 123, ScorePolicy: gamestate.CloneTeamBattleScorePolicy(p)}
 	// A policy change during the fight must not multiply the accepted score.
 	profiles[0].ScorePolicy.Rate = 1000
 	result, err := s.CompleteTeamBattle(123, false, profiles, TeamBattleDropReport{ScoreVerified: true, ScoreDamage: 250})
@@ -82,18 +82,18 @@ func TestDamageScoreTimeoutFreezesPolicyAndAwardsOnlyNewGrades(t *testing.T) {
 	if err := json.Unmarshal(encoded, &s.teamBattleScores); err != nil {
 		t.Fatal(err)
 	}
-	s.activeBattle = &TeamBattleContext{BossID: 123, ScorePolicy: p}
+	s.activeBattle = &TeamBattleContext{FameSeed: "score", FameSources: []TeamBattleFameSource{{MemberType: 1}}, BossID: 123, ScorePolicy: p}
 	result, err = s.CompleteTeamBattle(123, false, profiles, TeamBattleDropReport{ScoreVerified: true, ScoreDamage: 450})
 	if err != nil || s.coinFree != 40 || len(result.Score.Rewards) != 2 || s.teamBattleScores[123].Claimed != 15 {
 		t.Fatal("reloaded progress repeated or lost grade rewards", result, err)
 	}
-	s.activeBattle = &TeamBattleContext{BossID: 123, ScorePolicy: p}
+	s.activeBattle = &TeamBattleContext{FameSeed: "score", FameSources: []TeamBattleFameSource{{MemberType: 1}}, BossID: 123, ScorePolicy: p}
 	_, err = s.CompleteTeamBattle(123, false, profiles, TeamBattleDropReport{ScoreVerified: true, ScoreDamage: 150})
 	if err != nil || s.coinFree != 40 || s.teamBattleScores[123].HighScore != 450 {
 		t.Fatal("lower result erased progress", err)
 	}
 	// A late JP body alone has one trillion HP; its parts add valid score.
-	s.activeBattle = &TeamBattleContext{BossID: 123, ScorePolicy: p}
+	s.activeBattle = &TeamBattleContext{FameSeed: "score", FameSources: []TeamBattleFameSource{{MemberType: 1}}, BossID: 123, ScorePolicy: p}
 	_, err = s.CompleteTeamBattle(123, false, profiles, TeamBattleDropReport{ScoreVerified: true, ScoreDamage: 1000000000250})
 	if err != nil || s.teamBattleScores[123].HighScore != 1000000000250 {
 		t.Fatal("valid body and part damage above one trillion was rejected", err)
@@ -111,7 +111,7 @@ func TestSoloDamageScoreSeparatesGradesAndExcludesRentalRank(t *testing.T) {
 	profiles[0].ScorePolicy.Rate = 1000
 	play := func(solo, clear bool, damage int64, partners []TeamBattleResultPartner) teamBattleSettlement {
 		t.Helper()
-		s.activeBattle = &TeamBattleContext{BossID: 123, ScorePolicy: p, SelectedPartners: partners}
+		s.activeBattle = &TeamBattleContext{FameSeed: "score", FameSources: []TeamBattleFameSource{{MemberType: 1}}, BossID: 123, ScorePolicy: p, SelectedPartners: partners}
 		r, err := s.CompleteTeamBattle(123, clear, profiles, TeamBattleDropReport{SoloChallenge: solo, ScoreVerified: true, ScoreDamage: damage, Turns: 4})
 		if err != nil {
 			t.Fatal(err)

@@ -306,7 +306,6 @@ func ConsumptionTestStore(t *testing.T) *Account {
 
 func cardFusionTestPolicy() gamestate.CardProgressionPolicy {
 	return gamestate.CardProgressionPolicy{
-		MaximumCardMaterialCount:          100,
 		FusionGoldPerMaterialPerBaseLevel: 100,
 		FusionSuccessTypes: []gamestate.CardFusionSuccessPolicy{
 			{SuccessType: 0, Weight: 90, ExperiencePermille: 1000},

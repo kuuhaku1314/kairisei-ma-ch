@@ -9,6 +9,7 @@ import (
 
 	"kairisei.local/server/internal/accountstore"
 	"kairisei.local/server/internal/game"
+	"kairisei.local/server/internal/gamestate"
 )
 
 const (
@@ -95,7 +96,7 @@ func (operations *Runtime) GachaIDPublished(gachaID int, active map[int]struct{}
 	}
 	groupID, managed := published.GachaGroups[gachaID]
 	if !managed {
-		return gachaID == 90000100 || gachaID == 90000200
+		return gamestate.IsOnboardingGachaID(gachaID)
 	}
 	_, enabled := active[groupID]
 	return enabled

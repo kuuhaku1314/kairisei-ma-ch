@@ -183,7 +183,7 @@ func TestBossDifficultyModesShareDropsAndPersist(t *testing.T) {
 func TestBuiltinGachaPublicationAndSchedule(t *testing.T) {
 	accounts := testfixture.NewFriendCapacityTestAccounts(t)
 	base := gamestate.GachaProfile{GachaID: 60200011, GroupID: 60200001, Name: "常驻", Price: 50}
-	profiles := []gamestate.GachaProfile{base, {GachaID: 90000100, GroupID: 90000100}, {GachaID: 90000200, GroupID: 90000200}}
+	profiles := []gamestate.GachaProfile{base, {GachaID: gamestate.OnboardingMultiGachaID, GroupID: gamestate.OnboardingMultiGachaID}, {GachaID: gamestate.OnboardingGachaID, GroupID: gamestate.OnboardingGachaID}}
 	o, err := NewOperations(accounts.Database(), profiles)
 	if err != nil {
 		t.Fatal(err)
@@ -203,7 +203,7 @@ func TestBuiltinGachaPublicationAndSchedule(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if o.GachaIDPublished(base.GachaID, active) || !o.GachaIDPublished(90000100, active) || !o.GachaIDPublished(90000200, active) {
+	if o.GachaIDPublished(base.GachaID, active) || !o.GachaIDPublished(gamestate.OnboardingMultiGachaID, active) || !o.GachaIDPublished(gamestate.OnboardingGachaID, active) {
 		t.Fatal("group switch did not respect onboarding exemption")
 	}
 	c := AdminGachaConfigFromProfile(base)

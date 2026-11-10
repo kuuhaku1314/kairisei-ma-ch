@@ -34,7 +34,7 @@ func TestSoloStartUsesEnabledSlotsThroughClearHistory(t *testing.T) {
 				state.User.Name = "成员槽位测试"
 				state.User.BP = 100
 				helper := &state.PlayerProgressionPolicy.Friends.HelperReward
-				helper.OtherPerPartner, helper.FriendPerPartner, helper.MaximumPartners = 5, 10, 3
+				helper.OtherPerPartner, helper.FriendPerPartner = 5, 10
 				state.TeamBattleSolo = json.RawMessage(fmt.Sprintf(`{"9":[],"10":[{"0":300101,"9":0,"10":[{"0":30010102,"1":1,"5":1,"10":0,"16":0,"entry_limit":%s}]}],"11":[],"12":[]}`, limits))
 				initial = *state
 			})

@@ -75,7 +75,7 @@ func gachaPurgeDocuments(ctx context.Context, tx *sql.Tx, plan *GachaPurgePlan) 
 		return nil, errors.New("purge registry update is required")
 	}
 	for _, id := range plan.GachaIDs {
-		if id < gamestate.OperatorGachaFirstID || id == 90000100 || id == 90000200 {
+		if id < gamestate.OperatorGachaFirstID || gamestate.IsOnboardingGachaID(id) {
 			return nil, errors.New("purge cannot remove a built-in pool")
 		}
 		for _, prefix := range []string{"gacha-draft:", "gacha-live:"} {

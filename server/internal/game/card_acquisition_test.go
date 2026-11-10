@@ -255,8 +255,13 @@ func TestModernCardSourcesUsePublishedDestinationKinds(t *testing.T) {
 	}
 	for _, row := range result {
 		expected := want[row.CardID]
-		if len(row.GetCards) != 1 || row.GetCards[0].Type != expected.Type || row.GetCards[0].Subtype != expected.Subtype || row.GetCards[0].ContentID != expected.ContentID {
-			t.Fatalf("card %d sources = %+v; want %+v", row.CardID, row.GetCards, expected)
+		if len(row.GetCards) == 0 {
+			t.Fatalf("card %d has no published destination", row.CardID)
+		}
+		for _, source := range row.GetCards {
+			if source.Type != expected.Type || source.Subtype != expected.Subtype || source.ContentID != expected.ContentID {
+				t.Fatalf("card %d sources = %+v; want %+v", row.CardID, row.GetCards, expected)
+			}
 		}
 	}
 }

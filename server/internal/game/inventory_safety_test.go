@@ -32,7 +32,7 @@ func TestCardFusionFame(t *testing.T) {
 				},
 				cardExperience: map[int][]int{1: {10}},
 				stackCards:     []gamestate.CardStack{{CardID: 20, Num: 3, AddExperience: 10}},
-				cardProgression: gamestate.CardProgressionPolicy{MaximumCardMaterialCount: 100,
+				cardProgression: gamestate.CardProgressionPolicy{
 					FusionGoldPerMaterialPerBaseLevel: 100,
 					FusionSuccessTypes:                []gamestate.CardFusionSuccessPolicy{{SuccessType: 0, Weight: 1, ExperiencePermille: 1000}},
 					FameMaterials:                     map[int][5]int{20: {1, 5}},

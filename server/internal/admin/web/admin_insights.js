@@ -221,9 +221,7 @@ $('#account-reset').onclick = () => {
 function renderAccountFacts(a) {
   const battle = a.active_boss_id
     ? `BOSS ${a.active_boss_id}${a.active_room_id ? ' · 房间 ' + a.active_room_id : ' · 单人'}（未结算）`
-    : a.active_pvp
-      ? 'PVP 未结算'
-      : '无未结算对局';
+    : '无未结算对局';
   const facts = [
     ['账号类型', a.user_id >= 1900000000 ? '系统伙伴' : a.username ? '已绑定 · ' + a.username : '游客'],
     ['登录状态', typeof loginBlockText === 'function' ? loginBlockText(a.login_block) || '正常' : '—'],

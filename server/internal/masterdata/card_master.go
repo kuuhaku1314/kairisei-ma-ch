@@ -92,7 +92,6 @@ func validateCardRuntimeMaster(master CardRuntimeMaster) error {
 		return err
 	}
 	if master.CardProgressionPolicy.FusionGoldPerMaterialPerBaseLevel <= 0 ||
-		master.CardProgressionPolicy.MaximumCardMaterialCount != 100 ||
 		master.SphereProgressionPolicy.MaterialLevelBonusPermillePerLevel <= 0 ||
 		master.BuddyProgressionPolicy.MaximumMaterialCount <= 0 ||
 		master.SupportDeckSetCardNum <= 0 ||
@@ -207,7 +206,7 @@ func validateCardRuntimeMaster(master CardRuntimeMaster) error {
 			return fmt.Errorf("unknown CN fame material %d", cardID)
 		}
 		for _, bonus := range bonuses {
-			if bonus < 0 || bonus > math.MaxInt32/master.CardProgressionPolicy.MaximumCardMaterialCount {
+			if bonus < 0 || bonus > math.MaxInt32/gamestate.CardFusionMaterialLimit {
 				return fmt.Errorf("invalid CN fame material bonus %d", cardID)
 			}
 		}

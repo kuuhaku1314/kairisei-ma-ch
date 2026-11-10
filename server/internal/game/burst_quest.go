@@ -13,7 +13,7 @@ var ErrNoActiveBurstStory = errors.New("no active sword-release story")
 // Learning stories remain optional. The feature bits also serve as the
 // one-time receipt for each initial Buddy, including after selling it.
 func (s *Account) completeTrainingBurstLocked() error {
-	if s.onboarding.Step != cnOnboardingStepCount {
+	if s.onboarding.Step != gamestate.OnboardingStepCount {
 		return nil
 	}
 	pending := []gamestate.BurstQuest{}
@@ -81,7 +81,7 @@ func (s *Account) burstQuestAvailableLocked(quest gamestate.BurstQuest) bool {
 	_, profession := s.unlockedFeatureIDs[uint(quest.ArthurType-1)]
 	_, buddy := s.buddyDefinitions[quest.BuddyID]
 	_, script := s.storyBattleIDsByStory[fmt.Sprintf("sub:%d", quest.StoryIDs[2])]
-	return profession && buddy && script && s.onboarding.Step >= cnOnboardingStepCount
+	return profession && buddy && script && s.onboarding.Step >= gamestate.OnboardingStepCount
 }
 
 func (s *Account) BeginBurstStory(storyID int) error {

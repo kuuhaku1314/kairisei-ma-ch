@@ -4,17 +4,32 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
-	"slices"
 
 	"kairisei.local/server/internal/gamestate"
 )
 
-func TeamBattleFamePool(profile gamestate.TeamBattleRewardProfile, policy gamestate.TeamBattleFameBonusPolicy) []gamestate.Reward {
+const (
+	teamBattleFameMaximum    = 100
+	TeamBattleRewardFame     = 0
+	TeamBattleRewardFullFame = 1
+	TeamBattleRewardHost     = 5
+)
+
+func teamBattleBonusRewardType(kind int) bool {
+	switch kind {
+	case 6, 8, 13, 15, 19:
+		return true
+	default:
+		return false
+	}
+}
+
+func TeamBattleFamePool(profile gamestate.TeamBattleRewardProfile) []gamestate.Reward {
 	if profile.FameRewards != nil {
 		return cloneRewards(profile.FameRewards)
 	}
 	for _, reward := range profile.ResultRewards {
-		if slices.Contains(policy.EligibleRewardTypes, reward.Type) {
+		if teamBattleBonusRewardType(reward.Type) {
 			return []gamestate.Reward{cloneReward(reward)}
 		}
 	}

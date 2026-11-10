@@ -9,8 +9,6 @@ import (
 type TeamBattleSettlementPlan struct {
 	Profile    TeamBattleRewardProfile
 	EnemyTypes []int8
-	FameBonus  TeamBattleFameBonusPolicy
-	HostBonus  TeamBattleHostBonusPolicy
 }
 
 func CloneTeamBattleSettlementPlan(plan TeamBattleSettlementPlan) TeamBattleSettlementPlan {
@@ -28,7 +26,5 @@ func CloneTeamBattleSettlementPlan(plan TeamBattleSettlementPlan) TeamBattleSett
 		}
 	}
 	plan.Profile.ScorePolicy = CloneTeamBattleScorePolicy(plan.Profile.ScorePolicy)
-	plan.FameBonus.EligibleRewardTypes = slices.Clone(plan.FameBonus.EligibleRewardTypes)
-	plan.HostBonus.EligibleRewardTypes = slices.Clone(plan.HostBonus.EligibleRewardTypes)
 	return plan
 }

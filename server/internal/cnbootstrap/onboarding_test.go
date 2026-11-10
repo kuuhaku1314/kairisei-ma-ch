@@ -9,7 +9,6 @@ import (
 
 	"kairisei.local/server/internal/accountstore"
 	"kairisei.local/server/internal/gamestate"
-	"kairisei.local/server/internal/masterdata"
 )
 
 func TestFirstAccountUsesOnboardingAndPreservesProgressOnReload(t *testing.T) {
@@ -42,7 +41,7 @@ func TestFirstAccountUsesOnboardingAndPreservesProgressOnReload(t *testing.T) {
 	state.User.NaviID = 1 // A player's later choice must survive reload.
 	state.User.NaviUnlockFlag = 3
 	state.User.SelectableNaviIDs = []int8{0, 1}
-	state.Onboarding.Step = masterdata.OnboardingStepCount
+	state.Onboarding.Step = gamestate.OnboardingStepCount
 	state.User.UnlockedFeatureIDs = append(state.User.UnlockedFeatureIDs, 10)
 	if err := storage.Persist(state); err != nil {
 		t.Fatal(err)
@@ -55,7 +54,7 @@ func TestFirstAccountUsesOnboardingAndPreservesProgressOnReload(t *testing.T) {
 		t.Fatal("reload reset PvP or login reward progress")
 	}
 	if state.User.Name != "保留玩家名字" || state.User.Gold != 123 || state.User.NaviID != 1 ||
-		state.Onboarding.Step != masterdata.OnboardingStepCount || !slices.Contains(state.User.UnlockedFeatureIDs, uint(10)) {
+		state.Onboarding.Step != gamestate.OnboardingStepCount || !slices.Contains(state.User.UnlockedFeatureIDs, uint(10)) {
 		t.Fatal("reload reset player progress or left encyclopedia locked")
 	}
 }
@@ -122,12 +121,12 @@ func TestInitializeCNOnboardingSnapshot(t *testing.T) {
 	foundTutorialMultiGacha := false
 	for _, gacha := range state.Gachas {
 		switch gacha.GachaID {
-		case masterdata.OnboardingGachaID:
+		case gamestate.OnboardingGachaID:
 			foundTutorialGacha = true
 			if gacha.PayTypeID != 2001 || !slices.Equal(gacha.CardIDs, []int{10002001}) {
 				t.Fatalf("tutorial gacha = %+v", gacha)
 			}
-		case masterdata.OnboardingMultiGachaID:
+		case gamestate.OnboardingMultiGachaID:
 			foundTutorialMultiGacha = true
 			if gacha.PayType != 3 || gacha.Price != 400 || gacha.CardNum != 11 ||
 				gacha.GuaranteedRarityRank != 5 || gacha.GuaranteedCount != 1 ||
@@ -144,11 +143,11 @@ func TestInitializeCNOnboardingSnapshot(t *testing.T) {
 	if !foundTutorialGacha || !foundTutorialMultiGacha {
 		t.Fatal("one or more client-reserved tutorial gachas are missing")
 	}
-	if masterdata.OnboardingGachaID != 90000200 {
-		t.Fatalf("tutorial gacha ID = %d, want client-reserved first-draw ID", masterdata.OnboardingGachaID)
+	if gamestate.OnboardingGachaID != 90000200 || gamestate.OnboardingMultiGachaID != 90000100 {
+		t.Fatalf("tutorial gacha IDs = %d/%d, want client-reserved single/multi IDs", gamestate.OnboardingGachaID, gamestate.OnboardingMultiGachaID)
 	}
 	for index := range state.Gachas {
-		if state.Gachas[index].GachaID == masterdata.OnboardingMultiGachaID {
+		if state.Gachas[index].GachaID == gamestate.OnboardingMultiGachaID {
 			state.Gachas[index].PlayCount = 1
 			state.Gachas[index].CardIDs = []int{99990100}
 		}
@@ -157,7 +156,7 @@ func TestInitializeCNOnboardingSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, gacha := range state.Gachas {
-		if gacha.GachaID == masterdata.OnboardingMultiGachaID &&
+		if gacha.GachaID == gamestate.OnboardingMultiGachaID &&
 			(gacha.PlayCount != 1 || slices.Contains(gacha.CardIDs, 99990100)) {
 			t.Fatal("updating tutorial lineup reset the completed draw or retained an old prize")
 		}

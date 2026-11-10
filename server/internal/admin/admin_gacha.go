@@ -267,7 +267,8 @@ func (admin *API) validateGachaConfig(config AdminGachaConfig) (map[string]any, 
 		if len(config.CardFames) > 0 {
 			return nil, errors.New("混合奖励卡池不能设置抽出名声")
 		}
-		return validateMixedGachaConfig(admin.catalogByKey, base, config, admin.operations.ownedGachaRule(config.GachaID) != nil)
+		_, operator := admin.operations.customGachas[config.GachaID]
+		return validateMixedGachaConfig(admin.catalogByKey, base, config, operator)
 	}
 	if len(config.RewardPool) > 0 || len(config.Steps) > 0 {
 		return nil, errors.New("普通卡池不能附加混合奖励规则")
@@ -384,7 +385,11 @@ func (admin *API) gachaEditorList(writer http.ResponseWriter, request *http.Requ
 			}
 		}
 		pool, custom := admin.operations.customGachas[id]
-		rows = append(rows, map[string]any{"gacha_id": id, "config": config, "base": base, "live": live, "draft": draft, "custom": custom, "deleted": pool.Deleted, "template_id": pool.TemplateID, "rule": pool.Rule, "banner_url": "/gacha-assets/" + base.BannerKey + ".png"})
+		row := map[string]any{"gacha_id": id, "config": config, "base": base, "live": live, "draft": draft, "custom": custom, "deleted": pool.Deleted, "banner_url": "/gacha-assets/" + base.BannerKey + ".png"}
+		if custom {
+			row["rule"] = pool.editorRule()
+		}
+		rows = append(rows, row)
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i]["gacha_id"].(int) < rows[j]["gacha_id"].(int) })
 	WriteAdminJSON(writer, 200, map[string]any{"state": "PASS", "pools": rows, "custom_revision": admin.operations.customGachaRevision, "rule_types": gachaRuleTypes(), "max_draw_counts": maxGachaDrawCounts, "categories": gachaEditorCategories})

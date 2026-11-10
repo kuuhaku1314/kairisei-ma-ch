@@ -8,6 +8,8 @@ import (
 	"kairisei.local/server/internal/gamestate"
 )
 
+const teamBattleMaxPartners = 3
+
 // TeamBattleEntry contains caller-owned admission facts. Begin resolves the
 // accepted cost and content plan into a separate immutable battle context.
 type TeamBattleEntry struct {
@@ -101,8 +103,7 @@ func (s *Account) beginTeamBattleLocked(entry TeamBattleEntry, entryCatalog *bat
 	friendPointPolicy := s.playerProgression.Friends.HelperReward
 	if friendPointPolicy.OtherPerPartner <= 0 ||
 		friendPointPolicy.FriendPerPartner <= friendPointPolicy.OtherPerPartner ||
-		friendPointPolicy.MaximumPartners != 3 ||
-		entry.FriendPointPartners < 0 || entry.FriendPointPartners > friendPointPolicy.MaximumPartners {
+		entry.FriendPointPartners < 0 || entry.FriendPointPartners > teamBattleMaxPartners {
 		return TeamBattleContext{}, BattlePointStatus{}, false,
 			errors.New("local friend-point helper policy is invalid")
 	}
@@ -266,7 +267,7 @@ func (s *Account) beginTeamBattleLocked(entry TeamBattleEntry, entryCatalog *bat
 		return TeamBattleContext{}, BattlePointStatus{}, false, err
 	}
 	context.DropPlanSet, context.DropPlan = true, plan
-	context.FameRewardsSet, context.FameRewards = true, TeamBattleFamePool(profile, s.teamBattleFameBonus)
+	context.FameRewardsSet, context.FameRewards = true, TeamBattleFamePool(profile)
 	for _, reward := range context.FameRewards {
 		if err := s.validateRewardLocked(reward); err != nil {
 			return TeamBattleContext{}, BattlePointStatus{}, false, err

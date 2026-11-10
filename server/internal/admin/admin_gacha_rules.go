@@ -99,8 +99,6 @@ func (r gachaPoolRule) profile() gamestate.GachaProfile {
 		p.GachaType, p.PayType, p.Price, p.CardNumMax = 1, 2, 200, r.MaxDrawCount
 		p.CategoryNum, p.CategoryPictID, p.BannerKey = 3, 5, "local_friend"
 		p.DailyFirstFree = r.DailyFirstFree
-		if p.DailyFirstFree {
-		}
 	}
 	for i := 0; i < r.StepCount; i++ {
 		p.Steps = append(p.Steps, gamestate.GachaStep{Price: p.Price, RewardPool: []gamestate.WeightedReward{}})
@@ -155,11 +153,26 @@ func (o *Operations) filterGachaProfession(p gamestate.GachaProfile) gamestate.G
 	return p
 }
 
-func (o *Operations) ownedGachaRule(id int) *gachaPoolRule { return o.customGachas[id].Rule }
-
 func (o *Operations) mixedGacha(id int) bool {
-	r := o.ownedGachaRule(id)
-	return len(o.gachaBases[id].RewardPool) > 0 || r != nil && r.mixed()
+	p := o.gachaBases[id]
+	kind := o.customGachas[id].Type
+	return len(p.RewardPool) > 0 || len(p.Steps) > 0 || kind == "mixed" || kind == "step"
+}
+
+// The editor describes the owned profile; request rules are not stored twice.
+func (p customGachaPool) editorRule() gachaPoolRule {
+	r := gachaPoolRule{Type: p.Type, DrawCount: p.CardNum}
+	switch p.Type {
+	case "friend":
+		r.MaxDrawCount, r.DailyFirstFree = p.CardNumMax, p.DailyFirstFree
+	case "select":
+		r.UserSelectMax = p.UserSelectMax
+	case "guaranteed":
+		r.GuaranteedCount, r.GuaranteedRarity, r.RemainderRarity = p.GuaranteedCount, p.GuaranteedRarityRank, p.RemainderRarityRank
+	case "step":
+		r.StepCount = len(p.Steps)
+	}
+	return r
 }
 
 func validateCreationRules(rules []gachaPoolRule) error {

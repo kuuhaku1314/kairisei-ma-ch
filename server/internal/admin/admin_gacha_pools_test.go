@@ -466,19 +466,6 @@ func TestOperatorGachaPoolLifecycle(t *testing.T) {
 	if err != nil || reloaded.nextCustomGachaID() <= 60300004 {
 		t.Fatal("retired IDs reused after restart", err)
 	}
-	// Already stored template pools keep their original daily-free semantics.
-	registry := operations.customGachaDocument()
-	for version := 0; version <= 1; version++ {
-		id := 60301000 + version
-		registry.Pools = append(registry.Pools, customGachaPool{GachaID: id, GroupID: id, TemplateID: 60200101, Name: "已存在的友情池", RuleVersion: version})
-	}
-	if _, err := operations.storage.WriteDocument(customGachaKey, operations.customGachaRevision, registry, "test"); err != nil {
-		t.Fatal(err)
-	}
-	legacy, err := NewOperations(accounts.Database(), catalog.Gachas)
-	if err != nil || legacy.gachaBases[60301000].DailyFirstFree || !legacy.gachaBases[60301001].DailyFirstFree {
-		t.Fatal("existing template rules changed", err)
-	}
 }
 
 func findProfile(gachas []gamestate.GachaProfile, id int) *gamestate.GachaProfile {
@@ -552,7 +539,6 @@ func TestRuleTypesCreatePublishReloadAndKeepDailyClaim(t *testing.T) {
 		t.Fatal("rule catalog must be available without built-in pools")
 	}
 	for _, body := range []map[string]any{
-		{"rule_template_id": 60200201},
 		{"rules": []gachaPoolRule{{Type: "unknown", DrawCount: 1}}},
 		{"rules": []gachaPoolRule{{Type: "standard", DrawCount: 1, DailyFirstFree: true}}},
 		{"rules": []gachaPoolRule{{Type: "standard", DrawCount: 1}, {Type: "standard", DrawCount: 1}}},
@@ -604,7 +590,7 @@ func TestRuleTypesCreatePublishReloadAndKeepDailyClaim(t *testing.T) {
 		for _, raw := range ids {
 			id := int(raw.(float64))
 			pool := o.customGachas[id]
-			if pool.Rule == nil || pool.Rule.Type != kind.ID || pool.TemplateID != 0 {
+			if pool.Type != kind.ID {
 				t.Fatal("rule is not owned by pool", id)
 			}
 			doc, _ := o.storage.ReadDocument("gacha-draft:" + strconv.Itoa(id))
@@ -619,7 +605,7 @@ func TestRuleTypesCreatePublishReloadAndKeepDailyClaim(t *testing.T) {
 			if _, err := admin.validateGachaConfig(config); err == nil {
 				t.Fatal("empty pool passed validation")
 			}
-			if pool.Rule.mixed() {
+			if kind.ID == "mixed" || kind.ID == "step" {
 				config.RewardPool = []gamestate.WeightedReward{{Weight: 1, Reward: gamestate.Reward{Type: 4, Num: 7, CardSkillLevels: []int16{}}}}
 				for i := range config.Steps {
 					config.Steps[i].RewardPool = config.RewardPool

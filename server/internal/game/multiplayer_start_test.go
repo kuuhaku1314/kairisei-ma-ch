@@ -81,7 +81,7 @@ func TestPrepaidHostAndFreeGuestCanSettleAtZeroBP(t *testing.T) {
 			teamBattleSolo: battleCatalogFixture(t, json.RawMessage(`{"9":[],"10":[{"0":300101,"9":0,"10":[{"0":30010102,"5":15,"10":0}]}],"11":[],"12":[]}`)),
 		}
 		helper := &s.playerProgression.Friends.HelperReward
-		helper.OtherPerPartner, helper.FriendPerPartner, helper.MaximumPartners = 5, 10, 3
+		helper.OtherPerPartner, helper.FriendPerPartner = 5, 10
 		roomID := int64(0)
 		hostType := 0
 		mode := gamestate.BattleEntryMultiplayerGuest

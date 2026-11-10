@@ -137,7 +137,6 @@ type adminCatalogImageCoverage struct {
 }
 
 type adminAssetManifest struct {
-	CardImageIdentity    string                               `json:"card_image_identity"`
 	CatalogImageCoverage map[string]adminCatalogImageCoverage `json:"catalog_image_coverage"`
 }
 
@@ -202,7 +201,6 @@ type adminAccount struct {
 	UnlockedNavis       int                     `json:"unlocked_navis"`
 	ActiveBossID        int                     `json:"active_boss_id"`
 	ActiveRoomID        int64                   `json:"active_room_id"`
-	ActivePVP           bool                    `json:"active_pvp"`
 	RecentActivity      string                  `json:"recent_activity,omitempty"`
 	TrainingStep        int                     `json:"training_step"`
 	ArthurRank          int                     `json:"arthur_rank"`
@@ -283,7 +281,7 @@ func adminOptionalImageURL(assetsRoot, urlPath string) (string, error) {
 	return urlPath, err
 }
 
-func applyAdminCatalogAssetCoverage(catalog []AdminCatalogEntry, assetsRoot string, resources ...map[int]adminCardResource) ([]AdminCatalogEntry, error) {
+func applyAdminCatalogAssetCoverage(catalog []AdminCatalogEntry, assetsRoot string, resources map[int]adminCardResource) ([]AdminCatalogEntry, error) {
 	content, err := os.ReadFile(filepath.Join(assetsRoot, "manifest.json"))
 	if err != nil {
 		return nil, fmt.Errorf("read manifest: %w", err)
@@ -291,12 +289,6 @@ func applyAdminCatalogAssetCoverage(catalog []AdminCatalogEntry, assetsRoot stri
 	var manifest adminAssetManifest
 	if err := json.Unmarshal(content, &manifest); err != nil {
 		return nil, fmt.Errorf("decode manifest: %w", err)
-	}
-	if manifest.CardImageIdentity != "" && manifest.CardImageIdentity != "picture_id" {
-		return nil, errors.New("manifest card image identity is unsupported")
-	}
-	if manifest.CardImageIdentity == "picture_id" && (len(resources) == 0 || resources[0] == nil) {
-		return nil, errors.New("picture-ID thumbnails require the card presentation catalog")
 	}
 	expectedKinds := map[string]struct{}{
 		"card": {}, "item": {}, "material": {}, "sphere": {}, "buddy": {},
@@ -331,15 +323,15 @@ func applyAdminCatalogAssetCoverage(catalog []AdminCatalogEntry, assetsRoot stri
 			return nil, fmt.Errorf("catalog reward %s/%d has an invalid image contract", entry.Kind, entry.RewardTypeID)
 		}
 		if _, sourceGap := gapIDs[entry.Kind][entry.RewardTypeID]; sourceGap {
-			if entry.Kind == "card" && len(resources) > 0 && resources[0] != nil {
+			if entry.Kind == "card" {
 				copy := *entry
 				copy.ImageURL = ""
 				publishable = append(publishable, copy)
 			}
 			continue
 		}
-		if manifest.CardImageIdentity == "picture_id" && (entry.Kind == "card" || entry.Kind == "material") {
-			resource, exists := resources[0][entry.RewardTypeID]
+		if entry.Kind == "card" || entry.Kind == "material" {
+			resource, exists := resources[entry.RewardTypeID]
 			if !exists || resource.PictID < 10000000 {
 				return nil, fmt.Errorf("catalog reward %s/%d has no picture identity", entry.Kind, entry.RewardTypeID)
 			}
@@ -350,30 +342,27 @@ func applyAdminCatalogAssetCoverage(catalog []AdminCatalogEntry, assetsRoot stri
 		}
 		publishable = append(publishable, *entry)
 	}
-	if len(resources) > 0 && resources[0] != nil {
-		filtered := publishable[:0]
-		for _, entry := range publishable {
-			if entry.Kind == "material" {
-				if name := resources[0][entry.RewardTypeID].Name; name != "" {
-					entry.Name = name
-				}
+	filtered := publishable[:0]
+	for _, entry := range publishable {
+		if entry.Kind == "material" {
+			if name := resources[entry.RewardTypeID].Name; name != "" {
+				entry.Name = name
 			}
-			if entry.Kind == "card" {
-				resource := resources[0][entry.RewardTypeID]
-				if resource.PictID < 10000000 {
-					continue
-				}
-				entry.PictID = resource.PictID
-				entry.ResourceState = "unavailable"
-				if resource.Ready {
-					entry.ResourceState = "ready"
-				}
-			}
-			filtered = append(filtered, entry)
 		}
-		publishable = filtered
+		if entry.Kind == "card" {
+			resource := resources[entry.RewardTypeID]
+			if resource.PictID < 10000000 {
+				continue
+			}
+			entry.PictID = resource.PictID
+			entry.ResourceState = "unavailable"
+			if resource.Ready {
+				entry.ResourceState = "ready"
+			}
+		}
+		filtered = append(filtered, entry)
 	}
-	return publishable, nil
+	return filtered, nil
 }
 
 func attachAdminCardDetails(entries []AdminCatalogEntry, templates []gamestate.Card, details map[int]multiplayer.OperationsCardInfo) error {
@@ -667,7 +656,6 @@ func (admin *API) accountDetail(writer http.ResponseWriter, request *http.Reques
 		account.ActiveBossID = state.ActiveTeamBattle.BossID
 		account.ActiveRoomID = state.ActiveTeamBattle.PrepaidRoomID
 	}
-	account.ActivePVP = state.PVP.ActiveMatch != nil && !state.PVP.ActiveMatch.Retired && state.PVP.ActiveMatch.CompletedAtUnix == 0
 	for _, player := range admin.activity().HTTP.Players {
 		if player.UserID == userID {
 			account.RecentActivity = player.LastRequest.UTC().Format(time.RFC3339)

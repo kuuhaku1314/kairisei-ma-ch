@@ -34,7 +34,7 @@ func TestOperatorGachaCardEligibility(t *testing.T) {
 func TestAdminGachaDraftPublicationAndRestart(t *testing.T) {
 	accounts := testfixture.NewFriendCapacityTestAccounts(t)
 	base := gamestate.GachaProfile{GachaID: 60200301, Name: "local", Price: 10, CardNum: 2, CardNumMax: 2, GroupID: 60200301, PublicationKey: "water_coin", CardIDs: []int{1, 2}, CardWeights: []int{1, 1}, GuaranteedCount: 1, GuaranteedRarityRank: 6, RemainderRarityRank: 5}
-	operations, err := NewOperations(accounts.Database(), []gamestate.GachaProfile{base, {GachaID: 90000100}})
+	operations, err := NewOperations(accounts.Database(), []gamestate.GachaProfile{base, {GachaID: gamestate.OnboardingMultiGachaID}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestAdminGachaDraftPublicationAndRestart(t *testing.T) {
 	if err != nil || gachaDraftExists(cleared) {
 		t.Fatal("publication retained draft content", err)
 	}
-	restarted, err := NewOperations(accounts.Database(), []gamestate.GachaProfile{base, {GachaID: 90000100}})
+	restarted, err := NewOperations(accounts.Database(), []gamestate.GachaProfile{base, {GachaID: gamestate.OnboardingMultiGachaID}})
 	if err != nil {
 		t.Fatal(err)
 	}

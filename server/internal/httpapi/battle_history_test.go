@@ -44,7 +44,7 @@ func TestSoloScoreContractFreezesRulesAndCommitsOwnDeckRankOnce(t *testing.T) {
 		state.User.Name = "计分测试"
 		state.User.BP = 100
 		helper := &state.PlayerProgressionPolicy.Friends.HelperReward
-		helper.OtherPerPartner, helper.FriendPerPartner, helper.MaximumPartners = 5, 10, 3
+		helper.OtherPerPartner, helper.FriendPerPartner = 5, 10
 		state.TeamBattleSolo = json.RawMessage(`{"9":[],"10":[{"0":300101,"1":13,"4":"计分","10":[{"0":30010102,"1":0,"5":1,"6":1,"10":0,"16":0},{"0":130010102,"1":1,"5":1,"6":1,"10":0,"16":0}]}],"11":[],"12":[]}`)
 		initial = *state
 	})
@@ -122,7 +122,7 @@ func TestClearHistoryUsesStartedPartyAndNativeRankAlignment(t *testing.T) {
 		state.User.Name = "开战昵称"
 		state.User.BP = 100
 		helper := &state.PlayerProgressionPolicy.Friends.HelperReward
-		helper.OtherPerPartner, helper.FriendPerPartner, helper.MaximumPartners = 5, 10, 3
+		helper.OtherPerPartner, helper.FriendPerPartner = 5, 10
 		state.TeamBattleSolo = json.RawMessage(`{"9":[],"10":[{"0":300101,"4":"活动","9":0,"10":[{"0":30010102,"1":1,"4":"超级","5":1,"10":0,"16":0}]}],"11":[],"12":[]}`)
 		for i := range state.Decks {
 			state.Decks[i].Name = fmt.Sprintf("原卡组%d", i)

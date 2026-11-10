@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"kairisei.local/server/internal/accountstore"
+	"kairisei.local/server/internal/gamestate"
 	"kairisei.local/server/internal/masterdata"
 	"kairisei.local/server/internal/testfixture"
 )
@@ -79,7 +80,7 @@ func probeCompleteRuntimeFusion(t *testing.T, handler http.Handler, savePath, se
 			base.UniqueID, base.Level, base.Experience = 900000, 1, 0
 			state.Cards = append(state.Cards, base)
 			state.User.Gold = scenario.gold
-			state.Onboarding.Step = masterdata.OnboardingStepCount
+			state.Onboarding.Step = gamestate.OnboardingStepCount
 			state.StackCards = nil
 			selected := []int{}
 			materialIDs := append([]int(nil), scenario.ids...)

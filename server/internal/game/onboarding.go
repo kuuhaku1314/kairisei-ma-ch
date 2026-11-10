@@ -8,16 +8,6 @@ import (
 	"kairisei.local/server/internal/gamestate"
 )
 
-const (
-	cnOnboardingStepCount = 9
-	// CONFIRMED: GachaMgr recognizes 90000200..90000203 as the one-draw
-	// first-gacha family and switches the original scene into its fixed guide.
-	cnOnboardingGachaID = 90000200
-	// CONFIRMED: the paired 90000100..90000103 family is the client's later
-	// first multi-draw scene. It records completion only for card_num >= 11.
-	cnOnboardingMultiGachaID = 90000100
-)
-
 type onboardingEvent struct {
 	kind         string
 	areaID       int
@@ -68,7 +58,7 @@ func onboardingQuestForStep(step int, arthurType int8) (onboardingQuestDefinitio
 			QuestID: 1020, Title: "超级扭蛋",
 			Description: "通过超级扭蛋，获得骑士卡牌", ReceiveText: "获得了新的骑士卡牌！",
 			UnlockFeature: 16, Reward: stackReward(20000001), EventKind: "gacha",
-			GachaID: cnOnboardingGachaID,
+			GachaID: gamestate.OnboardingGachaID,
 		}, nil
 	case 2:
 		return onboardingQuestDefinition{
@@ -94,7 +84,7 @@ func onboardingQuestForStep(step int, arthurType int8) (onboardingQuestDefinitio
 		return onboardingQuestDefinition{
 			QuestID: 1049, Title: "首次十连扭蛋",
 			Description: "通过首次十连扭蛋，获得骑士卡牌", ReceiveText: "获得了新的骑士卡牌！",
-			Reward: crystalReward(50), EventKind: "gacha", GachaID: cnOnboardingMultiGachaID,
+			Reward: crystalReward(50), EventKind: "gacha", GachaID: gamestate.OnboardingMultiGachaID,
 		}, nil
 	case 6:
 		return onboardingQuestDefinition{
@@ -175,7 +165,7 @@ func (s *Account) HomeOnboardingQuests() ([]any, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	result := emptyOnboardingQuestInfo()
-	if s.onboarding.Step < 0 || s.onboarding.Step > cnOnboardingStepCount {
+	if s.onboarding.Step < 0 || s.onboarding.Step > gamestate.OnboardingStepCount {
 		return nil, errors.New("CN onboarding state is invalid")
 	}
 	if s.onboarding.PendingClearQuestID != 0 {
@@ -187,7 +177,7 @@ func (s *Account) HomeOnboardingQuests() ([]any, error) {
 		result["clear_quest"] = []any{definition.clearWire()}
 		s.onboarding.PendingClearQuestID = 0
 	}
-	if s.onboarding.Step == cnOnboardingStepCount {
+	if s.onboarding.Step == gamestate.OnboardingStepCount {
 		return []any{result}, nil
 	}
 	definition, err := onboardingQuestForStep(s.onboarding.Step, s.currentActiveArthur)
@@ -206,7 +196,7 @@ func (s *Account) HomeOnboardingQuests() ([]any, error) {
 func (s *Account) OnboardingInProgress() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.onboarding.Step < cnOnboardingStepCount
+	return s.onboarding.Step < gamestate.OnboardingStepCount
 }
 
 func (s *Account) UnlockedFeatureState() []uint {
@@ -231,7 +221,7 @@ func (s *Account) FeatureUnlocked(featureID uint) bool {
 // Completing it must release their ordinary menu gates as well as Collection.
 // Profession selection, deck-rank gates and Tower stay separate.
 func (s *Account) reconcileOnboardingFeatureUnlocksLocked() {
-	if s.onboarding.Step != cnOnboardingStepCount {
+	if s.onboarding.Step != gamestate.OnboardingStepCount {
 		return
 	}
 	for featureID := uint(4); featureID <= 31; featureID++ {
@@ -240,10 +230,10 @@ func (s *Account) reconcileOnboardingFeatureUnlocksLocked() {
 }
 
 func (s *Account) advanceOnboardingLocked(event onboardingEvent) error {
-	if s.onboarding.Step == cnOnboardingStepCount {
+	if s.onboarding.Step == gamestate.OnboardingStepCount {
 		return nil
 	}
-	if s.onboarding.Step < 0 || s.onboarding.Step > cnOnboardingStepCount {
+	if s.onboarding.Step < 0 || s.onboarding.Step > gamestate.OnboardingStepCount {
 		return errors.New("CN onboarding state is invalid")
 	}
 	definition, err := onboardingQuestForStep(s.onboarding.Step, s.currentActiveArthur)
@@ -265,7 +255,7 @@ func (s *Account) advanceOnboardingLocked(event onboardingEvent) error {
 		return nil
 	}
 	mail := s.tutorialCompletionMail
-	sendMail := s.onboarding.Step == cnOnboardingStepCount-1 && mail.Enabled
+	sendMail := s.onboarding.Step == gamestate.OnboardingStepCount-1 && mail.Enabled
 	if sendMail {
 		for _, reward := range mail.Rewards {
 			if err := s.validateRewardLocked(reward); err != nil {

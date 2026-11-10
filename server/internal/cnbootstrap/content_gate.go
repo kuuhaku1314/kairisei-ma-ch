@@ -187,10 +187,11 @@ func validateCNTeamBattleGate(
 			group.ButtonStrings1 == nil || group.ButtonStrings2 == nil {
 			return nil, nil, fmt.Errorf("CN runtime TeamBattle group %d is unavailable or incomplete", group.GroupID)
 		}
-		if group.StageQuestAreaID == 0 && group.StageType != 0 && group.StageType != 13 {
+		stageType := gamestate.BattleStageType(group.StageType)
+		if group.StageQuestAreaID == 0 && stageType != gamestate.BattleStageNormal && stageType != gamestate.BattleStageScore {
 			return nil, nil, fmt.Errorf("standalone CN TeamBattle group %d has a StageQuest type", group.GroupID)
 		}
-		if group.StageQuestAreaID > 0 && group.StageType != 0 && group.StageType != 11 && group.StageType != 15 {
+		if group.StageQuestAreaID > 0 && stageType != gamestate.BattleStageNormal && stageType != gamestate.BattleStageStageQuest && stageType != gamestate.BattleStageMainStageQuest {
 			return nil, nil, fmt.Errorf("CN StageQuest group %d has an unsupported stage type", group.GroupID)
 		}
 		if _, duplicate := groups[group.GroupID]; duplicate {

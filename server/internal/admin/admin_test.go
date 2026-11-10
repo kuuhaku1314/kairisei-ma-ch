@@ -128,14 +128,14 @@ func TestApplyAdminCatalogAssetCoverage(t *testing.T) {
 	root := t.TempDir()
 	catalog := []AdminCatalogEntry{
 		{Kind: "currency", RewardType: 4, Name: "gold"},
-		{Kind: "card", RewardType: 6, RewardTypeID: 1, Name: "card one", ImageURL: "/assets/card/1.webp"},
-		{Kind: "card", RewardType: 6, RewardTypeID: 2, Name: "card source gap", ImageURL: "/assets/card/2.webp"},
+		{Kind: "card", RewardType: 6, RewardTypeID: 1, Name: "card one", ImageURL: "/assets/card-picture/10000001.webp"},
+		{Kind: "card", RewardType: 6, RewardTypeID: 2, Name: "card source gap", ImageURL: "/assets/card-picture/10000002.webp"},
 		{Kind: "item", RewardType: 8, RewardTypeID: 3, Name: "item", ImageURL: "/assets/item/3.webp"},
-		{Kind: "material", RewardType: 13, RewardTypeID: 4, Name: "material", ImageURL: "/assets/card/4.webp"},
+		{Kind: "material", RewardType: 13, RewardTypeID: 4, Name: "material", ImageURL: "/assets/card-picture/10000004.webp"},
 		{Kind: "sphere", RewardType: 15, RewardTypeID: 5, Name: "sphere", ImageURL: "/assets/sphere/5.webp"},
 		{Kind: "buddy", RewardType: 19, RewardTypeID: 6, Name: "buddy", ImageURL: "/assets/buddy/6.webp"},
 	}
-	for _, relative := range []string{"currency/4.webp", "card/1.webp", "item/3.webp", "card/4.webp", "sphere/5.webp", "buddy/6.webp"} {
+	for _, relative := range []string{"currency/4.webp", "card-picture/10000001.webp", "item/3.webp", "card-picture/10000004.webp", "sphere/5.webp", "buddy/6.webp"} {
 		path := filepath.Join(root, filepath.FromSlash(relative))
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			t.Fatal(err)
@@ -161,19 +161,33 @@ func TestApplyAdminCatalogAssetCoverage(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "manifest.json"), content, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	publishable, err := applyAdminCatalogAssetCoverage(catalog, root)
+	resources := map[int]adminCardResource{
+		1: {PictID: 10000001, Ready: true},
+		2: {PictID: 10000002},
+		4: {PictID: 10000004, Name: "current material", Ready: true},
+	}
+	publishable, err := applyAdminCatalogAssetCoverage(catalog, root, resources)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(publishable) != len(catalog)-1 {
-		t.Fatalf("publishable catalog count = %d, want %d", len(publishable), len(catalog)-1)
+	if len(publishable) != len(catalog) {
+		t.Fatalf("publishable catalog count = %d, want %d", len(publishable), len(catalog))
 	}
 	for _, entry := range publishable {
 		if entry.Kind == "currency" && entry.ImageURL != "/assets/currency/4.webp" {
 			t.Fatal("currency image was not projected from the resource set")
 		}
 		if entry.RewardTypeID == 2 {
-			t.Fatal("source-gap card remains grantable")
+			if entry.ImageURL != "" || entry.PictID != 10000002 || entry.ResourceState != "unavailable" {
+				t.Fatalf("source-gap card lost its resource identity: %+v", entry)
+			}
+			continue
+		}
+		if entry.RewardTypeID == 1 && entry.ResourceState != "ready" {
+			t.Fatal("complete card resources are unavailable")
+		}
+		if entry.Kind == "material" && entry.Name != "current material" {
+			t.Fatal("material name did not come from the current presentation catalog")
 		}
 		if entry.Kind != "currency" && entry.ImageURL == "" {
 			t.Fatalf("publishable %s/%d has no image", entry.Kind, entry.RewardTypeID)
@@ -182,7 +196,7 @@ func TestApplyAdminCatalogAssetCoverage(t *testing.T) {
 	if err := os.Remove(filepath.Join(root, "buddy", "6.webp")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := applyAdminCatalogAssetCoverage(catalog, root); err == nil {
+	if _, err := applyAdminCatalogAssetCoverage(catalog, root, resources); err == nil {
 		t.Fatal("missing resolved Buddy output passed the Admin asset gate")
 	}
 }

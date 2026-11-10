@@ -57,8 +57,7 @@ type TeamBattleContext struct {
 func (s *Account) HasUnsettledSoloBattle() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return (s.activeBattle != nil && s.activeBattle.EntryRole == gamestate.BattleEntrySolo) ||
-		(s.pvp.ActiveMatch != nil && !s.pvp.ActiveMatch.Retired && s.pvp.ActiveMatch.CompletedAtUnix == 0)
+	return s.activeBattle != nil && s.activeBattle.EntryRole == gamestate.BattleEntrySolo
 }
 
 type TeamBattleResultPartner struct {
@@ -313,8 +312,7 @@ func (s *Account) validateActiveTeamBattleContextLocked(
 	friendPointPolicy := s.playerProgression.Friends.HelperReward
 	if friendPointPolicy.OtherPerPartner <= 0 ||
 		friendPointPolicy.FriendPerPartner <= friendPointPolicy.OtherPerPartner ||
-		friendPointPolicy.MaximumPartners != 3 || context.FriendPointPartners < 0 ||
-		context.FriendPointPartners > friendPointPolicy.MaximumPartners {
+		context.FriendPointPartners < 0 || context.FriendPointPartners > teamBattleMaxPartners {
 		return errors.New("local friend-point helper policy is invalid")
 	}
 	minimumReward := friendPointPolicy.OtherPerPartner * context.FriendPointPartners
@@ -496,19 +494,13 @@ func (s *Account) ContinueTeamBattle(report TeamBattleContinueReport, base games
 	return s.coin, s.coinFree, nil
 }
 
-func planTeamBattleFameAwards(profile gamestate.TeamBattleRewardProfile, context TeamBattleContext, policy gamestate.TeamBattleFameBonusPolicy) ([]teamBattleFameAwardPlan, error) {
-	if policy.ChanceMaximum == 0 {
-		return nil, nil
-	}
-	if policy.ChanceMaximum != 100 ||
-		policy.FullFameThreshold != 100 || policy.FullFameRewardCount != 2 ||
-		policy.BonusFameAdd < 0 ||
-		strings.TrimSpace(context.FameSeed) == "" || len(context.FameSources) == 0 {
-		return nil, errors.New("local team battle fame-bonus policy is invalid")
+func planTeamBattleFameAwards(profile gamestate.TeamBattleRewardProfile, context TeamBattleContext) ([]teamBattleFameAwardPlan, error) {
+	if strings.TrimSpace(context.FameSeed) == "" || len(context.FameSources) == 0 {
+		return nil, errors.New("team battle fame-bonus context is invalid")
 	}
 	pool := context.FameRewards
 	if !context.FameRewardsSet {
-		pool = TeamBattleFamePool(profile, policy)
+		pool = TeamBattleFamePool(profile)
 	}
 	if len(pool) == 0 {
 		// The local onboarding/training profile has no inventory-bearing drop.
@@ -521,60 +513,45 @@ func planTeamBattleFameAwards(profile gamestate.TeamBattleRewardProfile, context
 	})
 	plans := make([]teamBattleFameAwardPlan, 0, len(sources)+1)
 	for _, source := range sources {
-		effectiveFame := min(policy.ChanceMaximum, source.LeaderFame+policy.BonusFameAdd)
+		effectiveFame := min(teamBattleFameMaximum, source.LeaderFame)
 		if effectiveFame <= 0 {
 			continue
 		}
-		if teamBattleFameRoll(context.FameSeed, source.MemberType, policy.ChanceMaximum) <= effectiveFame {
+		if teamBattleFameRoll(context.FameSeed, source.MemberType) <= effectiveFame {
 			plans = append(plans, teamBattleFameAwardPlan{
 				MemberType: source.MemberType,
-				RewardKind: 0,
+				RewardKind: TeamBattleRewardFame,
 				Reward:     teamBattleFameReward(pool, context.FameSeed, source.MemberType, 0),
 			})
 		}
-		if effectiveFame >= policy.FullFameThreshold {
-			for rewardIndex := 1; rewardIndex < policy.FullFameRewardCount; rewardIndex++ {
-				plans = append(plans, teamBattleFameAwardPlan{
-					MemberType: source.MemberType,
-					RewardKind: 1,
-					Reward:     teamBattleFameReward(pool, context.FameSeed, source.MemberType, rewardIndex),
-				})
-			}
+		if effectiveFame >= teamBattleFameMaximum {
+			plans = append(plans, teamBattleFameAwardPlan{
+				MemberType: source.MemberType,
+				RewardKind: TeamBattleRewardFullFame,
+				Reward:     teamBattleFameReward(pool, context.FameSeed, source.MemberType, 1),
+			})
 		}
 	}
 	return plans, nil
 }
 
-func teamBattleFameRoll(seed string, memberType int, chanceMaximum int) int {
+func teamBattleFameRoll(seed string, memberType int) int {
 	sum := sha256.Sum256([]byte(fmt.Sprintf("%s|member=%d|fame-normal", seed, memberType)))
-	return int(binary.BigEndian.Uint64(sum[:8])%uint64(chanceMaximum)) + 1
+	return int(binary.BigEndian.Uint64(sum[:8])%uint64(teamBattleFameMaximum)) + 1
 }
 
-func planTeamBattleHostAwards(profile gamestate.TeamBattleRewardProfile, context TeamBattleContext, policy gamestate.TeamBattleHostBonusPolicy) ([]teamBattleFameAwardPlan, error) {
-	if policy.RewardCount == 0 {
-		return nil, nil
-	}
-	if policy.RewardCount != 1 || policy.RewardKind != 5 {
-		return nil, errors.New("local team battle host-bonus policy is invalid")
-	}
+func planTeamBattleHostAwards(profile gamestate.TeamBattleRewardProfile, context TeamBattleContext) ([]teamBattleFameAwardPlan, error) {
 	if context.HostBonusMemberType == 0 {
 		return nil, nil
 	}
 	if context.EntryRole != gamestate.BattleEntryMultiplayerHost || context.HostBonusMemberType < 1 || context.HostBonusMemberType > 4 {
 		return nil, errors.New("local team battle host-bonus context is invalid")
 	}
-	eligibleTypes := make(map[int]struct{}, len(policy.EligibleRewardTypes))
-	for _, rewardType := range policy.EligibleRewardTypes {
-		if rewardType <= 0 {
-			return nil, errors.New("local team battle host-bonus reward type is invalid")
-		}
-		eligibleTypes[rewardType] = struct{}{}
-	}
 	for _, reward := range profile.ResultRewards {
-		if _, eligible := eligibleTypes[reward.Type]; eligible {
+		if teamBattleBonusRewardType(reward.Type) {
 			return []teamBattleFameAwardPlan{{
 				MemberType: context.HostBonusMemberType,
-				RewardKind: policy.RewardKind,
+				RewardKind: TeamBattleRewardHost,
 				Reward:     reward,
 			}}, nil
 		}
@@ -604,7 +581,7 @@ func (s *Account) CompleteTeamBattle(
 		report = dropReports[0]
 	}
 	completedAt := s.missionTimeLocked(time.Now())
-	settlement, err := s.completeTeamBattleLocked(context, profile, isClear, report, s.teamBattleFameBonus, s.teamBattleHostBonus, completedAt)
+	settlement, err := s.completeTeamBattleLocked(context, profile, isClear, report, completedAt)
 	if err == nil {
 		if context.TowerID != 0 {
 			floor := s.towerQuestProgress[context.TowerID].Floor
@@ -639,10 +616,10 @@ func (s *Account) CompleteMultiplayerBattle(context TeamBattleContext, plan game
 		}
 		context.BPUse = cost
 	}
-	return s.completeTeamBattleLocked(context, plan.Profile, isClear, report, plan.FameBonus, plan.HostBonus, completedAt)
+	return s.completeTeamBattleLocked(context, plan.Profile, isClear, report, completedAt)
 }
 
-func (s *Account) completeTeamBattleLocked(context TeamBattleContext, profile gamestate.TeamBattleRewardProfile, isClear bool, report TeamBattleDropReport, famePolicy gamestate.TeamBattleFameBonusPolicy, hostPolicy gamestate.TeamBattleHostBonusPolicy, completedAt time.Time) (teamBattleSettlement, error) {
+func (s *Account) completeTeamBattleLocked(context TeamBattleContext, profile gamestate.TeamBattleRewardProfile, isClear bool, report TeamBattleDropReport, completedAt time.Time) (teamBattleSettlement, error) {
 	bossID := context.BossID
 	settlement := teamBattleSettlement{Context: context}
 	// Freeze operator policy at entry; multiplayer carries the room's snapshot.
@@ -749,11 +726,11 @@ func (s *Account) completeTeamBattleLocked(context TeamBattleContext, profile ga
 	if settlement.WasFirstClear {
 		rewards = append(rewards, profile.FirstClearRewards...)
 	}
-	famePlans, err := planTeamBattleFameAwards(profile, context, famePolicy)
+	famePlans, err := planTeamBattleFameAwards(profile, context)
 	if err != nil {
 		return teamBattleSettlement{}, err
 	}
-	hostPlans, err := planTeamBattleHostAwards(profile, context, hostPolicy)
+	hostPlans, err := planTeamBattleHostAwards(profile, context)
 	if err != nil {
 		return teamBattleSettlement{}, err
 	}
@@ -961,7 +938,7 @@ func (s *Account) teamBattleCatalogLocked() (*TeamBattleCatalog, error) {
 		return nil, err
 	}
 	tutorialNormalQuest := s.onboarding.Step == 0
-	tutorialActivity := s.onboarding.Step == cnOnboardingStepCount-1
+	tutorialActivity := s.onboarding.Step == gamestate.OnboardingStepCount-1
 	if err := catalog.project(s.stageQuests, s.teamBattleLimitedGroupIDs, tutorialNormalQuest, tutorialActivity); err != nil {
 		return nil, err
 	}

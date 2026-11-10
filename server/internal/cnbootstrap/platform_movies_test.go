@@ -40,7 +40,7 @@ func TestPortableMoviesBindContentAndServeOnlyRegisteredBytes(t *testing.T) {
 		"logical_name": "mov_prologue.cpk", "source_bytes": 123, "source_sha256": hash([]byte("cpk")), "usm_sha256": hash([]byte("usm")),
 		"movie_file": name, "movie_bytes": len(movie), "movie_sha256": hash(movie),
 	}}})
-	media := write("movie-profile.json", platformMovieProfile{Format: 1, TargetPlatform: "Portable", ArtifactRoot: ".", Index: index, Files: []platformMovieArtifact{{Name: name, File: "existing.mp4", Bytes: int64(len(movie)), SHA256: hash(movie)}}})
+	media := write("movie-profile.json", platformMovieProfile{ArtifactRoot: ".", Index: index, Files: []platformMovieArtifact{{Name: name, File: "existing.mp4", Bytes: int64(len(movie)), SHA256: hash(movie)}}})
 	raw, err := os.ReadFile(profilePath)
 	if err != nil {
 		t.Fatal(err)

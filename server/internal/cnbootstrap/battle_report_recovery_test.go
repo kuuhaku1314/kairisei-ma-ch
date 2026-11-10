@@ -11,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"kairisei.local/server/internal/game"
 	"kairisei.local/server/internal/gamestate"
 	"kairisei.local/server/internal/httpapi"
 	"kairisei.local/server/internal/multiplayer"
@@ -26,7 +25,7 @@ func TestInvalidCachedBattleReportReachesDiscardCallback(t *testing.T) {
 	state.PVP.History = []gamestate.PVPMatch{{BattleID: 1, ExpectedWin: true, CompletedAtUnix: 1}}
 	writes := 0
 	business, err := httpapi.New(httpapi.Config{
-		PVP: game.PVPConfig{ResultSource: game.PVPResultFixedPolicy, EngineMode: game.PvpEngineClientNativeLocal}, InitialState: state, BaseURL: "http://127.0.0.1", Multiplayer: multiplayer.NewHub(),
+		InitialState: state, BaseURL: "http://127.0.0.1", Multiplayer: multiplayer.NewHub(),
 		Logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),
 		PersistState: func(gamestate.State) error { writes++; return nil },
 	})

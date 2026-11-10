@@ -18,6 +18,7 @@ import (
 	"kairisei.local/server/battlemodel"
 	"kairisei.local/server/internal/accountstore"
 	adminapi "kairisei.local/server/internal/admin"
+	"kairisei.local/server/internal/gamestate"
 	"kairisei.local/server/internal/masterdata"
 	"kairisei.local/server/internal/multiplayer"
 	"kairisei.local/server/internal/netstats"
@@ -365,7 +366,7 @@ func TestCompleteRuntimeSetConstruction(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, pool := range state.Gachas {
-		if pool.GachaID != masterdata.OnboardingMultiGachaID {
+		if pool.GachaID != gamestate.OnboardingMultiGachaID {
 			continue
 		}
 		stars := map[int]int{}
@@ -442,7 +443,7 @@ func probeCompleteRuntimeGacha(t *testing.T, handler http.Handler, savePath, see
 			card.UniqueID = int64(len(state.Cards) + 100000)
 			state.Cards = append(state.Cards, card)
 		}
-		state.Onboarding.Step = masterdata.OnboardingStepCount
+		state.Onboarding.Step = gamestate.OnboardingStepCount
 		if err := accounts.PersistState(identity.UserID, state); err != nil {
 			t.Fatal(err)
 		}

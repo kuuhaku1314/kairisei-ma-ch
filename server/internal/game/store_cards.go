@@ -449,7 +449,7 @@ func (s *Account) FuseCard(
 		return CardInfo{}, CardInfo{}, 0, nil, err
 	}
 	materialCount := len(materialUniqueIDs) + len(containerMaterialUniqueIDs)
-	if len(materialUniqueIDs) > s.cardProgression.MaximumCardMaterialCount || len(containerMaterialUniqueIDs) > s.cardProgression.MaximumCardMaterialCount || len(stackUses) > s.cardProgression.MaximumCardMaterialCount {
+	if len(materialUniqueIDs) > gamestate.CardFusionMaterialLimit || len(containerMaterialUniqueIDs) > gamestate.CardFusionMaterialLimit || len(stackUses) > gamestate.CardFusionMaterialLimit {
 		return CardInfo{}, CardInfo{}, 0, nil, errors.New("too many card fusion material instances or types")
 	}
 	for _, use := range stackUses {

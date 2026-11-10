@@ -51,7 +51,7 @@ func probeCompleteRuntimeBurst(t *testing.T, handler http.Handler, savePath, see
 	if err != nil {
 		t.Fatal(err)
 	}
-	state.Onboarding.Step = masterdata.OnboardingStepCount
+	state.Onboarding.Step = gamestate.OnboardingStepCount
 	state.User.UnlockedFeatureIDs = append(state.User.UnlockedFeatureIDs, 0, 1, 2, 3)
 	state.User.Gold = 2000000
 	state.Items = append(state.Items, gamestate.Item{ItemID: 1305, Num: 20})

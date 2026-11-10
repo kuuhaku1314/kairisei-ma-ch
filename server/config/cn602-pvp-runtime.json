@@ -1,6 +1,4 @@
 {
-  "engine_mode": "client_native_local",
-  "result_source": "fixed_local_policy",
   "challenge_max": 5,
   "cost_initial": 3,
   "turn_max": 10,
@@ -13,44 +11,28 @@
   "reset_end_time": 0,
   "fields": [
     {
-      "fieldid": 1,
-      "mapid": 1000,
-      "bgmid": 10110
+      "fieldid": 1
     },
     {
-      "fieldid": 2,
-      "mapid": 2000,
-      "bgmid": 10120
+      "fieldid": 2
     },
     {
-      "fieldid": 3,
-      "mapid": 3000,
-      "bgmid": 10130
+      "fieldid": 3
     },
     {
-      "fieldid": 4,
-      "mapid": 4000,
-      "bgmid": 10140
+      "fieldid": 4
     },
     {
-      "fieldid": 5,
-      "mapid": 5000,
-      "bgmid": 10150
+      "fieldid": 5
     },
     {
-      "fieldid": 6,
-      "mapid": 6000,
-      "bgmid": 10160
+      "fieldid": 6
     },
     {
-      "fieldid": 7,
-      "mapid": 7000,
-      "bgmid": 10170
+      "fieldid": 7
     },
     {
-      "fieldid": 8,
-      "mapid": 8000,
-      "bgmid": 10190
+      "fieldid": 8
     }
   ],
   "ranks": [
@@ -58,162 +40,139 @@
       "rank_id": 0,
       "name": "初心者",
       "point_min": 0,
-      "point_max": 399,
-      "win_coin": 10
+      "point_max": 399
     },
     {
       "rank_id": 1,
       "name": "青铜(下阶)",
       "point_min": 400,
-      "point_max": 499,
-      "win_coin": 10
+      "point_max": 499
     },
     {
       "rank_id": 2,
       "name": "青铜(中阶)",
       "point_min": 500,
-      "point_max": 599,
-      "win_coin": 11
+      "point_max": 599
     },
     {
       "rank_id": 3,
       "name": "青铜(上阶)",
       "point_min": 600,
-      "point_max": 799,
-      "win_coin": 11
+      "point_max": 799
     },
     {
       "rank_id": 4,
       "name": "白银(下阶)",
       "point_min": 800,
-      "point_max": 999,
-      "win_coin": 12
+      "point_max": 999
     },
     {
       "rank_id": 5,
       "name": "白银(中阶)",
       "point_min": 1000,
-      "point_max": 1199,
-      "win_coin": 12
+      "point_max": 1199
     },
     {
       "rank_id": 6,
       "name": "白银(上阶)",
       "point_min": 1200,
-      "point_max": 1399,
-      "win_coin": 13
+      "point_max": 1399
     },
     {
       "rank_id": 7,
       "name": "黄金(下阶)",
       "point_min": 1400,
-      "point_max": 1599,
-      "win_coin": 13
+      "point_max": 1599
     },
     {
       "rank_id": 8,
       "name": "黄金(中阶)",
       "point_min": 1600,
-      "point_max": 1799,
-      "win_coin": 14
+      "point_max": 1799
     },
     {
       "rank_id": 9,
       "name": "黄金(上阶)",
       "point_min": 1800,
-      "point_max": 1999,
-      "win_coin": 14
+      "point_max": 1999
     },
     {
       "rank_id": 10,
       "name": "紫金(下阶)",
       "point_min": 2000,
-      "point_max": 2199,
-      "win_coin": 15
+      "point_max": 2199
     },
     {
       "rank_id": 11,
       "name": "紫金(中阶)",
       "point_min": 2200,
-      "point_max": 2399,
-      "win_coin": 15
+      "point_max": 2399
     },
     {
       "rank_id": 12,
       "name": "紫金(上阶)",
       "point_min": 2400,
-      "point_max": 2599,
-      "win_coin": 16
+      "point_max": 2599
     },
     {
       "rank_id": 13,
       "name": "秘银(下阶)",
       "point_min": 2600,
-      "point_max": 2799,
-      "win_coin": 16
+      "point_max": 2799
     },
     {
       "rank_id": 14,
       "name": "秘银(中阶)",
       "point_min": 2800,
-      "point_max": 2999,
-      "win_coin": 17
+      "point_max": 2999
     },
     {
       "rank_id": 15,
       "name": "秘银(上阶)",
       "point_min": 3000,
-      "point_max": 3199,
-      "win_coin": 17
+      "point_max": 3199
     },
     {
       "rank_id": 16,
       "name": "王者(下阶)",
       "point_min": 3200,
-      "point_max": 3499,
-      "win_coin": 18
+      "point_max": 3499
     },
     {
       "rank_id": 17,
       "name": "王者(中阶)",
       "point_min": 3500,
-      "point_max": 3799,
-      "win_coin": 18
+      "point_max": 3799
     },
     {
       "rank_id": 18,
       "name": "王者(上阶)",
       "point_min": 3800,
-      "point_max": 4099,
-      "win_coin": 19
+      "point_max": 4099
     },
     {
       "rank_id": 19,
       "name": "神授(下阶)",
       "point_min": 4100,
-      "point_max": 4399,
-      "win_coin": 19
+      "point_max": 4399
     },
     {
       "rank_id": 20,
       "name": "神授(中阶)",
       "point_min": 4400,
-      "point_max": 4699,
-      "win_coin": 20
+      "point_max": 4699
     },
     {
       "rank_id": 21,
       "name": "神授(上阶)",
       "point_min": 4700,
-      "point_max": 4999,
-      "win_coin": 20
+      "point_max": 4999
     },
     {
       "rank_id": 22,
       "name": "传说",
       "point_min": 5000,
-      "point_max": 100000000,
-      "win_coin": 20
+      "point_max": 100000000
     }
   ],
   "result_cmds": []

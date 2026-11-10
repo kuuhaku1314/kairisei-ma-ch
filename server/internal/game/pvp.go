@@ -6,17 +6,8 @@ import (
 
 const pvpHistoryLimit = 50
 
-const (
-	PvpEngineServerReplay      = "server_replay"
-	PvpEngineClientNativeLocal = "client_native_local"
-	PVPResultFixedPolicy       = "fixed_local_policy"
-	PVPResultRecordedReplay    = "recorded_replay"
-)
-
 type PVPFieldConfig struct {
 	FieldID int `json:"fieldid"`
-	MapID   int `json:"mapid"`
-	BGMID   int `json:"bgmid"`
 }
 
 type PVPRankConfig struct {
@@ -24,7 +15,6 @@ type PVPRankConfig struct {
 	Name     string `json:"name"`
 	PointMin int    `json:"point_min"`
 	PointMax int    `json:"point_max"`
-	WinCoin  int    `json:"win_coin"`
 }
 
 type PVPResultCommand struct {
@@ -35,8 +25,6 @@ type PVPResultCommand struct {
 // PVPConfig contains static local rules. Official client-owned field and rank
 // rows are kept separate from mutable account state in SQLite.
 type PVPConfig struct {
-	ResultSource   string             `json:"result_source"`
-	EngineMode     string             `json:"engine_mode"`
 	ChallengeMax   int                `json:"challenge_max"`
 	CostInitial    int                `json:"cost_initial"`
 	TurnMax        int                `json:"turn_max"`
@@ -73,10 +61,6 @@ func ClonePVPState(source gamestate.PVPPlayerState) gamestate.PVPPlayerState {
 	result.DefenseDecks = ClonePVPDeckSelections(source.DefenseDecks)
 	result.History = make([]gamestate.PVPMatch, len(source.History))
 	copy(result.History, source.History)
-	if source.ActiveMatch != nil {
-		active := *source.ActiveMatch
-		result.ActiveMatch = &active
-	}
 	return result
 }
 

@@ -8,7 +8,7 @@ import (
 )
 
 func completedTestOnboarding() gamestate.OnboardingState {
-	return gamestate.OnboardingState{Step: cnOnboardingStepCount}
+	return gamestate.OnboardingState{Step: gamestate.OnboardingStepCount}
 }
 
 func TestTutorialRouteFlagPreservesExistingProgress(t *testing.T) {
@@ -166,7 +166,7 @@ func TestOnboardingSequencePublishesQuestsRewardsAndFeatures(t *testing.T) {
 	}
 
 	store.mu.Lock()
-	err = store.advanceOnboardingLocked(onboardingEvent{kind: "gacha", gachaID: cnOnboardingGachaID})
+	err = store.advanceOnboardingLocked(onboardingEvent{kind: "gacha", gachaID: gamestate.OnboardingGachaID})
 	store.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
@@ -223,7 +223,7 @@ func TestOnboardingSequencePublishesQuestsRewardsAndFeatures(t *testing.T) {
 		t.Fatalf("first-area completion state = %+v, crystals = %d", store.onboarding, store.coinFree)
 	}
 	store.mu.Lock()
-	err = store.advanceOnboardingLocked(onboardingEvent{kind: "gacha", gachaID: cnOnboardingMultiGachaID})
+	err = store.advanceOnboardingLocked(onboardingEvent{kind: "gacha", gachaID: gamestate.OnboardingMultiGachaID})
 	store.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
@@ -289,7 +289,7 @@ func TestOnboardingSequencePublishesQuestsRewardsAndFeatures(t *testing.T) {
 	if err := reloaded.advanceOnboardingLocked(onboardingEvent{kind: "activity", activityBoss: true}); err != nil || len(reloaded.presents) != 0 {
 		t.Fatal("completed account received a retroactive graduation mail")
 	}
-	if store.onboarding.Step != cnOnboardingStepCount {
+	if store.onboarding.Step != gamestate.OnboardingStepCount {
 		t.Fatalf("final onboarding step = %d", store.onboarding.Step)
 	}
 	for featureID := uint(4); featureID <= 31; featureID++ {
@@ -326,14 +326,14 @@ func TestOnboardingFirstDrawPublishesOnlyTutorialGacha(t *testing.T) {
 	store.onboarding.Step = 1
 	store.gachas = []gamestate.GachaProfile{
 		{GachaID: 60200011, GroupID: 60200011, CategoryNum: 1, CardNumMax: 1, PayType: 3},
-		{GachaID: cnOnboardingGachaID, GroupID: cnOnboardingGachaID, CategoryNum: 4, CardNumMax: 1, PayType: 4, PayTypeID: 2001},
+		{GachaID: gamestate.OnboardingGachaID, GroupID: gamestate.OnboardingGachaID, CategoryNum: 4, CardNumMax: 1, PayType: 4, PayTypeID: 2001},
 	}
 	item := store.items[2001]
 	item.Num = 1
 	store.items[2001] = item
 
 	gachas := store.GachaState()
-	if len(gachas) != 1 || gachas[0].GachaID != cnOnboardingGachaID {
+	if len(gachas) != 1 || gachas[0].GachaID != gamestate.OnboardingGachaID {
 		t.Fatalf("first draw gacha state = %+v, want only the tutorial pool", gachas)
 	}
 }
@@ -342,27 +342,27 @@ func TestOnboardingFirstMultiDrawPublishesOnlyReservedGacha(t *testing.T) {
 	store := onboardingTestStore()
 	store.gachas = []gamestate.GachaProfile{
 		{GachaID: 60200011, GroupID: 60200011, CategoryNum: 1, CardNumMax: 1, PayType: 3},
-		{GachaID: cnOnboardingGachaID, GroupID: cnOnboardingGachaID, CategoryNum: 4, CardNumMax: 1, PayType: 4},
-		{GachaID: cnOnboardingMultiGachaID, GroupID: cnOnboardingMultiGachaID, CategoryNum: 4, CardNum: 11, CardNumMax: 11, PayType: 3},
+		{GachaID: gamestate.OnboardingGachaID, GroupID: gamestate.OnboardingGachaID, CategoryNum: 4, CardNumMax: 1, PayType: 4},
+		{GachaID: gamestate.OnboardingMultiGachaID, GroupID: gamestate.OnboardingMultiGachaID, CategoryNum: 4, CardNum: 11, CardNumMax: 11, PayType: 3},
 	}
 
 	for _, step := range []int{2, 3, 4, 5} {
 		store.onboarding.Step = step
 		gachas := store.GachaState()
-		if len(gachas) != 1 || gachas[0].GachaID != cnOnboardingMultiGachaID {
+		if len(gachas) != 1 || gachas[0].GachaID != gamestate.OnboardingMultiGachaID {
 			t.Fatalf("step %d first multi-draw gacha state = %+v, want only the reserved multi pool", step, gachas)
 		}
 	}
 
 	store.onboarding.Step = 2
-	if store.GachaAvailableForPlayLocked(cnOnboardingGachaID) ||
-		store.GachaAvailableForPlayLocked(cnOnboardingMultiGachaID) ||
+	if store.GachaAvailableForPlayLocked(gamestate.OnboardingGachaID) ||
+		store.GachaAvailableForPlayLocked(gamestate.OnboardingMultiGachaID) ||
 		store.GachaAvailableForPlayLocked(60200011) {
 		t.Fatal("intermediate tutorial step allowed a gacha play before the first area was complete")
 	}
 	store.onboarding.Step = 5
-	if store.GachaAvailableForPlayLocked(cnOnboardingGachaID) ||
-		!store.GachaAvailableForPlayLocked(cnOnboardingMultiGachaID) ||
+	if store.GachaAvailableForPlayLocked(gamestate.OnboardingGachaID) ||
+		!store.GachaAvailableForPlayLocked(gamestate.OnboardingMultiGachaID) ||
 		store.GachaAvailableForPlayLocked(60200011) {
 		t.Fatal("onboarding gacha availability does not match the active multi-draw step")
 	}
@@ -370,8 +370,8 @@ func TestOnboardingFirstMultiDrawPublishesOnlyReservedGacha(t *testing.T) {
 	gachas := store.GachaState()
 	if len(gachas) != 1 || gachas[0].GachaID != 60200011 ||
 		!store.GachaAvailableForPlayLocked(60200011) ||
-		store.GachaAvailableForPlayLocked(cnOnboardingGachaID) ||
-		store.GachaAvailableForPlayLocked(cnOnboardingMultiGachaID) {
+		store.GachaAvailableForPlayLocked(gamestate.OnboardingGachaID) ||
+		store.GachaAvailableForPlayLocked(gamestate.OnboardingMultiGachaID) {
 		t.Fatalf("completed onboarding did not switch exclusively to normal pools: %+v", gachas)
 	}
 }

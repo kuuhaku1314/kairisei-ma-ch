@@ -125,7 +125,7 @@ func TestAlchemistInventoryCandidate(t *testing.T) {
 		}
 		state.Onboarding = gamestate.OnboardingState{}
 		if done {
-			state.Onboarding.Step = masterdata.OnboardingStepCount
+			state.Onboarding.Step = gamestate.OnboardingStepCount
 		}
 		state.User.CardMax = capacity
 		definitions := &battlemodel.Definitions{Cards: make(map[int]battlemodel.CombatCardDefinition), Summons: make(map[int]battlemodel.CombatSummonDefinition)}

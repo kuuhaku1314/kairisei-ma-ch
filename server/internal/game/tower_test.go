@@ -77,7 +77,7 @@ func TestTowerReplaysPreserveChallengeAndSettleBestClear(t *testing.T) {
 			profiles := []gamestate.TeamBattleRewardProfile{{BossID: bossID, TowerID: towerID, TowerFloor: 1,
 				ResultRewards: []gamestate.Reward{{Type: 4, Num: 5}}, FirstClearRewards: []gamestate.Reward{{Type: 10, Num: 50}}}}
 			for _, clear := range []bool{false, true} {
-				s.activeBattle = &TeamBattleContext{BossID: bossID, TowerID: towerID, TowerFloor: 1}
+				s.activeBattle = &TeamBattleContext{FameSeed: "tower", FameSources: []TeamBattleFameSource{{MemberType: 1}}, BossID: bossID, TowerID: towerID, TowerFloor: 1}
 				result, err := s.CompleteTeamBattle(bossID, clear, profiles, TeamBattleDropReport{Turns: 10})
 				if err != nil {
 					t.Fatal(err)
@@ -124,7 +124,7 @@ func TestTowerSettlementReturnFreezesCommittedFloor(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			const towerID, bossID = 7, 123
-			context := TeamBattleContext{BossID: bossID, TowerID: towerID, TowerFloor: tc.floor,
+			context := TeamBattleContext{FameSeed: "tower", FameSources: []TeamBattleFameSource{{MemberType: 1}}, BossID: bossID, TowerID: towerID, TowerFloor: tc.floor,
 				StageType: gamestate.BattleStageAlchemist, EntryRole: gamestate.BattleEntrySolo}
 			cleared := []int{1}
 			if tc.floor == 3 {
@@ -144,7 +144,7 @@ func TestTowerSettlementReturnFreezesCommittedFloor(t *testing.T) {
 			if s.towerQuestProgress[towerID].Floor != tc.progress {
 				t.Fatal("wrong committed progress")
 			}
-			snapshot := result.ResultSnapshot(BoolInt(tc.clear), 1, 0, nil)
+			snapshot := result.ResultSnapshot(BoolInt(tc.clear), 1, nil)
 			if snapshot.Return == nil || snapshot.Return.BossID != bossID || snapshot.Return.TowerID != towerID ||
 				snapshot.Return.StageType != context.StageType || snapshot.Return.TowerFloor != tc.destination {
 				t.Fatalf("return differs from this settlement: %+v", snapshot.Return)
@@ -220,7 +220,7 @@ func TestClosedTowerBattleStartDoesNotChargeEntry(t *testing.T) {
 		towerQuestProgress: map[int]gamestate.TowerQuestProgress{7: {TowerID: 7, Floor: 1}},
 	}
 	helper := &s.playerProgression.Friends.HelperReward
-	helper.OtherPerPartner, helper.FriendPerPartner, helper.MaximumPartners = 5, 10, 3
+	helper.OtherPerPartner, helper.FriendPerPartner = 5, 10
 	_, _, started, err := s.BeginTeamBattle(TeamBattleEntry{
 		BossID: 123, EnemyTypes: []int8{0}, EntryRole: gamestate.BattleEntrySolo,
 		FameSeed: "solo-tower", FameSources: []TeamBattleFameSource{{MemberType: 1, LeaderFame: 1}},
@@ -278,7 +278,9 @@ func TestTowerClearRatingSettlementKeepsBestAndRejectsInvalidClear(t *testing.T)
 	}
 	profiles := []gamestate.TeamBattleRewardProfile{{BossID: bossID, TowerID: towerID, TowerFloor: 1,
 		ResultRewards: []gamestate.Reward{{Type: 4, Num: 5}}, FirstClearRewards: []gamestate.Reward{{Type: 10, Num: 50}}}}
-	start := func() { s.activeBattle = &TeamBattleContext{BossID: bossID, TowerID: towerID, TowerFloor: 1} }
+	start := func() {
+		s.activeBattle = &TeamBattleContext{FameSeed: "tower", FameSources: []TeamBattleFameSource{{MemberType: 1}}, BossID: bossID, TowerID: towerID, TowerFloor: 1}
+	}
 	for index, step := range []struct{ turns, old, flag, best int }{
 		{20, 0, 1, 20}, {16, 1, 1, 16}, {15, 1, 3, 15}, {11, 3, 3, 11},
 		{10, 3, 7, 10}, {1, 7, 7, 1}, {20, 7, 7, 1},
@@ -292,7 +294,7 @@ func TestTowerClearRatingSettlementKeepsBestAndRejectsInvalidClear(t *testing.T)
 			s.towerQuestProgress[towerID].BestClearTurns[1] != step.best || s.coinFree != 50 || s.gold != (index+1)*5 {
 			t.Fatalf("turns %d: rating=%+v progress=%+v gold=%d coin=%d", step.turns, result.ClearRating, s.towerQuestProgress[towerID], s.gold, s.coinFree)
 		}
-		encoded, err := json.Marshal(result.ResultSnapshot(1, 1, 0, nil))
+		encoded, err := json.Marshal(result.ResultSnapshot(1, 1, nil))
 		if err != nil {
 			t.Fatal(err)
 		}

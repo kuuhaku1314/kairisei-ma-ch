@@ -51,7 +51,7 @@ func TestAdminPictureIdentitySharesOneImageAcrossCardsAndMaterials(t *testing.T)
 	if err := os.WriteFile(filepath.Join(root, "card-picture", "10001234.webp"), []byte("webp"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	manifest := adminAssetManifest{CardImageIdentity: "picture_id", CatalogImageCoverage: map[string]adminCatalogImageCoverage{
+	manifest := adminAssetManifest{CatalogImageCoverage: map[string]adminCatalogImageCoverage{
 		"card": {}, "material": {}, "item": {}, "sphere": {}, "buddy": {},
 	}}
 	write := func() {
@@ -64,11 +64,8 @@ func TestAdminPictureIdentitySharesOneImageAcrossCardsAndMaterials(t *testing.T)
 		}
 	}
 	write()
-	catalog := []AdminCatalogEntry{{Kind: "card", RewardTypeID: 11, ImageURL: "/assets/card/11.webp"}, {Kind: "card", RewardTypeID: 12, ImageURL: "/assets/card/12.webp"}, {Kind: "material", RewardTypeID: 13, ImageURL: "/assets/card/13.webp"}}
+	catalog := []AdminCatalogEntry{{Kind: "card", RewardTypeID: 11, ImageURL: "/assets/card-picture/10001234.webp"}, {Kind: "card", RewardTypeID: 12, ImageURL: "/assets/card-picture/10001234.webp"}, {Kind: "material", RewardTypeID: 13, ImageURL: "/assets/card-picture/10001234.webp"}}
 	resources := map[int]adminCardResource{11: {PictID: 10001234, Ready: true}, 12: {PictID: 10001234, Ready: true}, 13: {PictID: 10001234, Ready: true}}
-	if _, err := applyAdminCatalogAssetCoverage(catalog, root); err == nil {
-		t.Fatal("picture identity accepted without source")
-	}
 	resolved, err := applyAdminCatalogAssetCoverage(catalog, root, resources)
 	if err != nil || len(resolved) != 3 {
 		t.Fatalf("shared image: %v %v", resolved, err)
@@ -78,9 +75,8 @@ func TestAdminPictureIdentitySharesOneImageAcrossCardsAndMaterials(t *testing.T)
 			t.Fatalf("unexpected image: %+v", entry)
 		}
 	}
-	manifest.CardImageIdentity = "unreviewed"
-	write()
+	resources[11] = adminCardResource{}
 	if _, err := applyAdminCatalogAssetCoverage(catalog, root, resources); err == nil {
-		t.Fatal("unknown image identity accepted")
+		t.Fatal("card without a picture identity accepted")
 	}
 }

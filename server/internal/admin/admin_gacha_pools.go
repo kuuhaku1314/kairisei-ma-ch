@@ -41,43 +41,14 @@ var gachaCoverPathPattern = regexp.MustCompile(`^gacha-covers/[0-9a-f]{64}\.(png
 var gachaCoverDecodeSlot = make(chan struct{}, 1)
 
 type customGachaPool struct {
-	GachaID     int            `json:"gacha_id"`
-	GroupID     int            `json:"group_id"`
-	TemplateID  int            `json:"template_id,omitempty"` // Read existing template-based pools only.
-	Name        string         `json:"name"`
-	Deleted     bool           `json:"deleted,omitempty"`
-	RuleVersion int            `json:"rule_version,omitempty"` // 0: legacy copy; 1: complete built-in rule template.
-	ArthurType  int8           `json:"arthur_type,omitempty"`  // Native profession picker: 1–4 professions, 5 mixed.
-	Rule        *gachaPoolRule `json:"rule,omitempty"`
+	gamestate.GachaProfile
+	Type    string `json:"type"`
+	Deleted bool   `json:"deleted,omitempty"`
 }
 
 type customGachaDocument struct {
 	Pools  []customGachaPool `json:"pools"`
 	NextID int               `json:"next_id,omitempty"`
-}
-
-// customGachaBase derives fixed rules from the recorded template. Legacy copies
-// omit promotions; version 1 deliberately keeps the complete selected rules.
-func customGachaBase(template gamestate.GachaProfile, pool customGachaPool) gamestate.GachaProfile {
-	base := gamestate.CloneGachas([]gamestate.GachaProfile{template})[0]
-	base.GachaID, base.GroupID = pool.GachaID, pool.GroupID
-	if pool.ArthurType != 0 {
-		base.ArthurType = pool.ArthurType
-	}
-	if pool.Name != "" {
-		base.Name = pool.Name
-	}
-	base.PublicationKey = "operator"
-	if pool.RuleVersion == 0 {
-		base.DailyFirstFree = false
-		base.Gifts = nil
-	}
-	base.PlayCount = 0
-	return base
-}
-
-func customGachaTemplateAllowed(template gamestate.GachaProfile) bool {
-	return len(template.RewardPool) == 0 && len(template.Steps) == 0 && template.GroupID > 0
 }
 
 // loadCustomGachas registers stored operator pools before configurations are built. Called once at start.
@@ -91,7 +62,10 @@ func (operations *Operations) loadCustomGachas() error {
 	if doc.Revision == 0 {
 		return nil
 	}
-	var stored customGachaDocument
+	var stored struct {
+		Pools  []json.RawMessage `json:"pools"`
+		NextID int               `json:"next_id,omitempty"`
+	}
 	if err := json.Unmarshal(doc.Payload, &stored); err != nil {
 		return fmt.Errorf("decode operator gacha pools: %w", err)
 	}
@@ -99,35 +73,38 @@ func (operations *Operations) loadCustomGachas() error {
 		return errors.New("invalid operator gacha ID cursor")
 	}
 	operations.customGachaNextID = stored.NextID
-	for _, pool := range stored.Pools {
+	converted := customGachaDocument{NextID: stored.NextID}
+	migrated := false
+	for _, raw := range stored.Pools {
+		pool, upgraded, err := operations.decodeStoredCustomGacha(raw)
+		if err != nil {
+			return err
+		}
 		if err := operations.registerCustomGacha(pool); err != nil {
 			return err
 		}
+		converted.Pools = append(converted.Pools, pool)
+		migrated = migrated || upgraded
+	}
+	if migrated {
+		updated, err := operations.storage.WriteDocument(customGachaKey, doc.Revision, converted, "gacha-custom-owned-migration")
+		if err != nil {
+			return fmt.Errorf("upgrade operator gacha definitions: %w", err)
+		}
+		operations.customGachaRevision = updated.Revision
 	}
 	return nil
 }
 
 func (operations *Operations) registerCustomGacha(pool customGachaPool) error {
-	var base gamestate.GachaProfile
-	if pool.Rule != nil {
-		if err := pool.Rule.validate(); err != nil {
-			return fmt.Errorf("operator gacha %d: %w", pool.GachaID, err)
-		}
-		base = pool.Rule.profile()
-		base.GachaID, base.GroupID, base.Name, base.ArthurType = pool.GachaID, pool.GroupID, pool.Name, pool.ArthurType
-		base.PublicationKey = "operator"
-	} else {
-		// Existing records retain the rules they were created with. New writes
-		// never create a template reference or introduce another rule version.
-		template, exists := operations.gachaBases[pool.TemplateID]
-		allowed := customGachaTemplateAllowed(template)
-		if pool.RuleVersion == 1 {
-			allowed = template.GroupID > 0 && template.PublicationKey != "operator" && template.UserSelectMax == 0 && template.CardNum > 0 && template.CardNumMax <= 100 && gamestate.ValidateGachaRules(template) == nil
-		}
-		if !exists || !allowed || pool.RuleVersion < 0 || pool.RuleVersion > 1 {
-			return fmt.Errorf("operator gacha %d references unavailable template %d", pool.GachaID, pool.TemplateID)
-		}
-		base = operations.filterGachaProfession(customGachaBase(template, pool))
+	if pool.GachaID < customGachaFirstID || pool.GroupID < customGachaFirstID || pool.Name == "" ||
+		pool.CardNum < 1 || pool.CardNum > 100 || pool.CardNumMax < pool.CardNum || pool.CardNumMax > 100 {
+		return fmt.Errorf("operator gacha %d has invalid identity or draw counts", pool.GachaID)
+	}
+	switch pool.Type {
+	case "standard", "select", "guaranteed", "unowned", "friend", "mixed", "step":
+	default:
+		return fmt.Errorf("operator gacha %d has an unknown rule type", pool.GachaID)
 	}
 	if pool.ArthurType < 0 || pool.ArthurType > 5 {
 		return errors.New("invalid operator gacha profession")
@@ -135,7 +112,8 @@ func (operations *Operations) registerCustomGacha(pool customGachaPool) error {
 	if _, taken := operations.gachaBases[pool.GachaID]; taken {
 		return fmt.Errorf("operator gacha %d collides with an existing pool", pool.GachaID)
 	}
-	operations.gachaBases[pool.GachaID] = base
+	pool.GachaProfile = gamestate.CloneGachas([]gamestate.GachaProfile{pool.GachaProfile})[0]
+	operations.gachaBases[pool.GachaID] = gamestate.CloneGachas([]gamestate.GachaProfile{pool.GachaProfile})[0]
 	operations.customGachas[pool.GachaID] = pool
 	operations.managedGachaGroups[pool.GroupID] = struct{}{}
 	operations.managedGachaGroupByID[pool.GachaID] = pool.GroupID
@@ -286,7 +264,10 @@ func (admin *API) createCustomGacha(w http.ResponseWriter, r *http.Request) {
 	}
 	for i, variant := range variants {
 		rule := body.Rules[variant.index]
-		pool := customGachaPool{GachaID: first + i, GroupID: first, Name: name, Rule: &rule, ArthurType: variant.profession}
+		profile := rule.profile()
+		profile.GachaID, profile.GroupID, profile.Name, profile.ArthurType = first+i, first, name, variant.profession
+		profile.PublicationKey = "operator"
+		pool := customGachaPool{GachaProfile: profile, Type: rule.Type}
 		if err := o.registerCustomGacha(pool); err != nil {
 			undo()
 			WriteAdminError(w, 400, err.Error())
@@ -505,8 +486,7 @@ func (admin *API) validateGachaCover(path string) error {
 	return nil
 }
 
-// customGachaPresets lists operator pool groups that are not deleted for the publication page, labelled
-// like the built-in group they were copied from.
+// customGachaPresets lists operator pool groups that are not deleted for the publication page.
 func (admin *API) customGachaPresets() []AdminGachaPreset {
 	o := admin.operations
 	result := []AdminGachaPreset{}
@@ -519,11 +499,6 @@ func (admin *API) customGachaPresets() []AdminGachaPreset {
 			continue
 		}
 		preset := AdminGachaPreset{PublicationKey: "operator", GroupID: pool.GroupID, GachaIDs: []int{pool.GachaID}}
-		for _, template := range admin.gachaPresets {
-			if slices.Contains(template.GachaIDs, pool.TemplateID) {
-				preset.BannerKey, preset.ImageURL, preset.PaymentItemID, preset.PaymentItem, preset.DrawCount = template.BannerKey, template.ImageURL, template.PaymentItemID, template.PaymentItem, template.DrawCount
-			}
-		}
 		base := o.gachaBases[pool.GachaID]
 		preset.Name, preset.Price, preset.CardCount = base.Name, base.Price, len(base.CardIDs)
 		preset.CategoryNum = base.CategoryNum

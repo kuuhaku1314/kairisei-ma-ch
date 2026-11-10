@@ -16,6 +16,7 @@ import (
 
 	"kairisei.local/server/internal/accountstore"
 	adminapi "kairisei.local/server/internal/admin"
+	"kairisei.local/server/internal/gamestate"
 	"kairisei.local/server/internal/masterdata"
 	"kairisei.local/server/internal/testfixture"
 )
@@ -51,7 +52,7 @@ func probeCompleteRuntimePurchase(t *testing.T, handler http.Handler, savePath, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	state.Onboarding.Step = masterdata.OnboardingStepCount
+	state.Onboarding.Step = gamestate.OnboardingStepCount
 	state.User.Coin, state.User.CoinFree, state.User.Gold = 0, 0, 0
 	state.User.CardMax = 100
 	if err := accounts.PersistState(identity.UserID, state); err != nil {

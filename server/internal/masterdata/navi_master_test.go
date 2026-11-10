@@ -26,7 +26,7 @@ func TestUserDerivedMOCNavigatorsUseNativeCatalogWithoutGrantingOwnership(t *tes
 		id := 71 + i
 		rows = append(rows, map[string]any{
 			"navi_id": id, "name": folder, "pict_id": 50000000 + id*1000,
-			"item_pict_id": 92000000 + id, "presentation_kind": 0,
+			"item_pict_id":  92000000 + id,
 			"live2d_folder": folder, "live2d_bundle": "live2d/live2d_" + folder + ".dat",
 			"voice_id": id, "client_published": true,
 		})
@@ -71,11 +71,6 @@ func TestUserDerivedMOCNavigatorsUseNativeCatalogWithoutGrantingOwnership(t *tes
 			t.Fatalf("accepted invalid navigator master: %s", reason)
 		}
 	}
-	for _, kind := range []int{1, 2} {
-		row["presentation_kind"] = kind
-		reject("unsupported presentation kind")
-	}
-	row["presentation_kind"] = 0
 	bundle := row["live2d_bundle"]
 	row["live2d_bundle"] = "live2d/live2d_wrong_owner.dat"
 	reject("bundle owner differs from the navigator folder")

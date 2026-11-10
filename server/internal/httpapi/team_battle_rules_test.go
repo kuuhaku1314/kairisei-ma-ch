@@ -142,7 +142,7 @@ func TestSoloVictoryDoesNotRequireEnemyBodyDeath(t *testing.T) {
 		state.ActiveTeamBattle = &gamestate.TeamBattleActiveState{BossID: 30010102, BattleEnemyTypes: []int8{1}, FameSeed: "solo:test", FameSources: []gamestate.TeamBattleFameSourceState{{MemberType: 1, LeaderFame: 1}}}
 		state.TeamBattleRewards = []gamestate.TeamBattleRewardProfile{{BossID: 30010102}}
 		helper := &state.PlayerProgressionPolicy.Friends.HelperReward
-		helper.OtherPerPartner, helper.FriendPerPartner, helper.MaximumPartners = 5, 10, 3
+		helper.OtherPerPartner, helper.FriendPerPartner = 5, 10
 	})
 	a := &API{account: s, initialState: gamestate.State{}, logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	response := httptest.NewRecorder()

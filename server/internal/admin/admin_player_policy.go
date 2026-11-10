@@ -88,19 +88,6 @@ func (o *Operations) loadPlayerPolicy() error {
 		if err := json.Unmarshal(doc.Payload, &value); err != nil {
 			return err
 		}
-		// Retire the old dedicated event-page advertisement even when an
-		// operator saved it before the shared carousel gained score targets.
-		value.HomeBanners.Items = slices.DeleteFunc(value.HomeBanners.Items, func(row operations.HomeBannerEntry) bool {
-			return row.Target == "eventpage"
-		})
-		// The pre-release per-draw targets are retired. Keep the artwork available
-		// for reselection in Admin and leave those rows disabled until then.
-		for i := range value.HomeBanners.Items {
-			row := &value.HomeBanners.Items[i]
-			if row.Target == "gacha" {
-				row.Target, row.TargetID, row.Enabled = "none", 0, false
-			}
-		}
 		// Stored policy predates newly published navigators after a resource
 		// upgrade. Complete only missing IDs; saved prices and switches win.
 		// Keep duplicates/unknown IDs intact so normal validation rejects them.

@@ -98,7 +98,7 @@ func (a *API) settleMultiplayerBattle(completed multiplayer.CompletedBattle) err
 		return err
 	}
 	isClear := game.BoolInt(completed.EndType != 2)
-	snapshot := settlement.ResultSnapshot(isClear, selfMemberType, completed.SettlementPlan.FameBonus.BonusFameAdd, partners)
+	snapshot := settlement.ResultSnapshot(isClear, selfMemberType, partners)
 	encodedSnapshot, err := json.Marshal(snapshot)
 	if err != nil {
 		return errors.New("encode multiplayer settlement snapshot")

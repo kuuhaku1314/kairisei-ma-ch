@@ -73,11 +73,11 @@ func ValidateStageQuestConfiguration(content json.RawMessage) error {
 				TalkInfo        []any `json:"talk_info"`
 				RaidBoss        []struct {
 					BossGroup struct {
-						BossGroupID      int    `json:"boss_groupid"`
-						StageType        int8   `json:"stage_type"`
-						Name             string `json:"name"`
-						PictID           int    `json:"pictid"`
-						StageQuestAreaID int    `json:"stage_quest_areaid"`
+						BossGroupID      int                       `json:"boss_groupid"`
+						StageType        gamestate.BattleStageType `json:"stage_type"`
+						Name             string                    `json:"name"`
+						PictID           int                       `json:"pictid"`
+						StageQuestAreaID int                       `json:"stage_quest_areaid"`
 						Bosses           []struct {
 							BossID        int             `json:"bossid"`
 							Difficulty    string          `json:"difficulty"`
@@ -123,7 +123,7 @@ func ValidateStageQuestConfiguration(content json.RawMessage) error {
 		stageIDs[stage.StageID] = struct{}{}
 		for _, raid := range stage.RaidBoss {
 			group := raid.BossGroup
-			if group.BossGroupID <= 0 || (group.StageType != 11 && group.StageType != 15) ||
+			if group.BossGroupID <= 0 || (group.StageType != gamestate.BattleStageStageQuest && group.StageType != gamestate.BattleStageMainStageQuest) ||
 				group.Name == "" || group.PictID <= 0 ||
 				group.StageQuestAreaID != stageQuest.AreaID || len(group.Bosses) == 0 ||
 				group.Stories == nil || group.ButtonStr1 == nil || group.ButtonStr2 == nil ||

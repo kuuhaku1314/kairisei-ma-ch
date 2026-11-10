@@ -219,8 +219,6 @@ type Account struct {
 	teamBattleSoloReceipts      map[string]gamestate.TeamBattleSoloResultReceipt
 	lastExploreResultReceipt    *gamestate.ExploreResultReceipt
 	pvpResultReceipts           map[int]gamestate.PVPResultReceipt
-	teamBattleFameBonus         gamestate.TeamBattleFameBonusPolicy
-	teamBattleHostBonus         gamestate.TeamBattleHostBonusPolicy
 	towerQuestProfiles          map[int]gamestate.TowerQuestProfile
 	towerAdmission              TowerAdmission
 	towerQuestProgress          map[int]gamestate.TowerQuestProgress
@@ -256,20 +254,6 @@ func CardsFromState(cards []gamestate.Card, slot int) []CardInfo {
 		}
 	}
 	return result
-}
-
-func cloneTeamBattleFameBonusPolicy(
-	policy gamestate.TeamBattleFameBonusPolicy,
-) gamestate.TeamBattleFameBonusPolicy {
-	policy.EligibleRewardTypes = append([]int(nil), policy.EligibleRewardTypes...)
-	return policy
-}
-
-func cloneTeamBattleHostBonusPolicy(
-	policy gamestate.TeamBattleHostBonusPolicy,
-) gamestate.TeamBattleHostBonusPolicy {
-	policy.EligibleRewardTypes = append([]int(nil), policy.EligibleRewardTypes...)
-	return policy
 }
 
 func cloneLoginBonusPolicy(policy gamestate.LoginBonusPolicy) gamestate.LoginBonusPolicy {
@@ -428,8 +412,6 @@ func New(state gamestate.State, options ...AccountOption) (*Account, error) {
 		cardProgression:             state.CardProgressionPolicy,
 		alchemistStarter:            state.AlchemistStarterDeck,
 		cardDevelopmentPolicy:       state.CardDevelopmentPolicy,
-		teamBattleFameBonus:         cloneTeamBattleFameBonusPolicy(state.TeamBattleFameBonusPolicy),
-		teamBattleHostBonus:         cloneTeamBattleHostBonusPolicy(state.TeamBattleHostBonusPolicy),
 		stive:                       state.CardDevelopment.Stive,
 		cardMax:                     state.User.CardMax,
 		cardContainerMax:            state.User.CardContainerMax,

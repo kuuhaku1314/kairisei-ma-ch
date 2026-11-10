@@ -1,7 +1,6 @@
 package masterdata
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -41,7 +40,6 @@ func isBattleRetiredSeedGroupID(groupID int) bool {
 }
 
 type BattleRuntimeMaster struct {
-	LocalProfile           json.RawMessage                      `json:"local_profile"`
 	ExcludedBossIDs        []int                                `json:"excluded_existing_boss_ids"`
 	DeduplicatedFamilies   []battleDeduplicatedFamily           `json:"deduplicated_families"`
 	Groups                 []json.RawMessage                    `json:"groups"`
@@ -80,11 +78,11 @@ func (rules battleEntryRules) valid() bool {
 }
 
 type BattleGroupIdentity struct {
-	StageType int    `json:"1"`
-	GroupID   int    `json:"0"`
-	IconIndex int    `json:"3"`
-	Name      string `json:"4"`
-	PictureID int    `json:"7"`
+	StageType gamestate.BattleStageType `json:"1"`
+	GroupID   int                       `json:"0"`
+	IconIndex int                       `json:"3"`
+	Name      string                    `json:"4"`
+	PictureID int                       `json:"7"`
 	Bosses    []struct {
 		battleEntryRules
 		BossID      int    `json:"0"`
@@ -170,34 +168,12 @@ func LoadBattleRuntimeMaster(masterPath string) (BattleRuntimeMaster, error) {
 }
 
 func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
-	if len(master.LocalProfile) == 0 || bytes.Equal(master.LocalProfile, []byte("null")) ||
-		len(master.Groups) == 0 || len(master.Replays) == 0 ||
+	if len(master.Groups) == 0 || len(master.Replays) == 0 ||
 		len(master.Rewards) == 0 || len(master.Replays) != len(master.Rewards) ||
 		len(master.Recommendations) == 0 || len(master.PastBossGroups) == 0 ||
 		len(master.ScheduleGroupIDs) == 0 || len(master.ScheduleGroupIDs) > 50 ||
 		len(master.TowerProfiles) == 0 {
 		return errors.New("CN battle runtime master is incomplete")
-	}
-	var localProfile struct {
-		RepeatableRewardPolicy struct {
-			FameBonus gamestate.TeamBattleFameBonusPolicy `json:"fame_bonus"`
-			HostBonus gamestate.TeamBattleHostBonusPolicy `json:"host_bonus"`
-		} `json:"repeatable_reward_policy"`
-	}
-	if json.Unmarshal(master.LocalProfile, &localProfile) != nil {
-		return errors.New("CN battle schedule local profile is invalid")
-	}
-	fameBonus := localProfile.RepeatableRewardPolicy.FameBonus
-	if fameBonus.ChanceMaximum != 100 ||
-		fameBonus.FullFameThreshold != 100 || fameBonus.FullFameRewardCount != 2 ||
-		fameBonus.BonusFameAdd != 0 ||
-		!slices.Equal(fameBonus.EligibleRewardTypes, []int{6, 8, 13, 15, 19}) {
-		return errors.New("CN battle fame-bonus local profile is invalid")
-	}
-	hostBonus := localProfile.RepeatableRewardPolicy.HostBonus
-	if hostBonus.RewardCount != 1 || hostBonus.RewardKind != 5 ||
-		!slices.Equal(hostBonus.EligibleRewardTypes, []int{6, 8, 13, 15, 19}) {
-		return errors.New("CN battle host-bonus local profile is invalid")
 	}
 	groupIDs := make(map[int]struct{}, len(master.Groups))
 	bossIDs := make(map[int]struct{}, len(master.Replays))
@@ -265,7 +241,7 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 			}
 			validRewardCards = validRewardCards && (isMaterialGroup || len(rewardCardIDs) == 1)
 			if boss.BossID <= 0 || !validDifficulty ||
-				(group.StageType == 13) != scorePolicies[boss.BossID] ||
+				(group.StageType == gamestate.BattleStageScore) != scorePolicies[boss.BossID] ||
 				boss.IsModel < 0 || boss.IsModel > 1 ||
 				boss.IsDailyRank != 1 || !boss.battleEntryRules.valid() ||
 				boss.BPUse <= 0 || boss.BPUseHalf != (boss.BPUse+1)/2 ||
@@ -595,11 +571,6 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 			return fmt.Errorf("CN battle runtime boss %d has no replay", bossID)
 		}
 	}
-	for _, profile := range master.Rewards {
-		if err := gamestate.ValidateTeamBattleScorePolicy(profile.ScorePolicy); err != nil {
-			return err
-		}
-	}
 	return validateBattleOwnDeckVariants(master)
 }
 
@@ -650,22 +621,6 @@ func ApplyBattleRuntimeMaster(state *gamestate.State, master BattleRuntimeMaster
 	if err != nil {
 		return err
 	}
-	var localProfile struct {
-		RepeatableRewardPolicy struct {
-			FameBonus gamestate.TeamBattleFameBonusPolicy `json:"fame_bonus"`
-			HostBonus gamestate.TeamBattleHostBonusPolicy `json:"host_bonus"`
-		} `json:"repeatable_reward_policy"`
-	}
-	if err := json.Unmarshal(master.LocalProfile, &localProfile); err != nil {
-		return errors.New("decode CN battle local profile")
-	}
-	fameBonus := localProfile.RepeatableRewardPolicy.FameBonus
-	fameBonus.EligibleRewardTypes = append([]int(nil), fameBonus.EligibleRewardTypes...)
-	state.TeamBattleFameBonusPolicy = fameBonus
-	hostBonus := localProfile.RepeatableRewardPolicy.HostBonus
-	hostBonus.EligibleRewardTypes = append([]int(nil), hostBonus.EligibleRewardTypes...)
-	state.TeamBattleHostBonusPolicy = hostBonus
-
 	var solo map[string]json.RawMessage
 	if json.Unmarshal(state.TeamBattleSolo, &solo) != nil {
 		return errors.New("decode persisted CN TeamBattleSoloShow")

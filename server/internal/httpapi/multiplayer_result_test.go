@@ -44,7 +44,7 @@ func TestMultiplayerResultUsesEveryWaveAndReplaysReceipt(t *testing.T) {
 		state.TeamBattleSolo = json.RawMessage(`{"9":[],"10":[{"0":300101,"9":0,"10":[{"0":30010102,"5":15,"10":0,"half_bp":8}]}],"11":[],"12":[]}`)
 		state.TeamBattleStartReceipts = []gamestate.TeamBattleStartReceipt{{RoomID: 123, BossID: boss, BPUse: 15}}
 		helper := &state.PlayerProgressionPolicy.Friends.HelperReward
-		helper.OtherPerPartner, helper.FriendPerPartner, helper.MaximumPartners = 5, 10, 3
+		helper.OtherPerPartner, helper.FriendPerPartner = 5, 10
 	})
 	runtime := gamestate.State{TeamBattleReplays: []gamestate.TeamBattleReplay{replay}, TeamBattleRewards: []gamestate.TeamBattleRewardProfile{profile}}
 	runtime.User.UserID = 1001
@@ -304,7 +304,7 @@ func TestMultiplayerCompletionSeparatesFallbackIDsFromAccountRelationships(t *te
 			state.TeamBattleSolo = json.RawMessage(`{"9":[],"10":[{"0":300101,"9":0,"10":[{"0":30010102,"5":15,"10":0,"half_bp":8}]}],"11":[],"12":[]}`)
 			state.TeamBattleStartReceipts = []gamestate.TeamBattleStartReceipt{{RoomID: roomID, BossID: boss, BPUse: 15}}
 			helper := &state.PlayerProgressionPolicy.Friends.HelperReward
-			helper.OtherPerPartner, helper.FriendPerPartner, helper.MaximumPartners = 5, 10, 3
+			helper.OtherPerPartner, helper.FriendPerPartner = 5, 10
 		})
 		runtime, err := accounts.LoadState(claimant)
 		if err != nil {

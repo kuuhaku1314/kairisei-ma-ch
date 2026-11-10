@@ -52,7 +52,7 @@ func TestSettlementOverflowPreservesProgressAndClaimableReward(t *testing.T) {
 			switch kind {
 			case "battle":
 				s.teamBattleSolo = battleCatalogFixture(t, json.RawMessage(`{"9":[],"10":[{"0":100001,"9":0,"10":[{"0":10000101,"10":0}]}],"11":[],"12":[]}`))
-				s.activeBattle = &TeamBattleContext{BossID: 10000101}
+				s.activeBattle = &TeamBattleContext{FameSeed: "delivery", FameSources: []TeamBattleFameSource{{MemberType: 1}}, BossID: 10000101}
 				profile := gamestate.TeamBattleRewardProfile{BossID: 10000101,
 					ResultRewards:     []gamestate.Reward{{Type: 4, Num: 5}, reward},
 					FirstClearRewards: []gamestate.Reward{{Type: 10, Num: 50}},

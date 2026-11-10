@@ -219,13 +219,13 @@ func (a *API) issueTeamBattleRoom(issue teamBattleRoomIssue) (multiplayer.Creden
 		}
 	}
 	return a.multiplayer.IssueCreate(multiplayer.RoomSpec{
-		SettlementPlan:     gamestate.TeamBattleSettlementPlan{Profile: rewardProfile, EnemyTypes: teamBattleEnemyTypes(battles), FameBonus: a.initialState.TeamBattleFameBonusPolicy, HostBonus: a.initialState.TeamBattleHostBonusPolicy},
+		SettlementPlan:     gamestate.TeamBattleSettlementPlan{Profile: rewardProfile, EnemyTypes: teamBattleEnemyTypes(battles)},
 		ScorePolicy:        rewardProfile.ScorePolicy,
 		StageType:          rules.StageType,
 		Battles:            battles,
 		DropPlan:           dropPlan,
 		FameRewardsSet:     true,
-		FameRewards:        game.TeamBattleFamePool(rewardProfile, a.initialState.TeamBattleFameBonusPolicy),
+		FameRewards:        game.TeamBattleFamePool(rewardProfile),
 		BattlePointUse:     bpUse,
 		ContinueAllowed:    rules.Continue != 0,
 		BossID:             issue.BossID,

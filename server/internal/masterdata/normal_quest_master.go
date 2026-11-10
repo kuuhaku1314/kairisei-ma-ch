@@ -26,15 +26,6 @@ type NormalQuestRuntimeMaster struct {
 	Areas                    []json.RawMessage                             `json:"areas"`
 	Replays                  []gamestate.TeamBattleReplay                  `json:"replays"`
 	Rewards                  []gamestate.TeamBattleRewardProfile           `json:"rewards"`
-	Summary                  struct {
-		Areas                    int            `json:"areas"`
-		EntryGroups              int            `json:"entry_groups"`
-		Quests                   int            `json:"quests"`
-		OrderedSegments          int            `json:"ordered_segments"`
-		SelectedOfficialParties  int            `json:"selected_official_parties"`
-		RewardContexts           int            `json:"reward_contexts"`
-		SegmentCountDistribution map[string]int `json:"segment_count_distribution"`
-	} `json:"summary"`
 }
 
 type normalQuestAreaIdentity struct {
@@ -111,7 +102,7 @@ func validateNormalQuestRuntimeMaster(master NormalQuestRuntimeMaster) error {
 		var group GateTeamBattleGroup
 		if err := json.Unmarshal(raw, &group); err != nil ||
 			group.GroupID < normalQuestAreaMin || group.GroupID > normalQuestAreaMax ||
-			group.StageQuestAreaID != group.GroupID || group.StageType != 0 ||
+			group.StageQuestAreaID != group.GroupID || group.StageType != gamestate.BattleStageNormal ||
 			group.IsReleased != 1 || group.Name == "" || group.PictID <= 0 ||
 			len(group.Bosses) == 0 || group.Stories == nil ||
 			group.ButtonStrings1 == nil || group.ButtonStrings2 == nil {
@@ -182,7 +173,6 @@ func validateNormalQuestRuntimeMaster(master NormalQuestRuntimeMaster) error {
 
 	replayIDs := make(map[int]struct{}, len(master.Replays))
 	selectedParties := make(map[int]struct{})
-	segmentCounts := make(map[string]int)
 	orderedSegments := 0
 	for _, replay := range master.Replays {
 		entry, exists := entryBosses[replay.BossID]
@@ -208,7 +198,6 @@ func validateNormalQuestRuntimeMaster(master NormalQuestRuntimeMaster) error {
 			selectedParties[segment.EnemyPartyID] = struct{}{}
 			orderedSegments++
 		}
-		segmentCounts[fmt.Sprint(len(replay.Battles))]++
 	}
 	if len(replayIDs) != len(entryBosses) || len(selectedParties) != 228 || orderedSegments != 228 {
 		return errors.New("CN normal quest replay segment coverage is incomplete")
@@ -241,20 +230,6 @@ func validateNormalQuestRuntimeMaster(master NormalQuestRuntimeMaster) error {
 			if _, exists := rewardContexts[key]; !exists {
 				return fmt.Errorf("CN normal quest reward context %v is absent", key)
 			}
-		}
-	}
-	if master.Summary.Areas != len(master.Areas) ||
-		master.Summary.EntryGroups != len(master.EntryGroups) ||
-		master.Summary.Quests != len(master.Replays) ||
-		master.Summary.OrderedSegments != orderedSegments ||
-		master.Summary.SelectedOfficialParties != len(selectedParties) ||
-		master.Summary.RewardContexts != len(master.Rewards) ||
-		len(master.Summary.SegmentCountDistribution) != len(segmentCounts) {
-		return errors.New("CN normal quest runtime summary is inconsistent")
-	}
-	for count, expected := range segmentCounts {
-		if master.Summary.SegmentCountDistribution[count] != expected {
-			return fmt.Errorf("CN normal quest segment-count summary %s is inconsistent", count)
 		}
 	}
 	return nil

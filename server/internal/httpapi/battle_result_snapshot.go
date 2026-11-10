@@ -77,7 +77,7 @@ func (a *API) teamBattleResultPayload(snapshot game.TeamBattleResultSnapshot, mu
 		"is_score_reward_in_present_box":  game.BoolInt(snapshot.Score.InPresentBox),
 		"is_rookie_bonus":                 0,
 		"unlock_notice":                   []any{},
-		"bonus_fame_add":                  snapshot.BonusFameAdd,
+		"bonus_fame_add":                  0,
 		// Permanent StageQuest routes are not suppression/world-boss results.
 		"stage_quest":        []any{},
 		"scene_transition":   teamBattleSceneTransition(snapshot.Return),

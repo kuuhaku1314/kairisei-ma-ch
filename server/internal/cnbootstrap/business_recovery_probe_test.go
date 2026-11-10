@@ -40,7 +40,7 @@ func auditCompleteBusinessRecovery(t *testing.T, handler http.Handler, savePath,
 	if err != nil {
 		t.Fatal(err)
 	}
-	state.Onboarding.Step = masterdata.OnboardingStepCount
+	state.Onboarding.Step = gamestate.OnboardingStepCount
 	state.User.Gold = 1000000
 	state.User.ArthurRank = 15
 	for _, spec := range []struct {
@@ -190,7 +190,7 @@ func auditCompleteBusinessRecovery(t *testing.T, handler http.Handler, savePath,
 	if !found {
 		t.Fatal("base card vanished")
 	}
-	call("/GachaPlay2", map[string]any{"0": 90000100, "1": 3, "2": "isolated-recovery-probe", "4": 0}, -3100)
+	call("/GachaPlay2", map[string]any{"0": gamestate.OnboardingMultiGachaID, "1": 3, "2": "isolated-recovery-probe", "4": 0}, -3100)
 	first := state.Engagement.Presents[0].PresentID
 	call("/PresentBoxDelete", map[string]int64{"presentid": first}, -1)
 	wantPresent = 1

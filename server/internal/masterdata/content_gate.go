@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+
+	"kairisei.local/server/internal/gamestate"
 )
 
 type gateTeamBattleBoss struct {
@@ -25,16 +27,16 @@ type gateTeamBattleBoss struct {
 }
 
 type GateTeamBattleGroup struct {
-	GroupID          int                  `json:"0"`
-	StageType        int                  `json:"1"`
-	IsReleased       int                  `json:"3"`
-	Name             string               `json:"4"`
-	PictID           int                  `json:"7"`
-	StageQuestAreaID int                  `json:"9"`
-	Bosses           []gateTeamBattleBoss `json:"10"`
-	Stories          []json.RawMessage    `json:"11"`
-	ButtonStrings1   []string             `json:"12"`
-	ButtonStrings2   []string             `json:"13"`
+	GroupID          int                       `json:"0"`
+	StageType        gamestate.BattleStageType `json:"1"`
+	IsReleased       int                       `json:"3"`
+	Name             string                    `json:"4"`
+	PictID           int                       `json:"7"`
+	StageQuestAreaID int                       `json:"9"`
+	Bosses           []gateTeamBattleBoss      `json:"10"`
+	Stories          []json.RawMessage         `json:"11"`
+	ButtonStrings1   []string                  `json:"12"`
+	ButtonStrings2   []string                  `json:"13"`
 }
 
 func ValidateTeamBattleBossGate(boss gateTeamBattleBoss) error {

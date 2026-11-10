@@ -161,9 +161,8 @@ if (Test-Path -LiteralPath $statePath -PathType Leaf) {
                 $oldProcessPath.Equals($serverPath, [StringComparison]::OrdinalIgnoreCase)) {
                 if ($oldState.port -ne $Port -or $oldState.listen_host -ne $ListenHost -or
                     $oldState.advertise_host -ne $AdvertiseHost -or
-                    ($null -ne $resourceInputs -and
-                     ($oldState.PSObject.Properties.Name -notcontains 'resource_set_sha256' -or
-                      $oldState.resource_set_sha256 -ne $resourceSetSHA256)) -or
+                    ($oldState.PSObject.Properties.Name -notcontains 'resource_set_sha256' -or
+                     $oldState.resource_set_sha256 -ne $resourceSetSHA256) -or
                     ($oldState.PSObject.Properties.Name -notcontains 'platform_contents_sha256') -or
                     ([string]$oldState.platform_contents_sha256 -ne $platformContentsSHA256)) {
                     throw 'Running package uses different resources or network settings; stop it before restarting.'

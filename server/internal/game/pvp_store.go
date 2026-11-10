@@ -14,9 +14,6 @@ import (
 func pvpChallengeDay(now time.Time) int64 { return (now.Unix() + 8*3600) / 86400 }
 
 func (s *Account) RefreshPVPChallenges(config PVPConfig, now time.Time, base gamestate.State, persist StatePersister) error {
-	if config.ChallengeMax <= 0 {
-		return nil // no PVP profile is configured
-	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	day := pvpChallengeDay(now)
@@ -105,15 +102,9 @@ func (s *Account) validatePVPDefenseLocked(decks []gamestate.PVPDeckSelection) (
 func (s *Account) BeginPVP(battleType int, opponentUserID int, decks []gamestate.PVPDeckSelection, config PVPConfig, now time.Time) (gamestate.PVPMatch, int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if source := config.ResultSource; source != PVPResultFixedPolicy && source != PVPResultRecordedReplay {
-		return gamestate.PVPMatch{}, s.pvp.Challenge, errors.New("PVP result source is unavailable")
-	}
 	canonical, err := s.validatePVPDefenseLocked(decks)
 	if err != nil {
 		return gamestate.PVPMatch{}, s.pvp.Challenge, fmt.Errorf("%w: %v", ErrInvalidPVPDeck, err)
-	}
-	if s.pvp.ActiveMatch != nil {
-		return gamestate.PVPMatch{}, s.pvp.Challenge, errors.New("当前竞技场对战尚未结束。")
 	}
 	if opponentUserID <= 0 {
 		return gamestate.PVPMatch{}, s.pvp.Challenge, errors.New("PVP opponent is invalid")
@@ -147,9 +138,8 @@ func (s *Account) BeginPVP(battleType int, opponentUserID int, decks []gamestate
 		CompletedAtUnix: now.Unix(),
 	}
 	s.pvp.NextBattleID++
-	// This endpoint returns an already-decided local-policy/recorded result.
-	// Native playback does not make that result an engine-computed winner.
-	// The stock client may never send End, so it must not be a later grant.
+	// Start commits the result consumed by PvPMgr.PvPEnd, including skip and
+	// replay. PvpEnd only acknowledges that result and cannot grant it again.
 	s.pvpPoint = match.PointAfter
 	s.markMissionMetricLocked(gamestate.MissionPVPRank)
 	s.recordMissionEventLocked(missionEvent{kind: gamestate.MissionPVPPlayed}, now)
@@ -157,71 +147,20 @@ func (s *Account) BeginPVP(battleType int, opponentUserID int, decks []gamestate
 	if len(s.pvp.History) > pvpHistoryLimit {
 		s.pvp.History = append([]gamestate.PVPMatch(nil), s.pvp.History[len(s.pvp.History)-pvpHistoryLimit:]...)
 	}
-	s.pvp.ActiveMatch = nil
 	return match, s.pvp.Challenge, nil
 }
 
-func (s *Account) FinishPVP(battleID int, isWin bool, isRetire bool, config PVPConfig, now time.Time) (gamestate.PVPMatch, int, int, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.pvp.ActiveMatch == nil || s.pvp.ActiveMatch.BattleID != battleID {
-		for index := len(s.pvp.History) - 1; index >= 0; index-- {
-			match := s.pvp.History[index]
-			if match.BattleID == battleID {
-				if match.ExpectedWin != (isWin && !isRetire) || match.Retired != isRetire {
-					return gamestate.PVPMatch{}, s.pvp.Challenge, 0, errors.New("PVP report conflicts with the committed result")
-				}
-				return match, s.pvp.Challenge, BoolInt(match.ExpectedWin), nil
+func (s *Account) FinishPVP(battleID int, isWin bool, isRetire bool) (gamestate.PVPMatch, int, int, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for index := len(s.pvp.History) - 1; index >= 0; index-- {
+		match := s.pvp.History[index]
+		if match.BattleID == battleID {
+			if match.ExpectedWin != (isWin && !isRetire) || match.Retired != isRetire {
+				return gamestate.PVPMatch{}, s.pvp.Challenge, 0, errors.New("PVP report conflicts with the committed result")
 			}
-		}
-		return gamestate.PVPMatch{}, s.pvp.Challenge, 0, errors.New("PVP settlement does not match the active battle")
-	}
-	match := *s.pvp.ActiveMatch
-	if config.EngineMode == PvpEngineServerReplay && !isRetire && isWin != match.ExpectedWin {
-		return gamestate.PVPMatch{}, s.pvp.Challenge, 0, errors.New("PVP client result differs from the authoritative replay")
-	}
-	if config.EngineMode == PvpEngineClientNativeLocal {
-		match = settleNativePVPMatch(match, isWin, isRetire, config, now)
-	}
-	result := BoolInt(match.ExpectedWin)
-	if isRetire && config.EngineMode != PvpEngineClientNativeLocal {
-		result = 0
-		match.ExpectedWin = false
-		match.Retired = true
-		match.PointAfter = match.PointBefore
-		if match.BattleType == 1 {
-			match.PointAfter += config.RankLosePoint
-			if match.PointAfter < 0 {
-				match.PointAfter = 0
-			}
+			return match, s.pvp.Challenge, BoolInt(match.ExpectedWin), nil
 		}
 	}
-	match.CompletedAtUnix = now.Unix()
-	s.pvpPoint = match.PointAfter
-	s.markMissionMetricLocked(gamestate.MissionPVPRank)
-	s.recordMissionEventLocked(missionEvent{kind: gamestate.MissionPVPPlayed}, now)
-	s.pvp.History = append(s.pvp.History, match)
-	if len(s.pvp.History) > pvpHistoryLimit {
-		s.pvp.History = append([]gamestate.PVPMatch(nil), s.pvp.History[len(s.pvp.History)-pvpHistoryLimit:]...)
-	}
-	s.pvp.ActiveMatch = nil
-	return match, s.pvp.Challenge, result, nil
-}
-
-func settleNativePVPMatch(match gamestate.PVPMatch, isWin bool, isRetire bool, config PVPConfig, now time.Time) gamestate.PVPMatch {
-	match.ExpectedWin = isWin && !isRetire
-	match.Retired = isRetire
-	match.PointAfter = match.PointBefore
-	if match.BattleType == 1 {
-		if match.ExpectedWin {
-			match.PointAfter += config.RankWinPoint
-		} else {
-			match.PointAfter += config.RankLosePoint
-			if match.PointAfter < 0 {
-				match.PointAfter = 0
-			}
-		}
-	}
-	match.CompletedAtUnix = now.Unix()
-	return match
+	return gamestate.PVPMatch{}, s.pvp.Challenge, 0, errors.New("PVP report does not match a committed battle")
 }

@@ -42,10 +42,9 @@ func (app *application) router() chi.Router {
 	router.Get("/healthz", func(writer http.ResponseWriter, _ *http.Request) {
 		writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_ = json.NewEncoder(writer).Encode(map[string]any{
-			"state":          "PASS",
-			"client_profile": "cn602-bootstrap",
-			"battle_rooms":   app.config.Multiplayer.RoomCount(),
-			"battle_port":    app.config.Network.BattleSV.Port,
+			"state":        "PASS",
+			"battle_rooms": app.config.Multiplayer.RoomCount(),
+			"battle_port":  app.config.Network.BattleSV.Port,
 		})
 	})
 	for _, name := range []string{"default", "apple-review", "qa"} {
@@ -163,7 +162,7 @@ func (app *application) handler() (*cnDeploymentHandler, error) {
 		Logger: app.config.Logger, Progression: app.progression,
 		NetworkMetrics: app.config.NetworkMetrics,
 		RuntimeLogPath: app.config.AdminLogFile,
-		GachaBanners:   app.resources.gachaBanners(), AssetMaps: []string{app.config.Resources.AssetMap},
+		GachaBanners:   app.resources.gachaBanners(), AssetMap: app.config.Resources.AssetMap,
 		GachaCoverDir: app.gachaCoverDir(), HomeBannerDir: app.homeBannerDir(), ImageStorage: app.config.ImageStorage,
 	})
 	if err != nil {

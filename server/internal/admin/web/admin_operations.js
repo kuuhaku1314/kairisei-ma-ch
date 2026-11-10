@@ -142,13 +142,11 @@ function renderPoolCopyTargets() {
       .join('') || '<span class="hint">没有其他普通卡牌分池</span>';
 }
 // A 混合职业 variant can hand each profession its cards. Targets are the profession variants of the same
-// draw method: variants created from one source share its template; built-in pools compare draw count and cost.
+// draw method: operator variants share their rule; built-in pools compare draw count and cost.
 const poolDrawKey = (v) =>
   v.rule
     ? `r${v.rule.type}:${v.rule.draw_count}`
-    : v.template_id
-      ? `t${v.template_id}`
-      : `n${v.base.card_num}:${v.base.pay_type}:${v.base.pay_typeid || 0}`;
+    : `n${v.base.card_num}:${v.base.pay_type}:${v.base.pay_typeid || 0}`;
 function poolSplitTargets() {
   const row = poolActiveRow();
   if (!row || row.base.arthur_type !== 5 || poolEditor.mixedByID.has(row.gacha_id)) return [];

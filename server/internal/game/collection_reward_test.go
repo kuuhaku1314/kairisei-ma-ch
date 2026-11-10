@@ -40,32 +40,23 @@ func TestCollectionRewardExchangeAndDuplicateGift(t *testing.T) {
 }
 
 func TestConfiguredFamePoolKeepsTriggerAndFrozenRewards(t *testing.T) {
-	policy := gamestate.TeamBattleFameBonusPolicy{ChanceMaximum: 100, FullFameThreshold: 100, FullFameRewardCount: 2, EligibleRewardTypes: []int{6, 13, 8}}
-	s := &Account{onboarding: completedTestOnboarding(), teamBattleFameBonus: policy}
 	profile := gamestate.TeamBattleRewardProfile{ResultRewards: []gamestate.Reward{{Type: 13, RewardTypeID: 1, Num: 1}}, FameRewards: []gamestate.Reward{{Type: 8, RewardTypeID: 4000, Num: 600}}}
-	context := TeamBattleContext{FameSeed: "multi:room=123", FameSources: []TeamBattleFameSource{{MemberType: 4, LeaderFame: 100}, {MemberType: 2, LeaderFame: 0}}, FameRewardsSet: true, FameRewards: TeamBattleFamePool(profile, policy)}
-	before, err := s.planTeamBattleFameAwardsLocked(profile, context)
+	context := TeamBattleContext{FameSeed: "multi:room=123", FameSources: []TeamBattleFameSource{{MemberType: 4, LeaderFame: 100}, {MemberType: 2, LeaderFame: 0}}, FameRewardsSet: true, FameRewards: TeamBattleFamePool(profile)}
+	before, err := planTeamBattleFameAwards(profile, context)
 	if err != nil || len(before) != 2 || before[0].MemberType != 4 || before[1].MemberType != 4 || before[0].Reward.Num != 600 || before[1].RewardKind != 1 {
 		t.Fatalf("fame: %+v %v", before, err)
 	}
 	profile.FameRewards = []gamestate.Reward{}
-	after, err := s.planTeamBattleFameAwardsLocked(profile, context)
+	after, err := planTeamBattleFameAwards(profile, context)
 	if err != nil || !reflect.DeepEqual(before, after) {
 		t.Fatal("live edit changed a frozen fame pool")
 	}
-	context.FameRewards = TeamBattleFamePool(profile, policy)
-	if disabled, err := s.planTeamBattleFameAwardsLocked(profile, context); err != nil || len(disabled) != 0 {
+	context.FameRewards = TeamBattleFamePool(profile)
+	if disabled, err := planTeamBattleFameAwards(profile, context); err != nil || len(disabled) != 0 {
 		t.Fatal("explicit empty pool did not disable rewards")
 	}
 	profile.FameRewards = nil
-	if pool := TeamBattleFamePool(profile, policy); len(pool) != 1 || pool[0].RewardTypeID != 1 {
+	if pool := TeamBattleFamePool(profile); len(pool) != 1 || pool[0].RewardTypeID != 1 {
 		t.Fatal("default fame reward changed")
 	}
-}
-
-func (s *Account) planTeamBattleFameAwardsLocked(
-	profile gamestate.TeamBattleRewardProfile,
-	context TeamBattleContext,
-) ([]teamBattleFameAwardPlan, error) {
-	return planTeamBattleFameAwards(profile, context, s.teamBattleFameBonus)
 }

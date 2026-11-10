@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"slices"
 
 	"kairisei.local/server/internal/accountstore"
@@ -60,11 +59,6 @@ func (o *Operations) gachaPurgePlan(groupID int) (accountstore.GachaPurgePlan, c
 	}
 	if len(plan.GachaIDs) == 0 {
 		return plan, doc, errors.New("回收站卡池不存在，或已被永久删除")
-	}
-	for _, pool := range doc.Pools {
-		if pool.GroupID != groupID && slices.Contains(plan.GachaIDs, pool.TemplateID) {
-			return plan, doc, fmt.Errorf("卡池 %d 仍引用此池作为模板，请先处理该配置", pool.GroupID)
-		}
 	}
 	doc.Pools = slices.DeleteFunc(doc.Pools, func(p customGachaPool) bool { return p.GroupID == groupID })
 	plan.Writes = append(plan.Writes, accountstore.DocumentWrite{Key: customGachaKey, Expected: o.customGachaRevision, Value: doc, Operation: "gacha-custom"})

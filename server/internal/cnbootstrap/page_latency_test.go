@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"kairisei.local/server/internal/accountstore"
+	"kairisei.local/server/internal/gamestate"
 	"kairisei.local/server/internal/masterdata"
 	"kairisei.local/server/internal/testfixture"
 )
@@ -124,7 +125,7 @@ func probeCompleteRuntimePages(t *testing.T, handler http.Handler, savePath, see
 			state.Cards = append(state.Cards, card)
 			state.SupportDeck.CardCollectionIDs = append(state.SupportDeck.CardCollectionIDs, card.CardID)
 		}
-		state.Onboarding.Step = masterdata.OnboardingStepCount
+		state.Onboarding.Step = gamestate.OnboardingStepCount
 		if err := accounts.PersistState(identity.UserID, state); err != nil {
 			t.Fatal(err)
 		}

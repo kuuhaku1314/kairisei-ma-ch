@@ -56,7 +56,7 @@ func (s *Account) ApplyGachaConfiguration(revision uint64, configs []GachaConfig
 			s.gachas = append(s.gachas, profile)
 			continue
 		}
-		if current == nil || isOnboardingGachaID(current.GachaID) {
+		if current == nil || gamestate.IsOnboardingGachaID(current.GachaID) {
 			continue
 		}
 		profile := CloneGachaProfiles([]gamestate.GachaProfile{config.Profile})[0]

@@ -71,7 +71,7 @@ func (s *Account) VisibleGachasLocked() []gamestate.GachaProfile {
 	candidates := make([]gamestate.GachaProfile, 0, len(s.gachas))
 	for _, gacha := range s.gachas {
 		gacha.GroupPlayCount = groupPlays[gacha.GroupID]
-		if isOnboardingGachaID(gacha.GachaID) || !s.gachaScheduledLocked(gacha.GachaID) || gacha.Exhausted() {
+		if gamestate.IsOnboardingGachaID(gacha.GachaID) || !s.gachaScheduledLocked(gacha.GachaID) || gacha.Exhausted() {
 			continue
 		}
 		gacha = s.currentGachaLocked(gacha)
@@ -162,10 +162,6 @@ func (s *Account) gachaSinglePaymentRankLocked(gacha gamestate.GachaProfile, now
 	}
 }
 
-func isOnboardingGachaID(gachaID int) bool {
-	return gachaID == cnOnboardingGachaID || gachaID == cnOnboardingMultiGachaID
-}
-
 // onboardingVisibleGachaForStepLocked follows the stock client's two reserved
 // first-gacha families.  The single-draw profile is replaced by the multi-draw
 // profile immediately after the fixed single draw; the multi remains visible
@@ -174,9 +170,9 @@ func isOnboardingGachaID(gachaID int) bool {
 func (s *Account) onboardingVisibleGachaForStepLocked() int {
 	switch s.onboarding.Step {
 	case 1:
-		return cnOnboardingGachaID
+		return gamestate.OnboardingGachaID
 	case 2, 3, 4, 5:
-		return cnOnboardingMultiGachaID
+		return gamestate.OnboardingMultiGachaID
 	default:
 		return 0
 	}
@@ -194,11 +190,11 @@ func (s *Account) GachaAvailableForPlayLocked(gachaID int) bool {
 	case 0, 2, 3, 4:
 		return false
 	case 1:
-		return gachaID == cnOnboardingGachaID
+		return gachaID == gamestate.OnboardingGachaID
 	case 5:
-		return gachaID == cnOnboardingMultiGachaID
+		return gachaID == gamestate.OnboardingMultiGachaID
 	}
-	return !isOnboardingGachaID(gachaID)
+	return !gamestate.IsOnboardingGachaID(gachaID)
 }
 
 // Count successful requests, never the number of cards drawn. Existing per-ID
@@ -467,7 +463,7 @@ func (s *Account) PlayGacha(
 		return gachaPlayResult{}, ErrGachaUnavailable
 	}
 	if !s.GachaAvailableForPlayLocked(gachaID) ||
-		(isOnboardingGachaID(gachaID) && gacha.PlayCount != 0) {
+		(gamestate.IsOnboardingGachaID(gachaID) && gacha.PlayCount != 0) {
 		return gachaPlayResult{}, ErrGachaUnavailable
 	}
 	dayKey := gachaLocalDayKey(time.Now())

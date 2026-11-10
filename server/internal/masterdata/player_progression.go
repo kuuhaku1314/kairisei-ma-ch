@@ -65,7 +65,6 @@ func validatePlayerProgressionRuntimeMaster(master playerProgressionRuntimeMaste
 		policy.Friends.IncreaseFromLevel < 1 || policy.Friends.IncreaseFromLevel > policy.MaxLevel || policy.Friends.FollowerDisplayLimit <= 0 ||
 		policy.Friends.HelperReward.OtherPerPartner <= 0 ||
 		policy.Friends.HelperReward.FriendPerPartner <= policy.Friends.HelperReward.OtherPerPartner ||
-		policy.Friends.HelperReward.MaximumPartners != 3 ||
 		policy.JobParameters.MaxStatusLevel <= 0 || len(policy.JobParameters.Maximum) != 6 {
 		return errors.New("CN player progression runtime identity or policy is invalid")
 	}

@@ -47,7 +47,7 @@ type Config struct {
 	RuntimeLogPath string
 	Progression    gamestate.PlayerProgressionPolicy
 	GachaBanners   map[string]string
-	AssetMaps      []string
+	AssetMap       string
 	// GachaCoverDir is the writable folder for uploaded pool covers (next to the save database).
 	GachaCoverDir string
 	// HomeBannerDir is the writable folder for uploaded home banners (next to the save database).
@@ -153,7 +153,7 @@ func New(config Config) (http.Handler, error) {
 	}
 	presetsByGroup := make(map[int]*AdminGachaPreset)
 	for _, gacha := range primaryState.Gachas {
-		if gacha.GachaID == 90000100 || gacha.GachaID == 90000200 {
+		if gamestate.IsOnboardingGachaID(gacha.GachaID) {
 			continue
 		}
 		bannerPath, exists := config.GachaBanners[gacha.BannerKey]
@@ -227,12 +227,9 @@ func New(config Config) (http.Handler, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve CN admin asset root: %w", err)
 	}
-	var cardResources map[int]adminCardResource
-	if len(config.AssetMaps) > 0 {
-		cardResources, err = loadAdminCardResources(cardMaster, config.CardMaster, config.AssetMaps[0])
-		if err != nil {
-			return nil, err
-		}
+	cardResources, err := loadAdminCardResources(cardMaster, config.CardMaster, config.AssetMap)
+	if err != nil {
+		return nil, err
 	}
 	catalog, err = applyAdminCatalogAssetCoverage(catalog, assetsRoot, cardResources)
 	if err != nil {

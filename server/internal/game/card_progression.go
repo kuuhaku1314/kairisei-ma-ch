@@ -11,12 +11,11 @@ import (
 )
 
 // JP 8.0.7 ExpFusion's total selection limit. Inventory instances, warehouse
-// instances and stack types each keep MaximumCardMaterialCount (100).
+// instances and stack types each keep the CN CardFusionMaterialLimit.
 const cardFusionTotalMaterialLimit = 9999
 
 func validateCardFusionSuccessPolicy(policy gamestate.CardProgressionPolicy) error {
-	// Original CN Const.CARD_FUSION_ADD_CARD_MAX, used by ExpFusion's selector.
-	if policy.MaximumCardMaterialCount != 100 || len(policy.FusionSuccessTypes) != 3 {
+	if len(policy.FusionSuccessTypes) != 3 {
 		return errors.New("card fusion success policy is incomplete")
 	}
 	totalWeight := 0

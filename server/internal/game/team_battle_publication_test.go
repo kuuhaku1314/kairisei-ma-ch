@@ -23,13 +23,13 @@ func TestOnboardingIceDragonIgnoresPublicationClosureOnlyForItsQuest(t *testing.
 	s.cardDefinitions = map[int]gamestate.Card{1: {CardID: 1}}
 	s.bp, s.bpMax, s.bpRecoveryInterval = 30, 30, 3*time.Minute
 	helper := &s.playerProgression.Friends.HelperReward
-	helper.OtherPerPartner, helper.FriendPerPartner, helper.MaximumPartners = 5, 10, 3
+	helper.OtherPerPartner, helper.FriendPerPartner = 5, 10
 	profiles := []gamestate.TeamBattleRewardProfile{{BossID: bossID}}
 	sourceProfiles := []gamestate.TeamBattleRewardProfile{{BossID: bossID,
 		ResultRewards: []gamestate.Reward{{Type: 6, RewardTypeID: 1, Num: 1}}}}
-	for _, step := range []int{cnOnboardingStepCount - 2, cnOnboardingStepCount - 1, cnOnboardingStepCount} {
+	for _, step := range []int{gamestate.OnboardingStepCount - 2, gamestate.OnboardingStepCount - 1, gamestate.OnboardingStepCount} {
 		s.onboarding.Step = step
-		wantOpen := step == cnOnboardingStepCount-1
+		wantOpen := step == gamestate.OnboardingStepCount-1
 		catalog, err := s.TeamBattleCatalog()
 		if err != nil {
 			t.Fatal(err)
@@ -44,11 +44,13 @@ func TestOnboardingIceDragonIgnoresPublicationClosureOnlyForItsQuest(t *testing.
 			t.Fatalf("step %d entry rules differ from publication", step)
 		}
 		rows, err := s.HowToGetCards([]int{1}, sourceProfiles, CardSourcePolicy{})
-		if err != nil || len(rows) != 1 || len(rows[0].GetCards) != 1 {
+		if err != nil || len(rows) != 1 || len(rows[0].GetCards) == 0 {
 			t.Fatalf("step %d card source query: %+v, %v", step, rows, err)
 		}
-		if source := rows[0].GetCards[0]; (source.Type == 10 && source.ContentID == bossID) != wantOpen {
-			t.Fatalf("step %d card source differs from publication: %+v", step, source)
+		for _, source := range rows[0].GetCards {
+			if (source.Type == 10 && source.ContentID == bossID) != wantOpen {
+				t.Fatalf("step %d card source differs from publication: %+v", step, source)
+			}
 		}
 		beforeBP := s.bp
 		_, _, started, err := s.BeginTeamBattle(TeamBattleEntry{BossID: bossID,

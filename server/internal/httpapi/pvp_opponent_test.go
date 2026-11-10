@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"testing"
+	"time"
 
 	"kairisei.local/server/internal/game"
 	"kairisei.local/server/internal/gamestate"
@@ -70,7 +71,7 @@ func TestPVPStartSkipsUnusableDefenseBeforeCharging(t *testing.T) {
 			ownDecks := make([]gamestate.PVPDeckSelection, 4)
 			s := testAccount(t, func(state *gamestate.State) {
 				state.User.PVPPoint = 0
-				state.PVP = gamestate.PVPPlayerState{NextBattleID: 1, Challenge: scenario.challenge, DefenseDecks: []gamestate.PVPDeckSelection{}, DefenseUpdatedAtUnix: 1, History: []gamestate.PVPMatch{}}
+				state.PVP = gamestate.PVPPlayerState{NextBattleID: 1, Challenge: scenario.challenge, ChallengeDay: (time.Now().Unix() + 8*3600) / 86400, DefenseDecks: []gamestate.PVPDeckSelection{}, DefenseUpdatedAtUnix: 1, History: []gamestate.PVPMatch{}}
 				for _, deck := range state.Decks {
 					if deck.Index != 0 {
 						continue
@@ -80,7 +81,7 @@ func TestPVPStartSkipsUnusableDefenseBeforeCharging(t *testing.T) {
 			})
 			before := game.ClonePVPState(s.Snapshot(gamestate.State{}).PVP)
 			api := &API{account: s, initialState: gamestate.State{}, pvpAccounts: scenario.states,
-				pvpConfig: game.PVPConfig{ResultSource: game.PVPResultFixedPolicy, EngineMode: game.PvpEngineClientNativeLocal, Fields: []game.PVPFieldConfig{{FieldID: 1}}, ReplayResult: 1, RankWinPoint: 10},
+				pvpConfig: game.PVPConfig{ChallengeMax: 5, Fields: []game.PVPFieldConfig{{FieldID: 1}}, ReplayResult: 1, RankWinPoint: 10},
 			}
 			body, err := json.Marshal(map[string]any{"type": 1, "select_arthur_type": 1, "pvp_my_deck": ownDecks})
 			if err != nil {

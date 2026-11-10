@@ -448,7 +448,7 @@ func ValidateSave(save saveState) error {
 		seenDailyClaims[claim.GachaID] = struct{}{}
 	}
 
-	if save.Onboarding.Step < 0 || save.Onboarding.Step > masterdata.OnboardingStepCount ||
+	if save.Onboarding.Step < 0 || save.Onboarding.Step > gamestate.OnboardingStepCount ||
 		(save.Onboarding.PendingClearQuestID != 0 && !isOnboardingQuestID(save.Onboarding.PendingClearQuestID)) {
 		return errors.New("CN save onboarding state is invalid")
 	}
@@ -1062,9 +1062,5 @@ func cloneReleasePVPState(source gamestate.PVPPlayerState) gamestate.PVPPlayerSt
 	}
 	result.History = make([]gamestate.PVPMatch, len(source.History))
 	copy(result.History, source.History)
-	if source.ActiveMatch != nil {
-		active := *source.ActiveMatch
-		result.ActiveMatch = &active
-	}
 	return result
 }

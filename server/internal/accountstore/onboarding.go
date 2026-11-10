@@ -6,7 +6,6 @@ import (
 	"sort"
 
 	"kairisei.local/server/internal/gamestate"
-	"kairisei.local/server/internal/masterdata"
 )
 
 var StarterCardIDs = []int{
@@ -207,8 +206,7 @@ func InstallOnboardingGacha(state *gamestate.State) error {
 			copy := gacha
 			multiSource = &copy
 		}
-		if gacha.GachaID != masterdata.OnboardingGachaID &&
-			gacha.GachaID != masterdata.OnboardingMultiGachaID {
+		if !gamestate.IsOnboardingGachaID(gacha.GachaID) {
 			gachas = append(gachas, gacha)
 		}
 	}
@@ -216,9 +214,9 @@ func InstallOnboardingGacha(state *gamestate.State) error {
 		return errors.New("CN onboarding source gachas are unavailable")
 	}
 	tutorial := *singleSource
-	tutorial.GachaID = masterdata.OnboardingGachaID
+	tutorial.GachaID = gamestate.OnboardingGachaID
 	tutorial.BannerKey = "local_first"
-	tutorial.GroupID = masterdata.OnboardingGachaID
+	tutorial.GroupID = gamestate.OnboardingGachaID
 	tutorial.Name = "首次扭蛋（仅限一次）"
 	tutorial.BuyMessage = "使用新手扭蛋券抽取1张骑士卡牌吗？"
 	tutorial.SubMessage = "完成『最初的一步』后开放"
@@ -230,7 +228,7 @@ func InstallOnboardingGacha(state *gamestate.State) error {
 	tutorial.CardNumMax = 1
 	tutorial.UserSelectMax = 0
 	tutorial.DailyFirstFree = false
-	tutorial.PlayCount = playCounts[masterdata.OnboardingGachaID]
+	tutorial.PlayCount = playCounts[gamestate.OnboardingGachaID]
 	tutorial.GuaranteedRarityRank = 0
 	tutorial.GuaranteedCount = 0
 	tutorial.RemainderRarityRank = 0
@@ -240,9 +238,9 @@ func InstallOnboardingGacha(state *gamestate.State) error {
 
 	// The first multi-draw returns eleven cards: one UR and ten SR.
 	multi := *multiSource
-	multi.GachaID = masterdata.OnboardingMultiGachaID
+	multi.GachaID = gamestate.OnboardingMultiGachaID
 	multi.BannerKey = "local_first_multi"
-	multi.GroupID = masterdata.OnboardingMultiGachaID
+	multi.GroupID = gamestate.OnboardingMultiGachaID
 	multi.Name = "新手11连扭蛋（仅限一次）"
 	multi.BuyMessage = "使用400个水晶进行新手11连扭蛋吗？"
 	multi.SubMessage = "通关『大地起源』后开放"
@@ -254,7 +252,7 @@ func InstallOnboardingGacha(state *gamestate.State) error {
 	multi.CardNumMax = 11
 	multi.UserSelectMax = 0
 	multi.DailyFirstFree = false
-	multi.PlayCount = playCounts[masterdata.OnboardingMultiGachaID]
+	multi.PlayCount = playCounts[gamestate.OnboardingMultiGachaID]
 	multi.GuaranteedRarityRank = 5
 	multi.GuaranteedCount = 1
 	multi.RemainderRarityRank = 4

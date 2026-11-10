@@ -147,7 +147,7 @@ func auditCompleteAdminContent(t *testing.T, h http.Handler) {
 			t.Fatalf("pool %d category = %d %q, want %q", p.GroupID, p.CategoryNum, p.Category, want)
 		}
 		for _, id := range p.GachaIDs {
-			if id == 90000100 || id == 90000200 {
+			if gamestate.IsOnboardingGachaID(id) {
 				t.Fatal("tutorial exposed")
 			}
 		}

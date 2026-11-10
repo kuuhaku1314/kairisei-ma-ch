@@ -149,7 +149,6 @@ func WriteTestCardMaster(t *testing.T, root string) string {
 		"card_collection_pages": [][]int{{10000010, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
 		"card_progression_policy": map[string]any{
 			"fusion_gold_per_material_per_base_level": 100,
-			"maximum_card_material_count":             100,
 			"fusion_success_types": []map[string]any{
 				{"success_type": 0, "weight": 90, "experience_permille": 1000},
 				{"success_type": 1, "weight": 9, "experience_permille": 1500},

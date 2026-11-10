@@ -599,7 +599,7 @@ func (a *API) teamBattleSoloEnd(writer http.ResponseWriter, request *http.Reques
 		writeError(writer, http.StatusInternalServerError, err.Error())
 		return
 	}
-	snapshot := settlement.ResultSnapshot(int(payload.IsClear), 1, a.initialState.TeamBattleFameBonusPolicy.BonusFameAdd, partners)
+	snapshot := settlement.ResultSnapshot(int(payload.IsClear), 1, partners)
 	encodedSnapshot, err := json.Marshal(snapshot)
 	if err != nil {
 		writeError(writer, http.StatusInternalServerError, "encode solo team battle settlement snapshot")
@@ -1064,7 +1064,7 @@ func battleFameRewardsWire(awards []game.TeamBattleFameAward) []any {
 	result := make([]any, 0, len(awards))
 	for _, award := range awards {
 		if len(award.Result.Rewards) != 1 || award.MemberType < 1 || award.MemberType > 4 ||
-			(award.RewardKind != 0 && award.RewardKind != 1) {
+			(award.RewardKind != game.TeamBattleRewardFame && award.RewardKind != game.TeamBattleRewardFullFame) {
 			continue
 		}
 		reward := battleResultRewardsWire(award.Result.Rewards)
@@ -1081,7 +1081,7 @@ func battleHostRewardsWire(awards []game.TeamBattleFameAward) []any {
 	result := make([]any, 0, len(awards))
 	for _, award := range awards {
 		if len(award.Result.Rewards) != 1 || award.MemberType < 1 || award.MemberType > 4 ||
-			award.RewardKind != 5 {
+			award.RewardKind != game.TeamBattleRewardHost {
 			continue
 		}
 		reward := battleResultRewardsWire(award.Result.Rewards)

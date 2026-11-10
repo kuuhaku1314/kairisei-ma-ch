@@ -77,7 +77,7 @@ func (s *Account) ApplyBattleCatalogConfiguration(definitions *TeamBattleDefinit
 func (s *Account) battlePublicationDisabledBossesLocked() map[int]bool {
 	disabled := s.disabledTeamBattleBossIDs
 	const tutorialBossID = 30010102
-	if disabled[tutorialBossID] && s.onboarding.Step == cnOnboardingStepCount-1 {
+	if disabled[tutorialBossID] && s.onboarding.Step == gamestate.OnboardingStepCount-1 {
 		disabled = maps.Clone(disabled)
 		delete(disabled, tutorialBossID)
 	}
