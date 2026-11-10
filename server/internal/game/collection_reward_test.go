@@ -10,7 +10,7 @@ import (
 
 func TestCollectionRewardExchangeAndDuplicateGift(t *testing.T) {
 	for _, kind := range []int{14, 16, 18} {
-		s := &Account{costumeIDs: map[int]struct{}{}, stampIDs: map[int]struct{}{}, honorIDs: map[int]struct{}{},
+		s := &Account{onboarding: completedTestOnboarding(), costumeIDs: map[int]struct{}{}, stampIDs: map[int]struct{}{}, honorIDs: map[int]struct{}{},
 			collectionRewardIDs: map[[2]int]struct{}{{kind, 2}: {}}, items: map[int]gamestate.Item{4000: {ItemID: 4000, Num: 100}},
 			tradeShopPurchases: map[int]int{}, tradeShopProfiles: map[int]gamestate.TradeShopProfile{1: {TradeShopID: 1, Lineups: []gamestate.TradeShopLineupProfile{{LineupID: 2, LineupName: "解锁", StockNum: 1, Prices: []gamestate.TradeShopPointProfile{{Type: 4, ID: 4000, Num: 25}}, Rewards: []gamestate.Reward{{Type: kind, RewardTypeID: 2, Num: 1}}}}}}}
 		if _, err := s.BuyTradeShop(2, 1, nil); err != nil {
@@ -41,7 +41,7 @@ func TestCollectionRewardExchangeAndDuplicateGift(t *testing.T) {
 
 func TestConfiguredFamePoolKeepsTriggerAndFrozenRewards(t *testing.T) {
 	policy := gamestate.TeamBattleFameBonusPolicy{ChanceMaximum: 100, FullFameThreshold: 100, FullFameRewardCount: 2, EligibleRewardTypes: []int{6, 13, 8}}
-	s := &Account{teamBattleFameBonus: policy}
+	s := &Account{onboarding: completedTestOnboarding(), teamBattleFameBonus: policy}
 	profile := gamestate.TeamBattleRewardProfile{ResultRewards: []gamestate.Reward{{Type: 13, RewardTypeID: 1, Num: 1}}, FameRewards: []gamestate.Reward{{Type: 8, RewardTypeID: 4000, Num: 600}}}
 	context := TeamBattleContext{FameSeed: "multi:room=123", FameSources: []TeamBattleFameSource{{MemberType: 4, LeaderFame: 100}, {MemberType: 2, LeaderFame: 0}}, FameRewardsSet: true, FameRewards: TeamBattleFamePool(profile, policy)}
 	before, err := s.planTeamBattleFameAwardsLocked(profile, context)

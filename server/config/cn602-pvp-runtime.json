@@ -1,7 +1,4 @@
 {
-  "schema_version": 2,
-  "client_profile": "cn602-bootstrap",
-  "config_version": 1,
   "engine_mode": "client_native_local",
   "result_source": "fixed_local_policy",
   "challenge_max": 5,

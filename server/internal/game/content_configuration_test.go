@@ -9,7 +9,7 @@ import (
 )
 
 func TestExchangeConfigurationPreservesCountsAndChargesDisplayedPrice(t *testing.T) {
-	s := &Account{items: map[int]gamestate.Item{4000: {ItemID: 4000, Num: 1000}}, itemDefinitions: map[int]gamestate.ItemDefinition{4000: {ItemID: 4000, MaxOwned: 9999}, 1000: {ItemID: 1000, MaxOwned: 9999}}, tradeShopPurchases: map[int]int{2: 2}}
+	s := &Account{onboarding: completedTestOnboarding(), items: map[int]gamestate.Item{4000: {ItemID: 4000, Num: 1000}}, itemDefinitions: map[int]gamestate.ItemDefinition{4000: {ItemID: 4000, MaxOwned: 9999}, 1000: {ItemID: 1000, MaxOwned: 9999}}, tradeShopPurchases: map[int]int{2: 2}}
 	base := gamestate.State{TradeShopProfiles: []gamestate.TradeShopProfile{{TradeShopID: 1, Name: "交换所", Lineups: []gamestate.TradeShopLineupProfile{{LineupID: 2, LineupName: "药水", StockNum: 3, Prices: []gamestate.TradeShopPointProfile{{Type: 4, ID: 4000, Num: 25, PointCardCondition: []gamestate.TradeShopPointCardCondition{}}}, Rewards: []gamestate.Reward{{Type: 8, RewardTypeID: 1000, Num: 2, CardSkillLevels: []int16{}}}}}}}}
 	s.ApplyTradeShopConfiguration(base.TradeShopProfiles)
 	rows := s.TradeShopState()
@@ -84,7 +84,7 @@ func TestContentCatalogKeepsProgressWhenMovingGroups(t *testing.T) {
 	if top["9"][0].Bosses[0].State != 2 || top["9"][0].Bosses[0].Cards[0]["0"] != 99 {
 		t.Fatal("catalog update did not preserve progress and replace definitions")
 	}
-	s := &Account{teamBattleSolo: battleCatalogFixture(t, state.TeamBattleSolo)}
+	s := &Account{onboarding: completedTestOnboarding(), teamBattleSolo: battleCatalogFixture(t, state.TeamBattleSolo)}
 	s.ApplyBattleCatalogConfiguration(battleDefinitionsFixture(t, catalog), map[int]bool{7: true})
 	if err := json.Unmarshal(filterBattleCatalog(s.teamBattleSolo.saved(), s.disabledTeamBattleBossIDs), &top); err != nil || len(top["9"][0].Bosses) != 0 {
 		t.Fatal("closed entry is still published", err)
@@ -97,7 +97,7 @@ func TestContentCatalogKeepsProgressWhenMovingGroups(t *testing.T) {
 
 func TestBattleCatalogRequestOwnsPublicationAndPreservesClosedClears(t *testing.T) {
 	raw := json.RawMessage(`{"future":9007199254740993,"9":[{"0":760000001,"9":0,"10":[{"0":30010101,"10":1,"14":1,"16":1},{"0":30010102,"10":2,"14":1,"16":0}]}],"10":[],"11":[],"12":[]}`)
-	s := &Account{teamBattleSolo: battleCatalogFixture(t, raw), disabledTeamBattleBossIDs: map[int]bool{30010102: true}}
+	s := &Account{onboarding: completedTestOnboarding(), teamBattleSolo: battleCatalogFixture(t, raw), disabledTeamBattleBossIDs: map[int]bool{30010102: true}}
 	view, err := s.TeamBattleCatalog()
 	if err != nil {
 		t.Fatal(err)

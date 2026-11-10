@@ -59,7 +59,7 @@ func TestSharedBattleDefinitionsKeepPrivateProgressAndViews(t *testing.T) {
 	if rules.EntryLimit[0].Slot1ArthurType != 1 {
 		t.Fatal("entry-rule caller changed shared slots")
 	}
-	account := &Account{teamBattleSolo: first}
+	account := &Account{onboarding: completedTestOnboarding(), teamBattleSolo: first}
 	replacement := battleDefinitionsFixture(t, json.RawMessage(`{"9":[],"10":[{"0":300101,"9":0,"10":[{"0":30010102,"5":99,"10":0,"16":0}]}],"11":[],"12":[]}`))
 	account.ApplyBattleCatalogConfiguration(replacement, nil)
 	if clear, err := first.firstClear(30010102, 0); err != nil || clear {

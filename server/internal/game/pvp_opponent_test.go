@@ -14,7 +14,7 @@ func TestPVPDailyChallengesPersistOnceAtCNMidnight(t *testing.T) {
 	beforeMidnight := time.Date(2026, 9, 7, 15, 59, 59, 0, time.UTC)
 	afterMidnight := beforeMidnight.Add(time.Second)
 	config := PVPConfig{ChallengeMax: 5}
-	s := &Account{pvp: gamestate.PVPPlayerState{Challenge: 0, ChallengeDay: pvpChallengeDay(beforeMidnight)}}
+	s := &Account{onboarding: completedTestOnboarding(), pvp: gamestate.PVPPlayerState{Challenge: 0, ChallengeDay: pvpChallengeDay(beforeMidnight)}}
 	writes := 0
 	var saved []byte
 	persist := func(state gamestate.State) error {
@@ -42,7 +42,7 @@ func TestPVPDailyChallengesPersistOnceAtCNMidnight(t *testing.T) {
 	if writes != 1 || s.pvp.Challenge != 5 {
 		t.Fatalf("concurrent midnight refresh: writes=%d state=%+v", writes, s.pvp)
 	}
-	reopened := &Account{}
+	reopened := &Account{onboarding: completedTestOnboarding()}
 	if err := json.Unmarshal(saved, &reopened.pvp); err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestPVPDailyChallengesPersistOnceAtCNMidnight(t *testing.T) {
 	}
 	// A retained save without the day field can recover after its last ranked
 	// debit, even if later free battles were played on the current day.
-	unstamped := &Account{pvp: gamestate.PVPPlayerState{Challenge: 0, History: []gamestate.PVPMatch{
+	unstamped := &Account{onboarding: completedTestOnboarding(), pvp: gamestate.PVPPlayerState{Challenge: 0, History: []gamestate.PVPMatch{
 		{BattleType: 1, StartedAtUnix: beforeMidnight.Unix()},
 		{BattleType: 0, StartedAtUnix: afterMidnight.Unix()},
 	}}}

@@ -28,7 +28,6 @@ const (
 type TeamBattlePublication = operationservice.TeamBattlePublication
 
 type gachaPublication struct {
-	CatalogVersion   int   `json:"catalog_version,omitempty"`
 	ExpectedRevision *int  `json:"expected_revision,omitempty"`
 	GroupIDs         []int `json:"group_ids"`
 }
@@ -259,7 +258,6 @@ func (operations *Operations) setGachaPublication(publication gachaPublication) 
 	}
 	expected := *publication.ExpectedRevision
 	publication.ExpectedRevision = nil
-	publication.CatalogVersion = 2
 	return operations.writeDocument(gachaPublicationKey, expected, publication)
 }
 

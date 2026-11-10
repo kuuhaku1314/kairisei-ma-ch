@@ -26,9 +26,6 @@ type stampDefinition struct {
 }
 
 type stampRuntimeMaster struct {
-	SchemaVersion int    `json:"schema_version"`
-	ClientProfile string `json:"client_profile"`
-
 	CategoryOrder []int             `json:"category_order"`
 	Stamps        []stampDefinition `json:"stamps"`
 }
@@ -68,9 +65,6 @@ func LoadStampRuntimeMaster(masterPath string) (stampRuntimeMaster, error) {
 }
 
 func validateStampRuntimeMaster(master stampRuntimeMaster) error {
-	if master.SchemaVersion != 1 || master.ClientProfile != "cn602-bootstrap" {
-		return errors.New("CN stamp runtime master identity is invalid")
-	}
 	if len(master.Stamps) == 0 {
 		return errors.New("CN stamp runtime master source is incomplete")
 	}
@@ -107,7 +101,7 @@ func validateStampRuntimeMaster(master stampRuntimeMaster) error {
 	return nil
 }
 
-func ApplyStampRuntimeMaster(state *gamestate.State, master stampRuntimeMaster) (bool, error) {
+func ApplyStampRuntimeMaster(state *gamestate.State, master stampRuntimeMaster) error {
 	definitions := make([]gamestate.CollectionRewardDefinition, 0, len(master.Stamps))
 	for _, stamp := range master.Stamps {
 		name := stamp.DisplayText
@@ -133,15 +127,13 @@ func ApplyStampRuntimeMaster(state *gamestate.State, master stampRuntimeMaster) 
 			defaults = append(defaults, stamp.StampID)
 		}
 	}
-	changed := false
 	if len(state.Stamps.StampIDs) == 0 {
 		state.Stamps.StampIDs = append([]int(nil), defaults...)
-		changed = true
 	}
 	owned := make(map[int]struct{}, len(state.Stamps.StampIDs))
 	for _, stampID := range state.Stamps.StampIDs {
 		if _, exists := available[stampID]; !exists {
-			return false, fmt.Errorf("configured owned stamp %d is absent from official master", stampID)
+			return fmt.Errorf("configured owned stamp %d is absent from official master", stampID)
 		}
 		owned[stampID] = struct{}{}
 	}
@@ -150,8 +142,8 @@ func ApplyStampRuntimeMaster(state *gamestate.State, master stampRuntimeMaster) 
 			continue
 		}
 		if _, exists := owned[stampID]; !exists {
-			return false, fmt.Errorf("configured stamp deck references unowned stamp %d", stampID)
+			return fmt.Errorf("configured stamp deck references unowned stamp %d", stampID)
 		}
 	}
-	return changed, nil
+	return nil
 }

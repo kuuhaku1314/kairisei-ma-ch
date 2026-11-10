@@ -47,7 +47,7 @@ func TestMoveEquippedCardToContainerAutoFillsDeckAtomically(t *testing.T) {
 }
 
 func TestMoveEquippedCardWithoutReplacementLeavesStateUntouched(t *testing.T) {
-	cardStore := &Account{
+	cardStore := &Account{onboarding: completedTestOnboarding(),
 		cards: []CardInfo{{UniqueID: 101, CardID: 1001}},
 		decks: []DeckInfo{{
 			ArthurType:      1,
@@ -122,7 +122,7 @@ func TestRepairIncompleteMainDecksRejectsUnknownReferenceAtomically(t *testing.T
 }
 
 func cardMoveTestStore() *Account {
-	return &Account{
+	return &Account{onboarding: completedTestOnboarding(),
 		cards: []CardInfo{
 			{UniqueID: 101, CardID: 1001},
 			{UniqueID: 102, CardID: 1002},

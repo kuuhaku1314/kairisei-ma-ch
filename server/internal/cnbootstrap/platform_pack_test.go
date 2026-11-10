@@ -63,7 +63,7 @@ func TestPlatformDeliveryRequiresOneTransportPerRealFile(t *testing.T) {
 			artifacts, directory := t.TempDir(), t.TempDir()
 			var archive bytes.Buffer
 			writer := zip.NewWriter(&archive)
-			p := platformDeliveryProfile{Format: 1, Platform: "StandaloneWindows64", UnityVersion: "6000.3.26f1",
+			p := platformDeliveryProfile{Platform: "StandaloneWindows64", UnityVersion: "6000.3.26f1",
 				ContentID: strings.Repeat("a", 64), ArtifactRoot: artifacts}
 			members := []string{}
 			for i, text := range []string{"first", "second", "third", "independent"} {

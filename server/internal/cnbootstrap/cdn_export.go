@@ -28,7 +28,6 @@ type CDNObject struct {
 type cdnObject = CDNObject
 
 type CDNManifest struct {
-	SchemaVersion     int                  `json:"schema_version"`
 	ResourceSetSHA256 string               `json:"resource_set_sha256"`
 	Files             []CDNObject          `json:"files"`
 	SourceRoots       map[string]string    `json:"source_roots,omitempty"`
@@ -115,11 +114,8 @@ func BuildCDNManifest(manifestPath string, platformProfiles ...string) (result C
 		return result, err
 	}
 	var manifest struct {
-		SchemaVersion int               `json:"schema_version"`
-		ClientProfile string            `json:"client_profile"`
-		PathBase      string            `json:"path_base"`
-		Entrypoints   map[string]string `json:"entrypoints"`
-		Files         []struct {
+		Entrypoints map[string]string `json:"entrypoints"`
+		Files       []struct {
 			Path   string `json:"path"`
 			Bytes  int64  `json:"bytes"`
 			SHA256 string `json:"sha256"`
@@ -127,9 +123,6 @@ func BuildCDNManifest(manifestPath string, platformProfiles ...string) (result C
 	}
 	if err := json.Unmarshal(content, &manifest); err != nil {
 		return result, err
-	}
-	if manifest.SchemaVersion != 1 || manifest.ClientProfile != "cn602-bootstrap" || manifest.PathBase != "RESOURCE_SET_ROOT" {
-		return result, errors.New("CDN export requires a complete CN resource set")
 	}
 	inputs := make(map[string]string)
 	inputKeys := []string{"cn-cpk-root", "cn-cpk-aliases", "cn-image-root"}
@@ -226,7 +219,7 @@ func BuildCDNManifest(manifestPath string, platformProfiles ...string) (result C
 	if len(files) == 0 {
 		return result, errors.New("empty CDN delivery manifest")
 	}
-	return CDNManifest{SchemaVersion: 2, ResourceSetSHA256: hex.EncodeToString(digest[:]), Files: files,
+	return CDNManifest{ResourceSetSHA256: hex.EncodeToString(digest[:]), Files: files,
 		SourceRoots: sourceRoots, PlatformContents: platformContents, Root: root}, nil
 }
 

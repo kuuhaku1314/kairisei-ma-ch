@@ -17,8 +17,6 @@ const maxLoginBonusRuntimeBytes = 64 * 1024
 var LoginBonusDayPattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
 type loginBonusRuntimeMaster struct {
-	SchemaVersion int    `json:"schema_version"`
-	ClientProfile string `json:"client_profile"`
 	gamestate.LoginBonusPolicy
 }
 
@@ -58,8 +56,7 @@ func LoadLoginBonusRuntimeMaster(path string) (gamestate.LoginBonusPolicy, error
 
 func validateLoginBonusRuntimeMaster(master loginBonusRuntimeMaster) error {
 	policy := master.LoginBonusPolicy
-	if master.SchemaVersion != 1 || master.ClientProfile != "cn602-bootstrap" ||
-		policy.ConfigVersion <= 0 || policy.DayBoundaryOffsetMinutes < -12*60 ||
+	if policy.DayBoundaryOffsetMinutes < -12*60 ||
 		policy.DayBoundaryOffsetMinutes > 14*60 || len(policy.Cycle) == 0 || len(policy.Cycle) > 31 ||
 		len(policy.Beginner) == 0 || len(policy.Beginner) > 30 ||
 		len(policy.TotalMilestones) == 0 || len(policy.TotalMilestones) > 100 {
@@ -94,33 +91,13 @@ func validateLoginBonusSchedule(name string, schedule []gamestate.LoginBonusDay,
 func ApplyLoginBonusRuntimeMaster(
 	state *gamestate.State,
 	policy gamestate.LoginBonusPolicy,
-) (bool, error) {
-	if state.LoginBonus.ConfigVersion > policy.ConfigVersion {
-		return false, errors.New("CN login bonus save is newer than the runtime policy")
-	}
+) error {
 	state.LoginBonusPolicy = cloneLoginBonusPolicy(policy)
-	if state.LoginBonus.ConfigVersion == policy.ConfigVersion {
-		if err := validateLoginBonusState(state.LoginBonus, policy); err != nil {
-			return false, err
-		}
-		return false, nil
-	}
-	state.LoginBonus.ConfigVersion = policy.ConfigVersion
-	if state.LoginBonus.CycleDay > len(policy.Cycle) {
-		state.LoginBonus.CycleDay = 0
-		state.LoginBonus.LastClaimDay = ""
-	}
-	if state.LoginBonus.BeginnerDay > len(policy.Beginner) {
-		state.LoginBonus.BeginnerDay = len(policy.Beginner)
-	}
-	if err := validateLoginBonusState(state.LoginBonus, policy); err != nil {
-		return false, err
-	}
-	return true, nil
+	return validateLoginBonusState(state.LoginBonus, policy)
 }
 
 func validateLoginBonusState(state gamestate.LoginBonusState, policy gamestate.LoginBonusPolicy) error {
-	if state.ConfigVersion != policy.ConfigVersion || state.CycleDay < 0 ||
+	if state.CycleDay < 0 ||
 		state.CycleDay > len(policy.Cycle) || state.BeginnerDay < 0 ||
 		state.BeginnerDay > len(policy.Beginner) || state.TotalClaims < state.CycleDay ||
 		state.TotalClaims < state.BeginnerDay ||

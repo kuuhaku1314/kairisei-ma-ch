@@ -11,7 +11,7 @@ import (
 )
 
 func TestMissingCardSourcesFollowInventoryWithoutChangingDetailQueries(t *testing.T) {
-	s := &Account{
+	s := &Account{onboarding: completedTestOnboarding(),
 		cardDefinitions: map[int]gamestate.Card{1: {CardID: 1}, 2: {CardID: 2}, 3: {CardID: 3}},
 		cards:           []CardInfo{{UniqueID: 101, CardID: 1}},
 		containerCards:  []CardInfo{{UniqueID: 102, CardID: 2}},
@@ -34,7 +34,7 @@ func TestMissingCardSourcesFollowInventoryWithoutChangingDetailQueries(t *testin
 
 func TestCardSourcesRespectGachaPublicationAndRandomGiftEligibility(t *testing.T) {
 	card := func(id int) gamestate.Reward { return gamestate.Reward{Type: 6, RewardTypeID: id, Num: 1} }
-	s := &Account{cardDefinitions: map[int]gamestate.Card{}, gachas: []gamestate.GachaProfile{{
+	s := &Account{onboarding: completedTestOnboarding(), cardDefinitions: map[int]gamestate.Card{}, gachas: []gamestate.GachaProfile{{
 		GachaID: 101, GroupID: 100, Name: "附赠池", PlayCount: 2, PlayCountMax: 3,
 		RewardPool: []gamestate.WeightedReward{{Reward: card(1), Weight: 1}},
 		Gifts:      []gamestate.GachaGiftRule{{FromPlay: 3, ToPlay: 3, Rewards: []gamestate.Reward{card(2)}}},
@@ -92,7 +92,7 @@ func TestCardSourcesFollowPublishedRewardsAndRemainingEligibility(t *testing.T) 
 		return []gamestate.WeightedReward{{Reward: card(id), Weight: 1}}
 	}
 	zero := 0
-	s := &Account{
+	s := &Account{onboarding: completedTestOnboarding(),
 		cardDefinitions:    map[int]gamestate.Card{},
 		stackCardTemplates: map[int]gamestate.CardStack{},
 		teamBattleSolo:     battleCatalogFixture(t, json.RawMessage(`{"9":[],"10":[{"0":100,"4":"活动","10":[{"0":101,"4":"超级","10":0,"26":0}]}],"11":[],"12":[]}`)),
@@ -208,7 +208,7 @@ func TestCardSourcesFollowPublishedRewardsAndRemainingEligibility(t *testing.T) 
 
 func TestModernCardSourcesUsePublishedDestinationKinds(t *testing.T) {
 	card := func(id int) gamestate.Reward { return gamestate.Reward{Type: 6, RewardTypeID: id, Num: 1} }
-	s := &Account{
+	s := &Account{onboarding: completedTestOnboarding(),
 		cardDefinitions: map[int]gamestate.Card{},
 		cards:           []CardInfo{{UniqueID: 1, CardID: 200}},
 		teamBattleSolo: battleCatalogFixture(t, json.RawMessage(`{

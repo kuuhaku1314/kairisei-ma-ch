@@ -1,7 +1,4 @@
 {
-  "schema_version": 2,
-  "client_profile": "cn602-bootstrap",
-  "config_version": 10,
   "max_level": 350,
   "experience_to_next": {
     "base": 100,

@@ -18,9 +18,6 @@ type exploreMap struct {
 }
 
 type exploreRuntimeMaster struct {
-	SchemaVersion int    `json:"schema_version"`
-	ClientProfile string `json:"client_profile"`
-
 	Maps        []exploreMap             `json:"maps"`
 	Stages      []gamestate.ExploreStage `json:"stages"`
 	FloorRarity int                      `json:"floor_rarity"`
@@ -62,9 +59,6 @@ func LoadExploreRuntimeMaster(masterPath string) (exploreRuntimeMaster, error) {
 }
 
 func validateExploreRuntimeMaster(master exploreRuntimeMaster) error {
-	if master.SchemaVersion != 1 || master.ClientProfile != "cn602-bootstrap" {
-		return errors.New("CN Explore runtime master identity is invalid")
-	}
 	if len(master.Maps) == 0 || len(master.Stages) == 0 {
 		return errors.New("CN Explore runtime master source is incomplete")
 	}

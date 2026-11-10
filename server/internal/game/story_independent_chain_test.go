@@ -12,7 +12,7 @@ func TestMainStoryCompletionStaysInItsProgressionChain(t *testing.T) {
 		{StoryMainPartID: 2, Sections: []gamestate.StoryMainSection{{Stories: []gamestate.StoryMain{{StoryMainID: 20101, StateFlag: 1}}}}},
 		{StoryMainPartID: 3, Sections: []gamestate.StoryMainSection{{Stories: []gamestate.StoryMain{{StoryMainID: 30101, StateFlag: 4}, {StoryMainID: 30102, StateFlag: 4}}}}},
 	}
-	s := &Account{storyMainParts: parts, storyRewardPolicy: gamestate.StoryRewardPolicy{MainFirstClear: gamestate.Reward{Type: 4, Num: 5}}}
+	s := &Account{onboarding: completedTestOnboarding(), storyMainParts: parts, storyRewardPolicy: gamestate.StoryRewardPolicy{MainFirstClear: gamestate.Reward{Type: 4, Num: 5}}}
 	clear := func(id int) {
 		if !s.BeginMainStory(id) {
 			t.Fatal("story locked", id)

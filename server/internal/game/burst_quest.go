@@ -13,7 +13,7 @@ var ErrNoActiveBurstStory = errors.New("no active sword-release story")
 // Learning stories remain optional. The feature bits also serve as the
 // one-time receipt for each initial Buddy, including after selling it.
 func (s *Account) completeTrainingBurstLocked() error {
-	if s.onboarding.ConfigVersion != cnOnboardingConfigVersion || s.onboarding.Step != cnOnboardingStepCount {
+	if s.onboarding.Step != cnOnboardingStepCount {
 		return nil
 	}
 	pending := []gamestate.BurstQuest{}

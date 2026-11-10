@@ -7,7 +7,7 @@ import (
 // Regression for the stock client's fixed ten-slot reader, discovery filter
 // and LOVE_MAX bit, including material-card history after inventory empties.
 func TestCardCollectionPagesAndHistory(t *testing.T) {
-	s := &Account{cardCollectionPages: [][10]int{{101, 102, 103, 104, 105, 106, 107, 108, 109, 110}, {201, 202}}}
+	s := &Account{onboarding: completedTestOnboarding(), cardCollectionPages: [][10]int{{101, 102, 103, 104, 105, 106, 107, 108, 109, 110}, {201, 202}}}
 	s.recordCollectedCardLocked(CardInfo{CardID: 101, Love: 100, LoveMax: 100})
 	s.recordCollectedCardLocked(CardInfo{CardID: 201})
 	s.recordCollectedCardLocked(CardInfo{CardID: 999}) // not part of the official directory

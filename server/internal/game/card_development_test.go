@@ -8,7 +8,7 @@ import (
 )
 
 func TestFameTrainingFinishesAtDeadlineWithoutRead(t *testing.T) {
-	s := &Account{stive: 10, coinFree: 100,
+	s := &Account{onboarding: completedTestOnboarding(), stive: 10, coinFree: 100,
 		cards:                 []CardInfo{{UniqueID: 1, CardID: 1, Level: 1, LevelMax: 1, Fame: 1}},
 		cardDefinitions:       map[int]gamestate.Card{1: {CardID: 1, LevelMax: 1, FameMax: 100}},
 		cardDevelopmentRules:  map[int]cardDevelopmentRule{1: {DevelopmentType: 2, DevelopRadix: 1, FameMax: 100}},

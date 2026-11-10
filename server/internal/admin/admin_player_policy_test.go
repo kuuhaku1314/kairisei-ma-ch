@@ -23,7 +23,7 @@ func TestPlayerPolicySaveRestartAndNewAccounts(t *testing.T) {
 		t.Fatal(err)
 	}
 	days := []gamestate.LoginBonusDay{{Day: 1, Comment: "签到", Reward: gamestate.Reward{Type: 10, Num: 5, CardSkillLevels: []int16{}}}}
-	o.playerLoginBase = gamestate.LoginBonusPolicy{ConfigVersion: 1, Cycle: days, Beginner: days, TotalMilestones: days}
+	o.playerLoginBase = gamestate.LoginBonusPolicy{Cycle: days, Beginner: days, TotalMilestones: days}
 	o.playerDefaults = &PlayerPolicy{Notice: noticePolicy{Title: "公告", Body: "欢迎", Enabled: true}, Login: loginRewards{days, days, days}, StoryCrystals: 50, Navigators: []game.NaviSetting{{NaviID: 1, Enabled: true, Price: 500}}}
 	o.playerNaviNames = map[int8]string{1: "妮妙"}
 	if err := o.loadPlayerPolicy(); err != nil {

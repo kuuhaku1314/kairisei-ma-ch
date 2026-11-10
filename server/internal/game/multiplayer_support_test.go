@@ -8,7 +8,7 @@ import (
 
 func TestMultiplayerMemberFreezesSupportSlotsAndLove(t *testing.T) {
 	deck := DeckInfo{Name: "support deck", ArthurType: 1, JobType: 1, LeaderCardIndex: 0, SupportCardUniqueIDs: []int64{0, 11}, SphereUniqueIDs: make([]int64, 3)}
-	s := &Account{currentName: "player name", deckHonorIDs: []int{0, 0, 0, 0}, avatars: []gamestate.Avatar{{}}, supportUnlockedSlots: make([]int8, 4)}
+	s := &Account{onboarding: completedTestOnboarding(), currentName: "player name", deckHonorIDs: []int{0, 0, 0, 0}, avatars: []gamestate.Avatar{{}}, supportUnlockedSlots: make([]int8, 4)}
 	for i := int64(1); i <= 10; i++ {
 		deck.CardUniqueIDs = append(deck.CardUniqueIDs, i)
 		s.cards = append(s.cards, CardInfo{UniqueID: i, CardID: int(i), Level: 1, HP: 100, Fame: 1})
@@ -34,7 +34,7 @@ func TestMultiplayerMemberFreezesSupportSlotsAndLove(t *testing.T) {
 }
 
 func TestOwnerFallbackUsesSelectedDeckWithoutReplacingEmptySelection(t *testing.T) {
-	s := &Account{currentName: "owner name", deckHonorIDs: make([]int, 4), avatars: make([]gamestate.Avatar, 4), supportUnlockedSlots: make([]int8, 4)}
+	s := &Account{onboarding: completedTestOnboarding(), currentName: "owner name", deckHonorIDs: make([]int, 4), avatars: make([]gamestate.Avatar, 4), supportUnlockedSlots: make([]int8, 4)}
 	for id := int64(1); id <= 10; id++ {
 		s.cards = append(s.cards, CardInfo{UniqueID: id, CardID: int(id), Level: 1, HP: 100, Fame: 1})
 	}

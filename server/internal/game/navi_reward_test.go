@@ -7,7 +7,7 @@ import (
 )
 
 func TestNavigatorRewardValidatesIdentityBeforeNarrowingAndUsesUnlockQuantity(t *testing.T) {
-	s := &Account{naviCatalogIDs: map[int8]struct{}{0: {}, 1: {}, 70: {}, 127: {}}, selectableNaviIDs: map[int8]struct{}{0: {}}}
+	s := &Account{onboarding: completedTestOnboarding(), naviCatalogIDs: map[int8]struct{}{0: {}, 1: {}, 70: {}, 127: {}}, selectableNaviIDs: map[int8]struct{}{0: {}}}
 	for _, reward := range []gamestate.Reward{
 		{Type: 11, RewardTypeID: -1, Num: 0},
 		{Type: 11, RewardTypeID: 128, Num: 1},

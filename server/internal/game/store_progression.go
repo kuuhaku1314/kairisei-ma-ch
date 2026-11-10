@@ -8,7 +8,7 @@ import (
 
 func (s *Account) applyPlayerExperienceLocked(amount int) {
 	policy := s.playerProgression
-	if amount <= 0 || policy.ConfigVersion <= 0 || s.currentLevel >= policy.MaxLevel {
+	if amount <= 0 || policy.MaxLevel <= 0 || s.currentLevel >= policy.MaxLevel {
 		return
 	}
 	remaining := amount

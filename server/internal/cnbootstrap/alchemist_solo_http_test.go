@@ -31,7 +31,7 @@ func auditAlchemistSoloHTTP(t *testing.T, handler *cnDeploymentHandler, masterPa
 	}
 	initial.User.Name = "炼金单人HTTP验证"
 	initial.User.BP = 100000
-	initial.Onboarding = gamestate.OnboardingState{ConfigVersion: 2, Step: 9}
+	initial.Onboarding = gamestate.OnboardingState{Step: 9}
 	initial.TowerQuestProgress = nil
 	for _, tower := range master.TowerProfiles {
 		initial.TowerQuestProgress = append(initial.TowerQuestProgress, gamestate.TowerQuestProgress{

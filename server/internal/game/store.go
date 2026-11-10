@@ -298,10 +298,9 @@ func New(state gamestate.State, options ...AccountOption) (*Account, error) {
 	if err := gamestate.ValidateItemShopProgress(state.ItemShopPurchases, state.ItemShopPeriods); err != nil {
 		return nil, err
 	}
-	if state.PlayerProgressionPolicy.ConfigVersion > 0 {
+	if state.PlayerProgressionPolicy.MaxLevel > 0 {
 		policy := state.PlayerProgressionPolicy
-		if state.PlayerProgressionConfigVersion != policy.ConfigVersion ||
-			state.User.Level < 1 || state.User.Level > policy.MaxLevel ||
+		if state.User.Level < 1 || state.User.Level > policy.MaxLevel ||
 			state.User.Experience < 0 || state.User.NowLevelExperience < 0 ||
 			state.User.BPMax != policy.BattlePointMaximum(state.User.Level) ||
 			!slices.Equal(state.User.Jobs, policy.JobsAtLevel(state.User.Level)) {

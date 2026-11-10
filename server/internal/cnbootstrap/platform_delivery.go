@@ -22,7 +22,6 @@ import (
 // Platform profiles are operator-owned build outputs. Their private filesystem
 // paths are never sent to the player; requests select only declared bundles.
 type platformDeliveryProfile struct {
-	Format       int                      `json:"format"`
 	Platform     string                   `json:"platform"`
 	UnityVersion string                   `json:"unity_version"`
 	ContentID    string                   `json:"content_id"`
@@ -47,12 +46,11 @@ type platformDeliveryCatalog struct {
 }
 
 type platformDeliveryBundle struct {
-	Name         string   `json:"name"`
-	File         string   `json:"file,omitempty"`
-	Bytes        int64    `json:"bytes"`
-	SHA256       string   `json:"sha256"`
-	CRC32        string   `json:"crc32"`
-	Dependencies []string `json:"dependencies"`
+	Name   string `json:"name"`
+	File   string `json:"file,omitempty"`
+	Bytes  int64  `json:"bytes"`
+	SHA256 string `json:"sha256"`
+	CRC32  string `json:"crc32"`
 }
 
 type platformDeliveryFile struct {
@@ -111,7 +109,7 @@ func loadPlatformDelivery(profilePath string) (*platformDelivery, error) {
 	if err := json.Unmarshal(raw, &profile); err != nil {
 		return nil, err
 	}
-	if profile.Format != 1 || (profile.Platform != "StandaloneWindows64" && profile.Platform != "Android") ||
+	if (profile.Platform != "StandaloneWindows64" && profile.Platform != "Android") ||
 		profile.UnityVersion == "" || strings.ContainsAny(profile.UnityVersion, "/\\:\x00\r\n") ||
 		!contentHashValid(profile.ContentID) || profile.ArtifactRoot == "" || len(profile.Bundles) == 0 || len(profile.Bundles) > 16384 {
 		return nil, errors.New("invalid platform delivery identity")

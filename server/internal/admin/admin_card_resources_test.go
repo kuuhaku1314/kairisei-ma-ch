@@ -51,7 +51,7 @@ func TestAdminPictureIdentitySharesOneImageAcrossCardsAndMaterials(t *testing.T)
 	if err := os.WriteFile(filepath.Join(root, "card-picture", "10001234.webp"), []byte("webp"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	manifest := adminAssetManifest{SchemaVersion: 2, ClientProfile: "cn602-bootstrap", CardImageIdentity: "picture_id", CatalogImageCoverage: map[string]adminCatalogImageCoverage{
+	manifest := adminAssetManifest{CardImageIdentity: "picture_id", CatalogImageCoverage: map[string]adminCatalogImageCoverage{
 		"card": {}, "material": {}, "item": {}, "sphere": {}, "buddy": {},
 	}}
 	write := func() {

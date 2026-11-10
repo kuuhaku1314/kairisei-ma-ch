@@ -15,7 +15,7 @@ func TestGachaGroupLimitCountsRequestsAcrossVariants(t *testing.T) {
 		{GachaID: 11, GroupID: 7, PayType: 3, Price: 1, CardNum: 1, CardNumMax: 1, PlayCountMax: 2, RewardPool: pool},
 		{GachaID: 12, GroupID: 7, PayType: 3, Price: 10, CardNum: 10, CardNumMax: 10, PlayCountMax: 2, RewardPool: pool},
 	}
-	s := &Account{gachas: gamestate.CloneGachas(profiles), coinFree: 100, items: map[int]gamestate.Item{}, itemDefinitions: map[int]gamestate.ItemDefinition{10: {ItemID: 10, MaxOwned: 1000}}}
+	s := &Account{onboarding: completedTestOnboarding(), gachas: gamestate.CloneGachas(profiles), coinFree: 100, items: map[int]gamestate.Item{}, itemDefinitions: map[int]gamestate.ItemDefinition{10: {ItemID: 10, MaxOwned: 1000}}}
 	if _, err := s.PlayGacha(12, 4, nil); err == nil || s.gachaGroupPlaysLocked()[7] != 0 {
 		t.Fatal("failed request used quota")
 	}
@@ -88,7 +88,7 @@ func TestGachaGroupLimitCountsRequestsAcrossVariants(t *testing.T) {
 func TestGachaStepPaymentUsesCurrentStage(t *testing.T) {
 	pool := []gamestate.WeightedReward{{Weight: 1, Reward: gamestate.Reward{Type: 8, RewardTypeID: 10, Num: 1, CardSkillLevels: []int16{}}}}
 	p := gamestate.GachaProfile{GachaID: 11, GroupID: 7, PayType: 3, Price: 1, CardNum: 1, CardNumMax: 1, RewardPool: pool, Steps: []gamestate.GachaStep{{Price: 1, RewardPool: pool}, {PayType: 4, PayTypeID: 99, Price: 2, RewardPool: pool}}}
-	s := &Account{gachas: []gamestate.GachaProfile{p}, coinFree: 20, items: map[int]gamestate.Item{99: {ItemID: 99, Num: 4}}, itemDefinitions: map[int]gamestate.ItemDefinition{10: {ItemID: 10, MaxOwned: 100}, 99: {ItemID: 99, MaxOwned: 100}}}
+	s := &Account{onboarding: completedTestOnboarding(), gachas: []gamestate.GachaProfile{p}, coinFree: 20, items: map[int]gamestate.Item{99: {ItemID: 99, Num: 4}}, itemDefinitions: map[int]gamestate.ItemDefinition{10: {ItemID: 10, MaxOwned: 100}, 99: {ItemID: 99, MaxOwned: 100}}}
 	if _, err := s.PlayGacha(11, 3, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestGachaStepPaymentUsesCurrentStage(t *testing.T) {
 }
 
 func TestGachaVisibilityRetainsAllProfessionChoices(t *testing.T) {
-	s := &Account{}
+	s := &Account{onboarding: completedTestOnboarding()}
 	for job := int8(1); job <= 5; job++ {
 		s.gachas = append(s.gachas, gamestate.GachaProfile{GachaID: 10 + int(job), GroupID: 7, ArthurType: job, PayType: 3, Price: 1, CardNum: 1, CardNumMax: 1, PlayCountMax: 1, CardIDs: []int{100}, CardWeights: []int{1}})
 	}
@@ -123,7 +123,7 @@ func TestGachaConfigurationPreservesPlayerStateAndScheduledPaymentFallback(t *te
 		{GachaID: 11, GroupID: 1, PayType: 4, PayTypeID: 99, Price: 1, PlayCount: 7, CardNum: 1, CardNumMax: 1, CardIDs: []int{100}, CardWeights: []int{1}},
 		{GachaID: 12, GroupID: 1, PayType: 3, Price: 5, CardNum: 1, CardNumMax: 1, CardIDs: []int{100}, CardWeights: []int{1}},
 	}
-	s := &Account{gachas: CloneGachaProfiles(profiles), items: map[int]gamestate.Item{99: {Num: 5}}, gachaDailyClaims: map[int]gamestate.GachaDailyClaim{11: {GachaID: 11, Day: "2026-09-06", PlayCount: 1}}, gachaSelections: map[int][]gamestate.Reward{}}
+	s := &Account{onboarding: completedTestOnboarding(), gachas: CloneGachaProfiles(profiles), items: map[int]gamestate.Item{99: {Num: 5}}, gachaDailyClaims: map[int]gamestate.GachaDailyClaim{11: {GachaID: 11, Day: "2026-09-06", PlayCount: 1}}, gachaSelections: map[int][]gamestate.Reward{}}
 	configured := profiles[0]
 	configured.Price = 2
 	configured.CardIDs = []int{200}
@@ -172,7 +172,7 @@ func TestGachaStepsCommitWithLimitedGifts(t *testing.T) {
 	profile := gamestate.GachaProfile{GachaID: 7, GroupID: 7, PayType: 3, Price: 1, CardNum: 1, CardNumMax: 1,
 		RewardPool: pool, Steps: []gamestate.GachaStep{{Price: 1, RewardPool: pool}, {Price: 2, RewardPool: pool}},
 		Gifts: []gamestate.GachaGiftRule{{FromPlay: 1, ToPlay: 5, Rewards: []gamestate.Reward{{Type: 8, RewardTypeID: 9, Num: 1, CardSkillLevels: []int16{}}}}}}
-	s := &Account{gachas: gamestate.CloneGachas([]gamestate.GachaProfile{profile}), items: map[int]gamestate.Item{10: {ItemID: 10, Num: 20}},
+	s := &Account{onboarding: completedTestOnboarding(), gachas: gamestate.CloneGachas([]gamestate.GachaProfile{profile}), items: map[int]gamestate.Item{10: {ItemID: 10, Num: 20}},
 		itemDefinitions: map[int]gamestate.ItemDefinition{9: {ItemID: 9, MaxOwned: 5}, 10: {ItemID: 10, MaxOwned: 100}}}
 	if _, err := s.PlayGacha(7, 3, nil); err == nil || s.gachas[0].PlayCount != 0 || s.gold != 0 {
 		t.Fatal("failed payment advanced the step")
@@ -225,7 +225,7 @@ func TestGachaStepsCommitWithLimitedGifts(t *testing.T) {
 }
 
 func TestMixedGachaExpectancyComparesPresentationGrades(t *testing.T) {
-	s := &Account{
+	s := &Account{onboarding: completedTestOnboarding(),
 		cardDefinitions:  map[int]gamestate.Card{1: {RarityRank: 5}},
 		buddyDefinitions: map[int]gamestate.BuddyDefinition{2: {Rarity: "LEGEND"}},
 		sphereDefinitions: map[int]gamestate.SphereDefinition{
@@ -254,7 +254,7 @@ func TestMixedGachaExpectancyComparesPresentationGrades(t *testing.T) {
 }
 
 func TestOperatorGachaPoolIsAppendedWithStoredPlays(t *testing.T) {
-	s := &Account{operatorGachaPlays: map[int]int{60300001: 3}}
+	s := &Account{onboarding: completedTestOnboarding(), operatorGachaPlays: map[int]int{60300001: 3}}
 	pool := gamestate.GachaProfile{GachaID: 60300001, GroupID: 60300001, CardNum: 1, CardNumMax: 1, CardIDs: []int{1}, CardWeights: []int{1}}
 	s.ApplyGachaConfiguration(1, []GachaConfiguration{{Operator: true, Profile: pool}})
 	pool.Name = "renamed"

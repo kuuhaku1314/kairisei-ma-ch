@@ -47,7 +47,7 @@ func TestPopupAnnouncementsPublishHomeReadAndRestart(t *testing.T) {
 		t.Fatal("draft was published")
 	}
 	state := testfixture.RuntimeState(t)
-	state.Onboarding.ConfigVersion, state.Onboarding.Step = 2, 9
+	state.Onboarding.Step = 9
 	state.Engagement.PopupReadIDs = nil
 	durable := state
 	newBusiness := func(input gamestate.State) http.Handler {

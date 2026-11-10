@@ -14,7 +14,7 @@ const alchemistFeatureID uint = 37
 func (s *Account) InitializeAlchemist() (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.alchemistStarter == nil || s.onboarding.ConfigVersion != cnOnboardingConfigVersion || s.onboarding.Step != cnOnboardingStepCount {
+	if s.alchemistStarter == nil || s.onboarding.Step != cnOnboardingStepCount {
 		return false, nil
 	}
 	if _, done := s.unlockedFeatureIDs[alchemistFeatureID]; done {

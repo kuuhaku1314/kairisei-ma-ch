@@ -8,7 +8,7 @@ import (
 )
 
 func TestItemShopOperatorPolicyControlsDisplayAndCharge(t *testing.T) {
-	s := &Account{
+	s := &Account{onboarding: completedTestOnboarding(),
 		gold: 30000,
 		itemShopTabs: []gamestate.ItemShopTab{{TabType: 0, Lineup: []gamestate.ItemShopLineup{{
 			LineupID: 602004, PayType: 1, Price: 10000, BuyNumMax: 99,
@@ -40,7 +40,7 @@ func TestItemShopOperatorPolicyControlsDisplayAndCharge(t *testing.T) {
 }
 
 func TestItemShopPeriodsAndNativeProductKinds(t *testing.T) {
-	s := &Account{gold: 10000, cardMax: 5990, cardContainerMax: 6000, items: map[int]gamestate.Item{}, itemDefinitions: map[int]gamestate.ItemDefinition{1000: {ItemID: 1000, Name: "恢复药", PictID: 10080, MaxOwned: 999, Description: "恢复体力。"}}, collectionRewardIDs: map[[2]int]struct{}{{16, 123}: {}}, stampIDs: map[int]struct{}{}}
+	s := &Account{onboarding: completedTestOnboarding(), gold: 10000, cardMax: 5990, cardContainerMax: 6000, items: map[int]gamestate.Item{}, itemDefinitions: map[int]gamestate.ItemDefinition{1000: {ItemID: 1000, Name: "恢复药", PictID: 10080, MaxOwned: 999, Description: "恢复体力。"}}, collectionRewardIDs: map[[2]int]struct{}{{16, 123}: {}}, stampIDs: map[int]struct{}{}}
 	for i := 0; i < 5; i++ {
 		s.itemShopTabs = append(s.itemShopTabs, gamestate.ItemShopTab{TabType: i})
 	}

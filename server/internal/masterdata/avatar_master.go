@@ -21,17 +21,13 @@ const (
 )
 
 type avatarRuntimeMaster struct {
-	SchemaVersion int    `json:"schema_version"`
-	ClientProfile string `json:"client_profile"`
-
-	LocalAccountConfigVersion int                                    `json:"local_account_config_version"`
-	InitialOwnedPartIDs       []int                                  `json:"initial_owned_part_ids"`
-	DefaultDecks              map[string][]int                       `json:"default_decks"`
-	ShopPolicy                gamestate.AvatarShopPolicy             `json:"shop_policy"`
-	PartDefinitions           []gamestate.AvatarPartDefinition       `json:"part_definitions"`
-	Series                    []gamestate.AvatarSeriesDefinition     `json:"series"`
-	SeriesCompletions         []gamestate.AvatarSeriesCompletion     `json:"series_completions"`
-	CostumeRewards            []gamestate.CollectionRewardDefinition `json:"costume_rewards"`
+	InitialOwnedPartIDs []int                                  `json:"initial_owned_part_ids"`
+	DefaultDecks        map[string][]int                       `json:"default_decks"`
+	ShopPolicy          gamestate.AvatarShopPolicy             `json:"shop_policy"`
+	PartDefinitions     []gamestate.AvatarPartDefinition       `json:"part_definitions"`
+	Series              []gamestate.AvatarSeriesDefinition     `json:"series"`
+	SeriesCompletions   []gamestate.AvatarSeriesCompletion     `json:"series_completions"`
+	CostumeRewards      []gamestate.CollectionRewardDefinition `json:"costume_rewards"`
 }
 
 func LoadAvatarRuntimeMaster(masterPath string) (avatarRuntimeMaster, error) {
@@ -69,10 +65,7 @@ func LoadAvatarRuntimeMaster(masterPath string) (avatarRuntimeMaster, error) {
 }
 
 func validateAvatarRuntimeMaster(master avatarRuntimeMaster) error {
-	if master.SchemaVersion != 1 || master.ClientProfile != "cn602-bootstrap" {
-		return errors.New("CN Avatar runtime master identity is invalid")
-	}
-	if master.LocalAccountConfigVersion <= 0 || len(master.PartDefinitions) == 0 ||
+	if len(master.PartDefinitions) == 0 ||
 		len(master.Series) == 0 || len(master.SeriesCompletions) == 0 ||
 		len(master.InitialOwnedPartIDs) == 0 || len(master.CostumeRewards) == 0 {
 		return errors.New("CN Avatar runtime master is incomplete")
@@ -175,7 +168,7 @@ func validateAvatarRuntimeMaster(master avatarRuntimeMaster) error {
 	return nil
 }
 
-func ApplyAvatarRuntimeMaster(state *gamestate.State, master avatarRuntimeMaster) (bool, error) {
+func ApplyAvatarRuntimeMaster(state *gamestate.State, master avatarRuntimeMaster) error {
 	state.SetCollectionRewardDefinitions(14, master.CostumeRewards)
 	state.AvatarPartDefinitions = append([]gamestate.AvatarPartDefinition(nil), master.PartDefinitions...)
 	state.AvatarDefaultDecks = make([][]int, 4)
@@ -192,37 +185,29 @@ func ApplyAvatarRuntimeMaster(state *gamestate.State, master avatarRuntimeMaster
 	for _, completion := range master.SeriesCompletions {
 		for _, reward := range completion.Rewards {
 			if _, exists := sphereDefinitionByID(state.SphereDefinitions, reward.RewardID); !exists {
-				return false, fmt.Errorf("CN Avatar completion %d references unknown official sphere %d", completion.CompletionID, reward.RewardID)
+				return fmt.Errorf("CN Avatar completion %d references unknown official sphere %d", completion.CompletionID, reward.RewardID)
 			}
 		}
 	}
-	changed := false
 	owned := make(map[int]struct{}, len(state.AvatarParts)+len(master.InitialOwnedPartIDs))
 	for _, partID := range state.AvatarParts {
 		if _, exists := definitions[partID]; !exists {
-			return false, fmt.Errorf("persisted CN Avatar part %d is absent from official definitions", partID)
+			return fmt.Errorf("persisted CN Avatar part %d is absent from official definitions", partID)
 		}
 		if _, duplicate := owned[partID]; duplicate {
-			return false, fmt.Errorf("persisted CN Avatar part %d is duplicated", partID)
+			return fmt.Errorf("persisted CN Avatar part %d is duplicated", partID)
 		}
 		owned[partID] = struct{}{}
 	}
-	if state.AvatarConfigVersion < master.LocalAccountConfigVersion {
-		for _, partID := range master.InitialOwnedPartIDs {
-			if _, exists := owned[partID]; !exists {
-				owned[partID] = struct{}{}
-				changed = true
-			}
-		}
-		state.AvatarConfigVersion = master.LocalAccountConfigVersion
-		changed = true
+	for _, partID := range master.InitialOwnedPartIDs {
+		owned[partID] = struct{}{}
 	}
 	if len(state.Avatars) != 4 {
-		return false, errors.New("persisted CN Avatar state requires four Arthur decks")
+		return errors.New("persisted CN Avatar state requires four Arthur decks")
 	}
 	for index, avatar := range state.Avatars {
 		if len(avatar.AvatarPartIDs) != avatarDeckSlots {
-			return false, fmt.Errorf("persisted CN Avatar deck %d is invalid", index+1)
+			return fmt.Errorf("persisted CN Avatar deck %d is invalid", index+1)
 		}
 		for slot, partID := range avatar.AvatarPartIDs {
 			if partID == 0 {
@@ -230,14 +215,13 @@ func ApplyAvatarRuntimeMaster(state *gamestate.State, master avatarRuntimeMaster
 			}
 			definition, exists := definitions[partID]
 			if !exists {
-				return false, fmt.Errorf("persisted CN Avatar deck %d references unknown part %d", index+1, partID)
+				return fmt.Errorf("persisted CN Avatar deck %d references unknown part %d", index+1, partID)
 			}
 			if err := validateAvatarPartEquipOrDefault(definition, index+1, slot, partID, state.AvatarDefaultDecks); err != nil {
-				return false, fmt.Errorf("persisted CN Avatar deck %d: %w", index+1, err)
+				return fmt.Errorf("persisted CN Avatar deck %d: %w", index+1, err)
 			}
 			if _, exists := owned[partID]; !exists {
 				owned[partID] = struct{}{}
-				changed = true
 			}
 		}
 	}
@@ -246,7 +230,7 @@ func ApplyAvatarRuntimeMaster(state *gamestate.State, master avatarRuntimeMaster
 		state.AvatarParts = append(state.AvatarParts, partID)
 	}
 	sort.Ints(state.AvatarParts)
-	return changed, nil
+	return nil
 }
 
 func ApplyAvatarShopAssetClosure(state *gamestate.State, availableBundles map[string]struct{}) error {

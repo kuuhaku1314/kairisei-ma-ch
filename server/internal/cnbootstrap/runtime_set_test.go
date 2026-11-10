@@ -173,7 +173,7 @@ func TestCompleteRuntimeSetConstruction(t *testing.T) {
 			}
 		}
 		manifest, err := BuildCDNManifest(filepath.Join(root, "resource-set.json"), resources.PlatformDeliveries...)
-		if err != nil || manifest.SchemaVersion != 2 {
+		if err != nil || len(manifest.Files) == 0 {
 			t.Fatalf("complete modern CDN export: %v", err)
 		}
 		t.Logf("Complete modern startup/login/catalog/CDN: %d profiles, %d public objects; no legacy patch roots/carrier loading, listeners or player DB", len(resources.PlatformDeliveries), len(manifest.Files))

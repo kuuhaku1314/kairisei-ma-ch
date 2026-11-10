@@ -137,9 +137,7 @@ type adminCatalogImageCoverage struct {
 }
 
 type adminAssetManifest struct {
-	SchemaVersion        int                                  `json:"schema_version"`
 	CardImageIdentity    string                               `json:"card_image_identity"`
-	ClientProfile        string                               `json:"client_profile"`
 	CatalogImageCoverage map[string]adminCatalogImageCoverage `json:"catalog_image_coverage"`
 }
 
@@ -293,9 +291,6 @@ func applyAdminCatalogAssetCoverage(catalog []AdminCatalogEntry, assetsRoot stri
 	var manifest adminAssetManifest
 	if err := json.Unmarshal(content, &manifest); err != nil {
 		return nil, fmt.Errorf("decode manifest: %w", err)
-	}
-	if manifest.SchemaVersion != 2 || manifest.ClientProfile != "cn602-bootstrap" {
-		return nil, errors.New("manifest identity or output closure is invalid")
 	}
 	if manifest.CardImageIdentity != "" && manifest.CardImageIdentity != "picture_id" {
 		return nil, errors.New("manifest card image identity is unsupported")
@@ -615,10 +610,8 @@ func (admin *API) status(writer http.ResponseWriter, request *http.Request) {
 	WriteAdminJSON(writer, http.StatusOK, response)
 }
 
-// loadAccountState applies the same player progression migration used when a
-// game handler is created. The admin list and grant paths otherwise expose and
-// mutate dormant accounts before their next login using stale level-derived
-// BP caps and job parameters.
+// loadAccountState binds the current progression rules and persists only
+// actual changes to level-derived experience, BP caps or job parameters.
 func (admin *API) loadAccountState(userID int) (gamestate.State, error) {
 	state, err := admin.accounts.LoadState(userID)
 	if err != nil {
@@ -632,7 +625,7 @@ func (admin *API) loadAccountState(userID int) (gamestate.State, error) {
 		return state, nil
 	}
 	if err := admin.accounts.PersistState(userID, state); err != nil {
-		return gamestate.State{}, fmt.Errorf("persist CN admin player progression migration: %w", err)
+		return gamestate.State{}, fmt.Errorf("persist CN admin player progression: %w", err)
 	}
 	admin.business.Invalidate(userID)
 	return state, nil
@@ -1220,7 +1213,7 @@ func applyAdminTargetLevel(state *gamestate.State, policy gamestate.PlayerProgre
 	if target < state.User.Level {
 		return errors.New("admin target level cannot lower an account")
 	}
-	if target > policy.MaxLevel || policy.ConfigVersion <= 0 {
+	if target > policy.MaxLevel || policy.MaxLevel <= 0 {
 		return errors.New("admin target level is outside the active progression policy")
 	}
 	if target == state.User.Level {

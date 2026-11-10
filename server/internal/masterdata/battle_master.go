@@ -41,9 +41,6 @@ func isBattleRetiredSeedGroupID(groupID int) bool {
 }
 
 type BattleRuntimeMaster struct {
-	SchemaVersion int    `json:"schema_version"`
-	ClientProfile string `json:"client_profile"`
-
 	LocalProfile           json.RawMessage                      `json:"local_profile"`
 	ExcludedBossIDs        []int                                `json:"excluded_existing_boss_ids"`
 	DeduplicatedFamilies   []battleDeduplicatedFamily           `json:"deduplicated_families"`
@@ -173,9 +170,6 @@ func LoadBattleRuntimeMaster(masterPath string) (BattleRuntimeMaster, error) {
 }
 
 func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
-	if master.SchemaVersion != 9 || master.ClientProfile != "cn602-bootstrap" {
-		return errors.New("CN battle runtime master identity is invalid")
-	}
 	if len(master.LocalProfile) == 0 || bytes.Equal(master.LocalProfile, []byte("null")) ||
 		len(master.Groups) == 0 || len(master.Replays) == 0 ||
 		len(master.Rewards) == 0 || len(master.Replays) != len(master.Rewards) ||

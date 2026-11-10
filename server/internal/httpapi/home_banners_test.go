@@ -13,7 +13,7 @@ import (
 func TestConfiguredHomeBannersOrderVisibilityAndContentAddress(t *testing.T) {
 	a := &API{baseURL: "http://127.0.0.1:26040"}
 	a.account = testAccount(t, func(state *gamestate.State) {
-		state.Onboarding = gamestate.OnboardingState{ConfigVersion: 2, Step: 9}
+		state.Onboarding = gamestate.OnboardingState{Step: 9}
 	})
 	path := "home-banners/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png"
 	a.homeBanners = operations.HomeBannerConfiguration{Policy: operations.HomeBannerPolicy{Custom: true, Items: []operations.HomeBannerEntry{
@@ -45,7 +45,7 @@ func TestConfiguredHomeBannersOrderVisibilityAndContentAddress(t *testing.T) {
 		t.Fatal("custom empty policy did not hide image banners", got)
 	}
 	// The training entrance retains ownership of Home while it is active.
-	a.account = testAccount(t, func(state *gamestate.State) { state.Onboarding = gamestate.OnboardingState{ConfigVersion: 2, Step: 1} })
+	a.account = testAccount(t, func(state *gamestate.State) { state.Onboarding = gamestate.OnboardingState{Step: 1} })
 	a.homeBanners.Policy.Items = []operations.HomeBannerEntry{{Title: "训练中隐藏", Enabled: true, CoverPath: path, Target: "none"}}
 	if rows := a.configuredHomeBanners(request, time.Unix(100, 0)); len(rows) != 0 {
 		t.Fatal("custom banner interrupted onboarding", rows)
@@ -55,7 +55,7 @@ func TestConfiguredHomeBannersOrderVisibilityAndContentAddress(t *testing.T) {
 func TestHomeGachaGroupBannerResolvesAVisiblePublishedDraw(t *testing.T) {
 	now := time.Now()
 	a := &API{account: testAccount(t, func(state *gamestate.State) {
-		state.Onboarding = gamestate.OnboardingState{ConfigVersion: 2, Step: 9}
+		state.Onboarding = gamestate.OnboardingState{Step: 9}
 		state.Gachas = []gamestate.GachaProfile{
 			{GroupID: 30, GachaID: 101, PayType: 4, PayTypeID: 2000, Price: 10000, CardNum: 1, CardNumMax: 1, EndTime: int(now.Add(time.Hour).Unix()), CardIDs: []int{11000045}, CardWeights: []int{1}},
 			{GroupID: 30, GachaID: 102, PayType: 3, Price: 1, CardNum: 1, CardNumMax: 1, EndTime: int(now.Add(time.Hour).Unix()), CardIDs: []int{11000045}, CardWeights: []int{1}},

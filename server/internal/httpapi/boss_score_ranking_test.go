@@ -26,7 +26,7 @@ func (f *scoreRankingFixture) BossScoreRanking(bossID int, mode gamestate.Battle
 
 func TestBossScoreRankingRouteAndBannerTarget(t *testing.T) {
 	state := testfixture.RuntimeState(t)
-	state.Onboarding = gamestate.OnboardingState{ConfigVersion: 2, Step: 9}
+	state.Onboarding = gamestate.OnboardingState{Step: 9}
 	state.TeamBattleRewards = append(state.TeamBattleRewards, gamestate.TeamBattleRewardProfile{
 		BossID: 37010101, ScorePolicy: &gamestate.TeamBattleScorePolicy{Rate: 1},
 	})

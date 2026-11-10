@@ -20,9 +20,6 @@ const (
 )
 
 type NormalQuestRuntimeMaster struct {
-	SchemaVersion int    `json:"schema_version"`
-	ClientProfile string `json:"client_profile"`
-
 	MainQuestSection         *gamestate.MainQuestSectionDefinition         `json:"main_quest_section,omitempty"`
 	MainQuestReadingSections []gamestate.MainQuestReadingSectionDefinition `json:"main_quest_reading_sections,omitempty"`
 	EntryGroups              []json.RawMessage                             `json:"entry_groups"`
@@ -95,9 +92,7 @@ func LoadNormalQuestRuntimeMaster(masterPath string) (NormalQuestRuntimeMaster, 
 }
 
 func validateNormalQuestRuntimeMaster(master NormalQuestRuntimeMaster) error {
-	if master.SchemaVersion != 1 ||
-		master.ClientProfile != "cn602-bootstrap" ||
-		len(master.EntryGroups) != 18 || len(master.Areas) != 18 ||
+	if len(master.EntryGroups) != 18 || len(master.Areas) != 18 ||
 		len(master.Replays) != 50 || len(master.Rewards) != 100 {
 		return errors.New("CN normal quest runtime master identity or coverage is invalid")
 	}

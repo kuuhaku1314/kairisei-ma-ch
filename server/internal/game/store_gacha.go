@@ -172,9 +172,6 @@ func isOnboardingGachaID(gachaID int) bool {
 // while fusion, deck editing, and the first area are still guiding the player.
 // Playback is gated separately by gachaAvailableForPlayLocked.
 func (s *Account) onboardingVisibleGachaForStepLocked() int {
-	if s.onboarding.ConfigVersion != cnOnboardingConfigVersion {
-		return 0
-	}
 	switch s.onboarding.Step {
 	case 1:
 		return cnOnboardingGachaID
@@ -193,15 +190,13 @@ func (s *Account) GachaAvailableForPlayLocked(gachaID int) bool {
 	if !s.gachaScheduledLocked(gachaID) {
 		return false
 	}
-	if s.onboarding.ConfigVersion == cnOnboardingConfigVersion {
-		switch s.onboarding.Step {
-		case 0, 2, 3, 4:
-			return false
-		case 1:
-			return gachaID == cnOnboardingGachaID
-		case 5:
-			return gachaID == cnOnboardingMultiGachaID
-		}
+	switch s.onboarding.Step {
+	case 0, 2, 3, 4:
+		return false
+	case 1:
+		return gachaID == cnOnboardingGachaID
+	case 5:
+		return gachaID == cnOnboardingMultiGachaID
 	}
 	return !isOnboardingGachaID(gachaID)
 }

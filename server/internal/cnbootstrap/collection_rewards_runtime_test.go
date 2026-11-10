@@ -44,14 +44,14 @@ func auditCompleteCollectionRewards(t *testing.T, h http.Handler, savePath, seed
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = masterdata.ApplyStampRuntimeMaster(&state, stamps); err != nil {
+	if err = masterdata.ApplyStampRuntimeMaster(&state, stamps); err != nil {
 		t.Fatal(err)
 	}
 	honors, err := masterdata.LoadHonorRuntimeMaster(honorPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = masterdata.ApplyHonorRuntimeMaster(&state, honors); err != nil {
+	if err = masterdata.ApplyHonorRuntimeMaster(&state, honors); err != nil {
 		t.Fatal(err)
 	}
 	admin := h.(interface{ AdminHandler() http.Handler }).AdminHandler()

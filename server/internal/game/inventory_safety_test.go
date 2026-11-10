@@ -11,7 +11,7 @@ import (
 )
 
 func TestAdminWithdrawnMailIsNotClaimHistory(t *testing.T) {
-	s := &Account{presentHistories: []gamestate.Present{
+	s := &Account{onboarding: completedTestOnboarding(), presentHistories: []gamestate.Present{
 		{PresentID: 1, State: gamestate.PresentStateAdminDeleted},
 		{PresentID: 2, State: 1},
 	}}
@@ -25,7 +25,7 @@ func TestCardFusionFame(t *testing.T) {
 	for _, name := range []string{"dual attribute caps fame", "wrong attribute", "manual leveled same family"} {
 		t.Run(name, func(t *testing.T) {
 			base := CardInfo{UniqueID: 1, CardID: 10, Level: 2, LevelMax: 2, Experience: 10, Fame: 90, BaseAddPrice: 100}
-			s := &Account{gold: 1000, cards: []CardInfo{base},
+			s := &Account{onboarding: completedTestOnboarding(), gold: 1000, cards: []CardInfo{base},
 				cardDefinitions: map[int]gamestate.Card{
 					10: {CardID: 10, SameCardID: 10, RarityRank: 5, LevelMax: 2, ExperienceTableID: 1, FameMax: 100, FusionAttributes: 3},
 					11: {CardID: 11, SameCardID: 10, RarityRank: 6},
@@ -77,7 +77,7 @@ func TestPresentMultiReceiveUsesClientFilterLimitAndPartialResults(t *testing.T)
 	item := gamestate.Present{PresentID: 1, Reward: gamestate.Reward{Type: 8, RewardTypeID: 10, Num: 1}}
 	for _, name := range []string{"twenty per batch", "full item keeps other rewards", "daily item filter", "nonclaimable keeps other rewards", "only received"} {
 		t.Run(name, func(t *testing.T) {
-			s := &Account{items: map[int]gamestate.Item{}, itemDefinitions: map[int]gamestate.ItemDefinition{
+			s := &Account{onboarding: completedTestOnboarding(), items: map[int]gamestate.Item{}, itemDefinitions: map[int]gamestate.ItemDefinition{
 				10: {ItemID: 10, MaxOwned: 1},
 			}}
 			receiveTypes := []int{2}
@@ -158,7 +158,7 @@ func TestPresentMultiReceiveUsesClientFilterLimitAndPartialResults(t *testing.T)
 
 func TestCardSalesRejectOverflowBeforeConsumingInventory(t *testing.T) {
 	for _, container := range []bool{false, true} {
-		s := &Account{gold: 1, cardDefinitions: map[int]gamestate.Card{9: {CardID: 9, SellGold: math.MaxInt}}}
+		s := &Account{onboarding: completedTestOnboarding(), gold: 1, cardDefinitions: map[int]gamestate.Card{9: {CardID: 9, SellGold: math.MaxInt}}}
 		cards := []CardInfo{{UniqueID: 1, CardID: 9}}
 		var err error
 		if container {
@@ -187,7 +187,7 @@ func TestCardSalesRejectOverflowBeforeConsumingInventory(t *testing.T) {
 }
 
 func TestFameTrainingCannotUnlockOrReplaceItsCard(t *testing.T) {
-	s := &Account{cardContainerMax: 10, cards: []CardInfo{{UniqueID: 1, CardID: 9, IsLock: 1}}, cardFameTraining: &gamestate.CardFameTraining{UniqueID: 1}}
+	s := &Account{onboarding: completedTestOnboarding(), cardContainerMax: 10, cards: []CardInfo{{UniqueID: 1, CardID: 9, IsLock: 1}}, cardFameTraining: &gamestate.CardFameTraining{UniqueID: 1}}
 	if err := s.SetCardLock(1, 0, false); err == nil || s.cards[0].IsLock != 1 {
 		t.Fatal("active training lock removed")
 	}
@@ -234,7 +234,7 @@ func TestCardFusionMaterialCount(t *testing.T) {
 	} {
 		t.Run(input.name, func(t *testing.T) {
 			base := CardInfo{UniqueID: 1, CardID: 10, Level: 1, LevelMax: 2, BaseAddPrice: 100}
-			s := &Account{gold: input.gold, cards: []CardInfo{base}, cardProgression: policy,
+			s := &Account{onboarding: completedTestOnboarding(), gold: input.gold, cards: []CardInfo{base}, cardProgression: policy,
 				cardDefinitions: map[int]gamestate.Card{10: {CardID: 10, LevelMax: 2, ExperienceTableID: 1}, 11: {CardID: 11, SameCardID: 11}},
 				cardExperience:  map[int][]int{1: {1000000}},
 			}
@@ -315,7 +315,7 @@ func TestCardEvolutionRecipes(t *testing.T) {
 			if input.kind == 3 {
 				transition.Materials = []gamestate.EvolutionMaterial{{CardID: 20, Num: 25, Fame: 1}, {CardID: 21, Num: 25, Fame: 1}, {CardID: 22, Num: 3, Fame: 1}}
 			}
-			s := &Account{gold: 500, cards: []CardInfo{base}, cardCollectionIDs: map[int]struct{}{},
+			s := &Account{onboarding: completedTestOnboarding(), gold: 500, cards: []CardInfo{base}, cardCollectionIDs: map[int]struct{}{},
 				cardActions:     gamestate.CardActionState{EvolutionTransitions: []gamestate.EvolutionTransition{transition}},
 				cardDefinitions: map[int]gamestate.Card{11: {CardID: 11, LevelMax: 3, ExperienceTableID: 2, LoveMax: 10000, FameMax: 100}},
 				cardTemplates:   map[int]CardInfo{11: {CardID: 11, Level: 1, LevelMax: 3}},

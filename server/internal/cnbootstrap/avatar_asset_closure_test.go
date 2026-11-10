@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"kairisei.local/server/internal/protocol"
 	"os"
 	"path/filepath"
 	"testing"
@@ -18,7 +19,7 @@ func TestLoadCNAssetMapDeliveryCRC32(t *testing.T) {
 		"schema_version": 2,
 		"client_profile": "cn602-bootstrap",
 		"source": map[string]any{
-			"catalog_version":                    cn602CatalogVersion,
+			"catalog_version":                    protocol.CatalogRevision,
 			"version_dat_sha256":                 fmt.Sprintf("%x", digest),
 			"parsed_unity_bundle_count":          1,
 			"non_unity_bundle_count":             0,

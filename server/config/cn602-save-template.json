@@ -1,10 +1,7 @@
 {
-  "schema_version": 1,
-  "player_progression_config_version": 6,
   "battle_point": {
     "recovery_seconds": 180
   },
-  "pvp_config_version": 1,
   "pvp": {
     "challenge": 5,
     "next_battle_id": 1,
@@ -12,28 +9,6 @@
     "history": []
   },
   "spheres": [],
-  "battle_loadout_card_unique_ids": [
-    602000101,
-    602000102,
-    602000103,
-    602000104,
-    602000105,
-    602000201,
-    602000202,
-    602000203,
-    602000204,
-    602000205,
-    602000301,
-    602000302,
-    602000303,
-    602000304,
-    602000305,
-    602000401,
-    602000402,
-    602000403,
-    602000404,
-    602000405
-  ],
   "user": {
     "user_id": 1000001,
     "invite_id": "000000001",
@@ -1001,7 +976,6 @@
     "push_enable_flag": 0
   },
   "login_bonus": {
-    "config_version": 2,
     "last_claim_day": "",
     "cycle_day": 0,
     "beginner_day": 0,
@@ -88513,5 +88487,8 @@
     "costumeids": [
       1
     ]
+  },
+  "onboarding": {
+    "step": 9
   }
 }

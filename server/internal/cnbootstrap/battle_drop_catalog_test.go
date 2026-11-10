@@ -23,7 +23,7 @@ func auditCompleteRuntimeDropCatalog(t *testing.T, state gamestate.State, cards 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := masterdata.ApplyCardRuntimeMaster(&state, cards); err != nil {
+	if err := masterdata.ApplyCardRuntimeMaster(&state, cards); err != nil {
 		t.Fatal(err)
 	}
 	if err := masterdata.ApplyBattleRuntimeMaster(&state, master); err != nil {

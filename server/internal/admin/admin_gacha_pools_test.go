@@ -700,14 +700,14 @@ func TestRuleTypesCreatePublishReloadAndKeepDailyClaim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := masterdata.ApplyCardRuntimeMaster(&state, master); err != nil {
+	if err := masterdata.ApplyCardRuntimeMaster(&state, master); err != nil {
 		t.Fatal(err)
 	}
 	avatar, err := masterdata.LoadAvatarRuntimeMaster(testfixture.WriteTestAvatarMaster(t, t.TempDir()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := masterdata.ApplyAvatarRuntimeMaster(&state, avatar); err != nil {
+	if err := masterdata.ApplyAvatarRuntimeMaster(&state, avatar); err != nil {
 		t.Fatal(err)
 	}
 	item, err := masterdata.LoadItemRuntimeMaster(testfixture.WriteTestItemMaster(t, t.TempDir()))
@@ -721,7 +721,7 @@ func TestRuleTypesCreatePublishReloadAndKeepDailyClaim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := masterdata.ApplyLoginBonusRuntimeMaster(&state, login); err != nil {
+	if err := masterdata.ApplyLoginBonusRuntimeMaster(&state, login); err != nil {
 		t.Fatal(err)
 	}
 	account, err := game.New(state)

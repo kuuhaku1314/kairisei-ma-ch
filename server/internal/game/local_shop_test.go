@@ -10,7 +10,7 @@ import (
 )
 
 func TestLocalShopRetryDailyBoundaryAndFailedCommit(t *testing.T) {
-	s := &Account{localCrystalPurchaseEnabled: true}
+	s := &Account{onboarding: completedTestOnboarding(), localCrystalPurchaseEnabled: true}
 	now := time.Date(2026, 9, 6, 15, 59, 0, 0, time.UTC) // 23:59 CN
 	order := "local:1:00000000000000000000000000000001"
 	var saved gamestate.State
@@ -72,7 +72,7 @@ func TestLocalShopRetryDailyBoundaryAndFailedCommit(t *testing.T) {
 }
 
 func TestLocalMonthlyAndForeverCardEntitlements(t *testing.T) {
-	s := &Account{localCrystalPurchaseEnabled: true}
+	s := &Account{onboarding: completedTestOnboarding(), localCrystalPurchaseEnabled: true}
 	now := time.Date(2026, 9, 10, 4, 0, 0, 0, time.UTC)
 	day := localShopDay(now)
 	var saved gamestate.State

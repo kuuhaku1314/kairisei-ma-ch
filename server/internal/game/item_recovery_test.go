@@ -17,7 +17,7 @@ func TestRecoveryItemFunctions(t *testing.T) {
 		{"AP_HEAL_FULL", 20, 3}, {"AP_HEAL_1", 20, 2},
 	} {
 		t.Run(tc.function, func(t *testing.T) {
-			s := &Account{bp: 20, bpMax: 87, ap: 1, apMax: 3, bpRecoveryInterval: time.Hour, apRecoveryInterval: time.Hour,
+			s := &Account{onboarding: completedTestOnboarding(), bp: 20, bpMax: 87, ap: 1, apMax: 3, bpRecoveryInterval: time.Hour, apRecoveryInterval: time.Hour,
 				items: map[int]gamestate.Item{1002: {ItemID: 1002, Num: 1}}, itemDefinitions: map[int]gamestate.ItemDefinition{1002: {ItemID: 1002, Function: tc.function}}}
 			result, err := s.UseItem(1002)
 			if err != nil {
@@ -32,7 +32,7 @@ func TestRecoveryItemFunctions(t *testing.T) {
 		})
 	}
 	t.Run("overflow pauses recovery and full rejects another item", func(t *testing.T) {
-		s := &Account{bp: 80, bpMax: 87, ap: 3, apMax: 3, bpRecoveryInterval: time.Hour,
+		s := &Account{onboarding: completedTestOnboarding(), bp: 80, bpMax: 87, ap: 3, apMax: 3, bpRecoveryInterval: time.Hour,
 			items: map[int]gamestate.Item{1002: {ItemID: 1002, Num: 2}}, itemDefinitions: map[int]gamestate.ItemDefinition{1002: {ItemID: 1002, Function: "BP_HEAL_30"}}}
 		if result, err := s.UseItem(1002); err != nil || result.BP.Current != 110 || !s.bpNextRecovery.IsZero() {
 			t.Fatalf("cap: %+v %v", result, err)
@@ -60,7 +60,7 @@ func TestRecoveryItemFunctions(t *testing.T) {
 // for its full-recovery estimate. It must never be the missing points' total.
 func TestPointTimerIntervals(t *testing.T) {
 	now := time.Unix(1800000000, 0)
-	s := &Account{bp: 53, bpMax: 74, bpRecoveryInterval: 3 * time.Minute,
+	s := &Account{onboarding: completedTestOnboarding(), bp: 53, bpMax: 74, bpRecoveryInterval: 3 * time.Minute,
 		bpNextRecovery: now.Add(150 * time.Second), ap: 0, apMax: 3,
 		apRecoveryInterval: 2 * time.Hour, apNextRecovery: now.Add(time.Hour)}
 	bp := s.battlePointStatusLocked(now)

@@ -20,7 +20,7 @@ func TestRuntimeInputsUseContainedManifestEntrypoints(t *testing.T) {
 	for _, key := range strings.Fields("cn-save-seed cn-asset-map cn-cpk-root cn-image-root cn-cpk-aliases cn-gacha-banner cn-five-star-gacha-banner cn-home-banner cn-card-master cn-explore-master cn-story-master cn-battle-master cn-navi-master cn-item-master cn-avatar-master cn-stamp-master cn-honor-master cn-pvp-master cn-player-progression cn-login-bonus cn-combat-card-master cn-combat-master-root") {
 		entries[key] = "input"
 	}
-	manifest := map[string]any{"schema_version": 1, "client_profile": "cn602-bootstrap", "path_base": "RESOURCE_SET_ROOT", "entrypoints": entries}
+	manifest := map[string]any{"entrypoints": entries}
 	filename := filepath.Join(root, "resource-set.json")
 	load := func() (RuntimeInputs, error) {
 		t.Helper()
@@ -49,10 +49,5 @@ func TestRuntimeInputsUseContainedManifestEntrypoints(t *testing.T) {
 	delete(entries, "cn-five-star-gacha-banner")
 	if _, err := load(); err == nil || !strings.Contains(err.Error(), "cn-five-star-gacha-banner") {
 		t.Fatalf("missing immutable input accepted: %v", err)
-	}
-	entries["cn-five-star-gacha-banner"] = "input"
-	manifest["client_profile"] = "other"
-	if _, err := load(); err == nil {
-		t.Fatal("foreign resource profile accepted")
 	}
 }

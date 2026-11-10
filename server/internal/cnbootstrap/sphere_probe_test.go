@@ -42,7 +42,7 @@ func auditCompleteSpheres(t *testing.T, handler http.Handler, savePath, seedPath
 	if len(state.Spheres) != 0 {
 		t.Fatal("new account unexpectedly owns spheres")
 	}
-	if _, err := masterdata.ApplyCardRuntimeMaster(&state, cards); err != nil {
+	if err := masterdata.ApplyCardRuntimeMaster(&state, cards); err != nil {
 		t.Fatal(err)
 	}
 	state.Onboarding.Step = masterdata.OnboardingStepCount
@@ -207,7 +207,7 @@ func auditCompleteSpheres(t *testing.T, handler http.Handler, savePath, seedPath
 		t.Fatal(err)
 	}
 	state = load()
-	if _, err = masterdata.ApplyCardRuntimeMaster(&state, cards); err != nil {
+	if err = masterdata.ApplyCardRuntimeMaster(&state, cards); err != nil {
 		t.Fatal(err)
 	}
 	state.Onboarding.Step = masterdata.OnboardingStepCount

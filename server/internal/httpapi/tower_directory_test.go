@@ -35,7 +35,7 @@ func TestSelectedTowerRuntimeIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = masterdata.ApplyCardRuntimeMaster(&state, cards); err != nil {
+	if err = masterdata.ApplyCardRuntimeMaster(&state, cards); err != nil {
 		t.Fatal(err)
 	}
 	items, err := masterdata.LoadItemRuntimeMaster(os.Getenv("CN602_TOWER_ITEM_MASTER"))

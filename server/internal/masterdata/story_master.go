@@ -82,9 +82,6 @@ type storyBattleCatalog struct {
 }
 
 type storyRuntimeMaster struct {
-	SchemaVersion int    `json:"schema_version"`
-	ClientProfile string `json:"client_profile"`
-
 	NormalParts      []storyMasterPart           `json:"normal_parts"`
 	CNParts          []storyMasterPart           `json:"cn_parts"`
 	SubCharacters    []storyMasterSubCharacter   `json:"sub_characters"`
@@ -129,9 +126,6 @@ func LoadStoryRuntimeMaster(masterPath string) (storyRuntimeMaster, error) {
 }
 
 func validateStoryRuntimeMaster(master storyRuntimeMaster) error {
-	if master.SchemaVersion != 5 || master.ClientProfile != "cn602-bootstrap" {
-		return errors.New("CN story runtime master identity is invalid")
-	}
 
 	normalCount, err := validateStoryMasterParts(master.NormalParts, make(map[int]struct{}))
 	if err != nil {
@@ -605,7 +599,7 @@ func materializeEventStories(
 	return events
 }
 
-func ApplyStoryRuntimeMaster(state *gamestate.State, master storyRuntimeMaster) bool {
+func ApplyStoryRuntimeMaster(state *gamestate.State, master storyRuntimeMaster) {
 	normalParts := materializeStoryParts(master.NormalParts, state.Story.MainParts)
 	cnParts := materializeStoryParts(master.CNParts, state.Story.CNMainParts)
 	ownedCards := make([]gamestate.Card, 0, len(state.Cards)+len(state.ContainerCards))
@@ -622,10 +616,6 @@ func ApplyStoryRuntimeMaster(state *gamestate.State, master storyRuntimeMaster) 
 	}
 	gamestate.UnlockCollectedCharacterStories(subCharacters, collected)
 	events := materializeEventStories(master.Events, state.Story.Events)
-	changed := !reflect.DeepEqual(state.Story.MainParts, normalParts) ||
-		!reflect.DeepEqual(state.Story.CNMainParts, cnParts) ||
-		!reflect.DeepEqual(state.Story.SubCharacters, subCharacters) ||
-		!reflect.DeepEqual(state.Story.Events, events)
 	state.Story.MainParts = normalParts
 	state.Story.CNMainParts = cnParts
 	state.Story.SubCharacters = subCharacters
@@ -646,5 +636,4 @@ func ApplyStoryRuntimeMaster(state *gamestate.State, master storyRuntimeMaster) 
 			StoryBattleIDs: append([]int(nil), reference.StoryBattleIDs...),
 		}
 	}
-	return changed
 }

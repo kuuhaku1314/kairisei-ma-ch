@@ -40,16 +40,10 @@ func LoadRuntimeInputs(filename string) (RuntimeInputs, error) {
 		return inputs, err
 	}
 	var manifest struct {
-		SchemaVersion int               `json:"schema_version"`
-		ClientProfile string            `json:"client_profile"`
-		PathBase      string            `json:"path_base"`
-		Entrypoints   map[string]string `json:"entrypoints"`
+		Entrypoints map[string]string `json:"entrypoints"`
 	}
 	if err := json.Unmarshal(content, &manifest); err != nil {
 		return inputs, fmt.Errorf("decode resource-set manifest: %w", err)
-	}
-	if manifest.SchemaVersion != 1 || manifest.ClientProfile != "cn602-bootstrap" || manifest.PathBase != "RESOURCE_SET_ROOT" {
-		return inputs, errors.New("expected a complete CN resource-set manifest")
 	}
 	bindings := []struct {
 		key string

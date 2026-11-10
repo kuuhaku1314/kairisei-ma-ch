@@ -18,7 +18,7 @@ func TestMissionEventsKeepDailyProgressClaimsAndPrerequisitesSeparate(t *testing
 		2: {MissionID: 2, Published: true, Daily: true, PrerequisiteID: 1, Title: "后续强化", Rule: &gamestate.MissionRule{Event: gamestate.MissionCardFusion, Target: 2}},
 		3: {MissionID: 3, Title: "未开放", Rule: &gamestate.MissionRule{Event: gamestate.MissionCardFusion, Target: 1}},
 	}
-	s := &Account{missionCatalog: missionCatalogFixture(t, definitions), missions: map[int]gamestate.MissionProgress{
+	s := &Account{onboarding: completedTestOnboarding(), missionCatalog: missionCatalogFixture(t, definitions), missions: map[int]gamestate.MissionProgress{
 		1: {MissionID: 1, State: 2, ProgressNow: 9, ClearLimitTime: end - 86400},
 	}}
 	if err := s.validateMissionsLocked(); err != nil {
@@ -50,7 +50,7 @@ func TestMissionEventsKeepDailyProgressClaimsAndPrerequisitesSeparate(t *testing
 	if s.missions[1].ProgressNow != 1 || s.missions[1].ClearLimitTime != end+86400 || s.missionProgressLocked(definitions[2], tomorrow.Unix()).State != 0 {
 		t.Fatal("daily completion or prerequisite crossed the period boundary")
 	}
-	other := &Account{missionCatalog: missionCatalogFixture(t, definitions), missions: map[int]gamestate.MissionProgress{}}
+	other := &Account{onboarding: completedTestOnboarding(), missionCatalog: missionCatalogFixture(t, definitions), missions: map[int]gamestate.MissionProgress{}}
 	if other.MissionNotice().Claimable || other.MissionInfos(false)[0].ProgressNow != 0 {
 		t.Fatal("one account mutated shared mission definitions")
 	}

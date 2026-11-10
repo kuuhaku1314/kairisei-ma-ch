@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 
 	"kairisei.local/server/internal/accountstore"
-	"kairisei.local/server/internal/game"
 	"kairisei.local/server/internal/gamestate"
 	"kairisei.local/server/internal/httpapi"
 	"kairisei.local/server/internal/masterdata"
@@ -25,7 +24,7 @@ func (prepare cnRuntimeStatePreparer) prepareAccount(state gamestate.State) (gam
 }
 
 // loadCNRuntimeStatePreparer reads immutable master data once per server.
-func loadCNRuntimeStatePreparer(masters MastersConfig, pvpConfig game.PVPConfig, playerProgression gamestate.PlayerProgressionPolicy, loginBonusPolicy gamestate.LoginBonusPolicy, availableBundles map[string]struct{}) (cnRuntimeStatePreparer, error) {
+func loadCNRuntimeStatePreparer(masters MastersConfig, playerProgression gamestate.PlayerProgressionPolicy, loginBonusPolicy gamestate.LoginBonusPolicy, availableBundles map[string]struct{}) (cnRuntimeStatePreparer, error) {
 	cardMaster, err := masterdata.LoadCardRuntimeMaster(masters.Cards)
 	if err != nil {
 		return nil, err
@@ -58,21 +57,14 @@ func loadCNRuntimeStatePreparer(masters MastersConfig, pvpConfig game.PVPConfig,
 	if err != nil {
 		return nil, err
 	}
-	var battleMaster masterdata.BattleRuntimeMaster
-	var normalQuestMaster masterdata.NormalQuestRuntimeMaster
-	if masters.Battle != "" {
-		battleMaster, err = masterdata.LoadBattleRuntimeMaster(masters.Battle)
-		if err != nil {
-			return nil, err
-		}
-		normalQuestMasterPath := filepath.Join(
-			filepath.Dir(masters.Battle),
-			"cn602-normal-quest-runtime.json",
-		)
-		normalQuestMaster, err = masterdata.LoadNormalQuestRuntimeMaster(normalQuestMasterPath)
-		if err != nil {
-			return nil, err
-		}
+	battleMaster, err := masterdata.LoadBattleRuntimeMaster(masters.Battle)
+	if err != nil {
+		return nil, err
+	}
+	normalQuestMasterPath := filepath.Join(filepath.Dir(masters.Battle), "cn602-normal-quest-runtime.json")
+	normalQuestMaster, err := masterdata.LoadNormalQuestRuntimeMaster(normalQuestMasterPath)
+	if err != nil {
+		return nil, err
 	}
 	return func(runtimeState gamestate.State, buildBattleDefinitions bool) (gamestate.State, error) {
 		var err error
@@ -85,15 +77,11 @@ func loadCNRuntimeStatePreparer(masters MastersConfig, pvpConfig game.PVPConfig,
 		if err != nil {
 			return gamestate.State{}, err
 		}
-		_, err = masterdata.ApplyLoginBonusRuntimeMaster(&runtimeState, loginBonusPolicy)
+		err = masterdata.ApplyLoginBonusRuntimeMaster(&runtimeState, loginBonusPolicy)
 		if err != nil {
 			return gamestate.State{}, err
 		}
-		if pvpConfig.ConfigVersion > 0 {
-			masterdata.NormalizePVPState(&runtimeState, pvpConfig)
-		}
-		normalizeCN602StampDeck(&runtimeState)
-		_, err = masterdata.ApplyCardRuntimeMaster(&runtimeState, cardMaster)
+		err = masterdata.ApplyCardRuntimeMaster(&runtimeState, cardMaster)
 		if err != nil {
 			return gamestate.State{}, err
 		}
@@ -101,19 +89,17 @@ func loadCNRuntimeStatePreparer(masters MastersConfig, pvpConfig game.PVPConfig,
 			return gamestate.State{}, err
 		}
 		masterdata.ApplyStoryRuntimeMaster(&runtimeState, storyMaster)
-		if masters.Battle != "" {
-			if buildBattleDefinitions {
-				if err := masterdata.ApplyBattleRuntimeMaster(&runtimeState, battleMaster); err != nil {
-					return gamestate.State{}, err
-				}
-			} else {
-				masterdata.NormalizeBattleAccountProgress(&runtimeState)
-			}
-			// Normal-quest clears also update their battle entrance progress.
-			// Keep that account-specific reconciliation on both paths.
-			if err := masterdata.ApplyNormalQuestRuntimeMaster(&runtimeState, normalQuestMaster); err != nil {
+		if buildBattleDefinitions {
+			if err := masterdata.ApplyBattleRuntimeMaster(&runtimeState, battleMaster); err != nil {
 				return gamestate.State{}, err
 			}
+		} else {
+			masterdata.NormalizeBattleAccountProgress(&runtimeState)
+		}
+		// Normal-quest clears also update their battle entrance progress.
+		// Keep that account-specific reconciliation on both paths.
+		if err := masterdata.ApplyNormalQuestRuntimeMaster(&runtimeState, normalQuestMaster); err != nil {
+			return gamestate.State{}, err
 		}
 		if err := masterdata.ApplyNaviRuntimeMaster(&runtimeState, naviMaster); err != nil {
 			return gamestate.State{}, err
@@ -122,18 +108,18 @@ func loadCNRuntimeStatePreparer(masters MastersConfig, pvpConfig game.PVPConfig,
 		if err != nil {
 			return gamestate.State{}, err
 		}
-		_, err = masterdata.ApplyAvatarRuntimeMaster(&runtimeState, avatarMaster)
+		err = masterdata.ApplyAvatarRuntimeMaster(&runtimeState, avatarMaster)
 		if err != nil {
 			return gamestate.State{}, err
 		}
 		if err := masterdata.ApplyAvatarShopAssetClosure(&runtimeState, availableBundles); err != nil {
 			return gamestate.State{}, err
 		}
-		_, err = masterdata.ApplyStampRuntimeMaster(&runtimeState, stampMaster)
+		err = masterdata.ApplyStampRuntimeMaster(&runtimeState, stampMaster)
 		if err != nil {
 			return gamestate.State{}, err
 		}
-		_, err = masterdata.ApplyHonorRuntimeMaster(&runtimeState, honorMaster)
+		err = masterdata.ApplyHonorRuntimeMaster(&runtimeState, honorMaster)
 		if err != nil {
 			return gamestate.State{}, err
 		}
@@ -185,21 +171,6 @@ func newCNBusinessHandler(config httpapi.Config, prepareRuntimeState func(gamest
 		"story_battle_references", contentGate.StoryBattleReferences,
 		"popup_profiles", contentGate.PopupProfiles,
 	)
-	runtimeState.SchemaVersion = 1
-	runtimeState.ReleaseID = "cn602-bootstrap"
-	runtimeState.CatalogVersion = cn602CatalogVersion
-	runtimeState.State = "LOCAL"
 	config.InitialState = runtimeState
 	return httpapi.New(config)
-}
-
-func normalizeCN602StampDeck(state *gamestate.State) bool {
-	const stampDeckSlots = 12
-	if len(state.Stamps.DeckStampIDs) == stampDeckSlots {
-		return false
-	}
-	deck := make([]int, stampDeckSlots)
-	copy(deck, state.Stamps.DeckStampIDs)
-	state.Stamps.DeckStampIDs = deck
-	return true
 }

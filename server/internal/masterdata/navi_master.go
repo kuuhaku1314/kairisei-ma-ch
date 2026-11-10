@@ -33,9 +33,6 @@ type naviLocalPurchase struct {
 }
 
 type naviRuntimeMaster struct {
-	SchemaVersion int    `json:"schema_version"`
-	ClientProfile string `json:"client_profile"`
-
 	LocalPurchase naviLocalPurchase `json:"local_purchase"`
 	Navigators    []naviDefinition  `json:"navigators"`
 }
@@ -75,9 +72,6 @@ func LoadNaviRuntimeMaster(masterPath string) (naviRuntimeMaster, error) {
 }
 
 func validateNaviRuntimeMaster(master naviRuntimeMaster) error {
-	if master.SchemaVersion != 3 || master.ClientProfile != "cn602-bootstrap" {
-		return errors.New("CN navigator runtime master identity is invalid")
-	}
 	if master.LocalPurchase.Price <= 0 {
 		return errors.New("CN navigator local purchase profile is invalid")
 	}

@@ -16,7 +16,7 @@ func TestMultiplayerMissionUsesCompletionDayWithoutRewindingProgress(t *testing.
 		MissionID: 1, Published: true, Daily: true, Title: "每日组队", ProgressMax: 2,
 		Rule: &gamestate.MissionRule{Event: gamestate.MissionQuestClear, QuestScope: gamestate.MissionQuestMultiplayer, Target: 2},
 	}
-	s := &Account{
+	s := &Account{onboarding: completedTestOnboarding(),
 		teamBattleSolo: battleCatalogFixture(t, json.RawMessage(`{"9":[],"10":[{"0":300101,"9":0,"10":[{"0":30010102,"10":0}]}],"11":[],"12":[]}`)),
 		missions:       map[int]gamestate.MissionProgress{},
 		missionCatalog: missionCatalogFixture(t, map[int]gamestate.MissionDefinition{1: definition}),
@@ -58,7 +58,7 @@ func TestQuestMissionsRespectScoreDefeatAndKeepScriptedVictoryRewards(t *testing
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			const boss = 30010102
-			s := &Account{activeBattle: &TeamBattleContext{BossID: boss, StageType: tc.stage, EntryRole: gamestate.BattleEntrySolo, BattleEnemyTypes: []int8{1}},
+			s := &Account{onboarding: completedTestOnboarding(), activeBattle: &TeamBattleContext{BossID: boss, StageType: tc.stage, EntryRole: gamestate.BattleEntrySolo, BattleEnemyTypes: []int8{1}},
 				teamBattleSolo: battleCatalogFixture(t, json.RawMessage(`{"9":[],"10":[{"0":300101,"9":0,"10":[{"0":30010102,"10":0}]}],"11":[],"12":[]}`)),
 				missions:       map[int]gamestate.MissionProgress{}, missionCatalog: missionCatalogFixture(t, map[int]gamestate.MissionDefinition{
 					1: {MissionID: 1, Published: true, Title: "通关", Rule: &gamestate.MissionRule{Event: gamestate.MissionQuestClear, Target: 1}},

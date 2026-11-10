@@ -20,7 +20,7 @@ func TestTowerDirectoryProjectsProgressWithoutConsumingResults(t *testing.T) {
 	}{
 		{1, 0, 0, nil}, {3, 1, 1, []int{1, 2}}, {0, 3, 2, []int{1, 2, 3}},
 	} {
-		a := &Account{towerQuestProfiles: map[int]gamestate.TowerQuestProfile{7: profile}, towerQuestProgress: map[int]gamestate.TowerQuestProgress{
+		a := &Account{onboarding: completedTestOnboarding(), towerQuestProfiles: map[int]gamestate.TowerQuestProfile{7: profile}, towerQuestProgress: map[int]gamestate.TowerQuestProgress{
 			7: {TowerID: 7, Floor: tc.floor, LastBattleFloor: tc.last, ClearedFloors: tc.cleared, LastResult: "win", LastRankUp: true},
 		}}
 		before, _ := json.Marshal(a.towerQuestProgress)

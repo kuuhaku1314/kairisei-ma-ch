@@ -14,7 +14,7 @@ func TestCardSellExtractUsesBaseRarityAndSharesSaleSettlement(t *testing.T) {
 		BaseRarities:      map[int]int{100: 5, 400: 4},
 	}
 	newAccount := func(owned, max int) *Account {
-		return &Account{
+		return &Account{onboarding: completedTestOnboarding(),
 			cards: []CardInfo{{UniqueID: 1, CardID: 101, Fame: 1}, {UniqueID: 2, CardID: 102, Fame: 100}},
 			cardDefinitions: map[int]gamestate.Card{
 				100: {CardID: 100, RarityRank: 1},

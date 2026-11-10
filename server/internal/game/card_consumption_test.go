@@ -286,7 +286,7 @@ func TestAlchemyEvolutionConsumesItemsAndPreservesCardInventory(t *testing.T) {
 
 func ConsumptionTestStore(t *testing.T) *Account {
 	t.Helper()
-	return &Account{
+	return &Account{onboarding: completedTestOnboarding(),
 		gold: 100000, cardProgression: cardFusionTestPolicy(),
 		cards: []CardInfo{{UniqueID: 1, CardID: 10, Level: 2, LevelMax: 2, Experience: 1000000, BaseAddPrice: 200},
 			{UniqueID: 2, CardID: 20, Level: 1, AddExperience: 10}},

@@ -144,7 +144,6 @@ func run() error {
 		}
 	}
 	result := struct {
-		SchemaVersion      int             `json:"schema_version"`
 		State              string          `json:"state"`
 		Evidence           string          `json:"evidence"`
 		GeneratedUTC       string          `json:"generated_utc"`
@@ -158,7 +157,6 @@ func run() error {
 		UncompressedSHA256 string          `json:"uncompressed_sha256"`
 		RequiredBundles    map[string]bool `json:"required_bundles"`
 	}{
-		SchemaVersion:      1,
 		State:              "PASS",
 		Evidence:           "CONFIRMED",
 		GeneratedUTC:       time.Now().UTC().Format(time.RFC3339Nano),

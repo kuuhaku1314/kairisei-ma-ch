@@ -32,8 +32,8 @@ func TestCardMasterRefreshPreservesOwnedProgress(t *testing.T) {
 	decks := cardRefreshJSON(t, state.Decks)
 	support := cardRefreshJSON(t, state.SupportDeck)
 	state.SupportDeck.CardCollectionIDs = append(state.SupportDeck.CardCollectionIDs, card.CardID)
-	if changed, err := masterdata.ApplyCardRuntimeMaster(&state, master); err != nil || !changed {
-		t.Fatalf("refresh: changed=%v, err=%v", changed, err)
+	if err := masterdata.ApplyCardRuntimeMaster(&state, master); err != nil {
+		t.Fatalf("refresh: %v", err)
 	}
 	after := state.Cards[0]
 	if after.UniqueID != before.UniqueID || after.CardID != before.CardID ||
@@ -45,11 +45,14 @@ func TestCardMasterRefreshPreservesOwnedProgress(t *testing.T) {
 	if string(decks) != string(cardRefreshJSON(t, state.Decks)) || string(support) != string(cardRefreshJSON(t, state.SupportDeck)) {
 		t.Fatal("definition refresh changed deck selections, unlocks or collection history")
 	}
-	if changed, err := masterdata.ApplyCardRuntimeMaster(&state, master); err != nil || changed {
-		t.Fatalf("repeat refresh: changed=%v, err=%v", changed, err)
+	if err := masterdata.ApplyCardRuntimeMaster(&state, master); err != nil {
+		t.Fatalf("repeat refresh: %v", err)
+	}
+	if !reflect.DeepEqual(after, state.Cards[0]) {
+		t.Fatal("repeated definition refresh changed owned card progress")
 	}
 	state.Cards[0].Experience = -1
-	if _, err := masterdata.ApplyCardRuntimeMaster(&state, master); err == nil {
+	if err := masterdata.ApplyCardRuntimeMaster(&state, master); err == nil {
 		t.Fatal("negative owned experience accepted")
 	}
 }

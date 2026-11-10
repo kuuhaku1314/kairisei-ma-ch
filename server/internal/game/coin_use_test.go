@@ -9,7 +9,7 @@ import (
 func TestCardExpansionChargesOnlyAcceptedCapacity(t *testing.T) {
 	for _, container := range []bool{false, true} {
 		base := CardCapacityLimit - 80
-		s := &Account{cardMax: base, cardContainerMax: base, coinFree: 640, highestDeckRank: 1}
+		s := &Account{onboarding: completedTestOnboarding(), cardMax: base, cardContainerMax: base, coinFree: 640, highestDeckRank: 1}
 		extend, capacity := s.ExtendCardCapacity, s.CardCapacity
 		if container {
 			extend, capacity = s.ExtendCardContainerCapacity, s.CardContainerCapacity

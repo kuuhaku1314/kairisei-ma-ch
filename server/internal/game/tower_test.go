@@ -16,7 +16,7 @@ func TestTowerChallengeFailuresAccumulateWithinRank(t *testing.T) {
 	profile := gamestate.TowerQuestProfile{TowerID: towerID, LoseCountMax: 4,
 		Floors: []gamestate.TowerQuestFloorProfile{{Floor: 1, Rank: 1}, {Floor: 2, Rank: 2},
 			{Floor: 3, Rank: 2}, {Floor: 4, Rank: 2}, {Floor: 5, Rank: 3}}}
-	s := &Account{towerQuestProfiles: map[int]gamestate.TowerQuestProfile{towerID: profile},
+	s := &Account{onboarding: completedTestOnboarding(), towerQuestProfiles: map[int]gamestate.TowerQuestProfile{towerID: profile},
 		towerQuestProgress: map[int]gamestate.TowerQuestProgress{towerID: {TowerID: towerID, Floor: 2, ClearedFloors: []int{1}}}}
 	settle := func(floor int, clear bool) gamestate.TowerQuestProgress {
 		t.Helper()
@@ -67,7 +67,7 @@ func TestTowerReplaysPreserveChallengeAndSettleBestClear(t *testing.T) {
 				losses = 0
 				cleared = []int{1, 2, 3}
 			}
-			s := &Account{
+			s := &Account{onboarding: completedTestOnboarding(),
 				towerQuestProfiles: map[int]gamestate.TowerQuestProfile{towerID: {TowerID: towerID, LoseCountMax: 4,
 					Floors: []gamestate.TowerQuestFloorProfile{{Floor: 1, Rank: 1}, {Floor: 2, Rank: 2}, {Floor: 3, Rank: 3}}}},
 				towerQuestProgress: map[int]gamestate.TowerQuestProgress{towerID: {TowerID: towerID, Floor: current,
@@ -130,7 +130,7 @@ func TestTowerSettlementReturnFreezesCommittedFloor(t *testing.T) {
 			if tc.floor == 3 {
 				cleared = append(cleared, 2)
 			}
-			s := &Account{activeBattle: &context,
+			s := &Account{onboarding: completedTestOnboarding(), activeBattle: &context,
 				towerAdmission: TowerAdmission{TowerIDs: map[int]struct{}{}}, // Closed after the accepted start.
 				towerQuestProfiles: map[int]gamestate.TowerQuestProfile{towerID: {TowerID: towerID, LoseCountMax: 4,
 					Floors: []gamestate.TowerQuestFloorProfile{{Floor: 1, Rank: 1}, {Floor: 2, Rank: 2}, {Floor: 3, Rank: 2}}}},
@@ -168,7 +168,7 @@ func TestTowerPublicationClosesEntryWithoutErasingProgressOrInFlightStory(t *tes
 	profile := gamestate.TowerQuestProfile{TowerID: towerID, LoseCountMax: 3, Floors: []gamestate.TowerQuestFloorProfile{{
 		Floor: 1, Rank: 1, BPUse: 30, Story: gamestate.TowerQuestStoryProfile{TalkID: 77},
 	}}}
-	s := &Account{bp: 100, bpMax: 100, bpRecoveryInterval: time.Minute,
+	s := &Account{onboarding: completedTestOnboarding(), bp: 100, bpMax: 100, bpRecoveryInterval: time.Minute,
 		towerQuestProfiles: map[int]gamestate.TowerQuestProfile{towerID: profile},
 		towerQuestProgress: map[int]gamestate.TowerQuestProgress{towerID: {TowerID: towerID, Floor: 1, ClearRatings: map[int]int{}}},
 	}
@@ -212,7 +212,7 @@ func TestTowerPublicationClosesEntryWithoutErasingProgressOrInFlightStory(t *tes
 }
 
 func TestClosedTowerBattleStartDoesNotChargeEntry(t *testing.T) {
-	s := &Account{bp: 100, bpMax: 100, bpRecoveryInterval: time.Minute,
+	s := &Account{onboarding: completedTestOnboarding(), bp: 100, bpMax: 100, bpRecoveryInterval: time.Minute,
 		towerAdmission: TowerAdmission{TowerIDs: map[int]struct{}{}},
 		towerQuestProfiles: map[int]gamestate.TowerQuestProfile{7: {TowerID: 7, Floors: []gamestate.TowerQuestFloorProfile{{
 			Floor: 1, BPUse: 30, Boss: json.RawMessage(`{"0":123}`),
@@ -234,7 +234,7 @@ func TestClosedTowerBattleStartDoesNotChargeEntry(t *testing.T) {
 func TestTowerQuestRatingProgressIsAccountOwned(t *testing.T) {
 	profile := gamestate.TowerQuestProfile{TowerID: 7}
 	account := func(flag int) *Account {
-		return &Account{
+		return &Account{onboarding: completedTestOnboarding(),
 			towerQuestProfiles: map[int]gamestate.TowerQuestProfile{7: profile},
 			towerAdmission:     TowerAdmission{TowerIDs: map[int]struct{}{7: {}}},
 			towerQuestProgress: map[int]gamestate.TowerQuestProgress{
@@ -269,7 +269,7 @@ func TestTowerQuestRatingProgressIsAccountOwned(t *testing.T) {
 
 func TestTowerClearRatingSettlementKeepsBestAndRejectsInvalidClear(t *testing.T) {
 	const bossID, towerID = 123, 7
-	s := &Account{
+	s := &Account{onboarding: completedTestOnboarding(),
 		towerQuestProfiles: map[int]gamestate.TowerQuestProfile{
 			towerID: {TowerID: towerID, LoseCountMax: 3,
 				Floors: []gamestate.TowerQuestFloorProfile{{Floor: 1, Rank: 1}}},
@@ -326,7 +326,7 @@ func TestTowerClearRatingSettlementKeepsBestAndRejectsInvalidClear(t *testing.T)
 
 func TestTowerQuestRankingStateRejectsClosedTower(t *testing.T) {
 	const towerID = 7
-	state := &Account{
+	state := &Account{onboarding: completedTestOnboarding(),
 		towerAdmission: TowerAdmission{TowerIDs: map[int]struct{}{}},
 		towerQuestProfiles: map[int]gamestate.TowerQuestProfile{
 			towerID: {TowerID: towerID},

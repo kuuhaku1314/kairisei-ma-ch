@@ -10,7 +10,6 @@ import (
 	"sort"
 
 	"kairisei.local/server/internal/game"
-	"kairisei.local/server/internal/gamestate"
 )
 
 const maxPVPMasterBytes = 1024 * 1024
@@ -37,9 +36,6 @@ func LoadPVPRuntimeMaster(masterPath string) (game.PVPConfig, error) {
 			return game.PVPConfig{}, errors.New("CN PVP runtime config has trailing JSON")
 		}
 		return game.PVPConfig{}, fmt.Errorf("decode trailing CN PVP runtime config: %w", err)
-	}
-	if config.SchemaVersion != 2 || config.ClientProfile != "cn602-bootstrap" || config.ConfigVersion <= 0 {
-		return game.PVPConfig{}, errors.New("CN PVP runtime config identity is invalid")
 	}
 	if config.ChallengeMax != 5 || config.CostInitial <= 0 || config.TurnMax <= 0 || config.HoldMax <= 0 ||
 		config.RankWinPoint <= 0 || config.RankLosePoint > 0 || config.ReplayResult < 0 || config.ReplayResult > 1 {
@@ -77,29 +73,4 @@ func LoadPVPRuntimeMaster(masterPath string) (game.PVPConfig, error) {
 		nextPoint = rank.PointMax + 1
 	}
 	return config, nil
-}
-
-func NormalizePVPState(state *gamestate.State, config game.PVPConfig) bool {
-	changed := false
-	if state.PVPConfigVersion == 0 {
-		state.PVP.Challenge = config.ChallengeMax
-		changed = true
-	}
-	if state.PVPConfigVersion < config.ConfigVersion {
-		state.PVPConfigVersion = config.ConfigVersion
-		changed = true
-	}
-	if state.PVP.NextBattleID <= 0 {
-		state.PVP.NextBattleID = 1
-		changed = true
-	}
-	if state.PVP.DefenseDecks == nil {
-		state.PVP.DefenseDecks = []gamestate.PVPDeckSelection{}
-		changed = true
-	}
-	if state.PVP.History == nil {
-		state.PVP.History = []gamestate.PVPMatch{}
-		changed = true
-	}
-	return changed
 }

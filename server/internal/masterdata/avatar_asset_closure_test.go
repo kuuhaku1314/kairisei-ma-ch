@@ -44,7 +44,7 @@ func TestAvatarCostumeCatalogFromResourceMaster(t *testing.T) {
 	}
 	state := testfixture.RuntimeState(t)
 	owned := append([]byte(nil), state.Costume...)
-	if _, err := masterdata.ApplyAvatarRuntimeMaster(&state, master); err != nil {
+	if err := masterdata.ApplyAvatarRuntimeMaster(&state, master); err != nil {
 		t.Fatal(err)
 	}
 	var costumes []gamestate.CollectionRewardDefinition

@@ -7,7 +7,7 @@ import (
 )
 
 func TestItemExchangePreservesEmptyRewardSkills(t *testing.T) {
-	s := &Account{
+	s := &Account{onboarding: completedTestOnboarding(),
 		items: map[int]gamestate.Item{10: {ItemID: 10, Num: 3}},
 		itemExchangeProfiles: map[int]gamestate.ItemExchangeProfile{10: {
 			ItemID: 10, NeedNum: 1,

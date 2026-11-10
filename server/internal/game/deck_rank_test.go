@@ -8,7 +8,7 @@ import (
 )
 
 func TestDeckSaveAcceptsNewlyUnlockedEmptySlotInSameRequest(t *testing.T) {
-	s := &Account{
+	s := &Account{onboarding: completedTestOnboarding(),
 		deckSlots: 10, supportSlotCapacity: 10, buddySlots: 5,
 		supportUnlockedSlots: []int8{0, 0, 0, 0},
 		highestDeckRank:      3,
@@ -55,7 +55,7 @@ func TestDeckSaveAcceptsNewlyUnlockedEmptySlotInSameRequest(t *testing.T) {
 }
 
 func TestDeckRankRetainsHistoricalUnlockAfterChangingToWeakerDeck(t *testing.T) {
-	s := &Account{
+	s := &Account{onboarding: completedTestOnboarding(),
 		lastHomeDeckRank: 8,
 		deckRankPolicy: gamestate.DeckRankPolicy{
 			ParameterThresholds: []int{0, 600, 650, 700, 750, 800, 850, 900, 1000, 1100, 1250, 1800, 2300, 2600, 4000, 5000, 6000, 7000},
@@ -104,7 +104,7 @@ func TestDeckRankRetainsHistoricalUnlockAfterChangingToWeakerDeck(t *testing.T) 
 }
 
 func TestDeckRankCardUseAllowsHiddenDeckMaterialBeforeA(t *testing.T) {
-	s := &Account{
+	s := &Account{onboarding: completedTestOnboarding(),
 		deckRankPolicy: gamestate.DeckRankPolicy{ParameterThresholds: []int{0}}, highestDeckRank: 9,
 		currentActiveArthur: 1,
 		cards:               []CardInfo{{UniqueID: 1, CardID: 101}, {UniqueID: 2, CardID: 102}, {UniqueID: 3, CardID: 101}, {UniqueID: 4, CardID: 102}},

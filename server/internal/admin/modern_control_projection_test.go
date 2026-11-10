@@ -127,12 +127,12 @@ func TestModernControlProjectionCandidate(t *testing.T) {
 		card.IsLock = 1
 		state.ContainerCards = append(state.ContainerCards, card)
 	}
-	if _, err := masterdata.ApplyCardRuntimeMaster(&state, old); err != nil {
+	if err := masterdata.ApplyCardRuntimeMaster(&state, old); err != nil {
 		t.Fatal("prepare isolated old progress: ", err)
 	}
 	before := append(append([]gamestate.Card(nil), state.Cards...), state.ContainerCards...)
-	if changed, err := masterdata.ApplyCardRuntimeMaster(&state, cards); err != nil || !changed {
-		t.Fatalf("modern definition refresh: %v %v", changed, err)
+	if err := masterdata.ApplyCardRuntimeMaster(&state, cards); err != nil {
+		t.Fatalf("modern definition refresh: %v", err)
 	}
 	after := append(append([]gamestate.Card(nil), state.Cards...), state.ContainerCards...)
 	if len(before) != len(after) {
@@ -144,8 +144,11 @@ func TestModernControlProjectionCandidate(t *testing.T) {
 			t.Fatalf("mutable progress changed: %d", a.UniqueID)
 		}
 	}
-	if changed, err := masterdata.ApplyCardRuntimeMaster(&state, cards); err != nil || changed {
-		t.Fatalf("definition refresh is not idempotent: %v %v", changed, err)
+	if err := masterdata.ApplyCardRuntimeMaster(&state, cards); err != nil {
+		t.Fatalf("definition refresh: %v", err)
+	}
+	if !reflect.DeepEqual(after, append(append([]gamestate.Card(nil), state.Cards...), state.ContainerCards...)) {
+		t.Fatal("repeated definition refresh changed inventory")
 	}
 	result, err := json.Marshal(map[string]any{"catalog": counts, "unique_card_images": len(seenImages), "definition_cards": len(fileDefinitions.Cards), "migration_inventory_rows": len(before), "file_memory_definitions_equal": true, "mutable_progress_preserved": true, "idempotent": true})
 	if err != nil {

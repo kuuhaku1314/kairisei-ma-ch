@@ -27,7 +27,7 @@ func (o *Operations) publishRuntimeLocked() {
 		Missions:           o.missionConfig, Evolution: o.evolutionPolicy, Settings: settings, Gachas: o.gachaConfigurations, GachaRevision: o.gachaRevision,
 		TowerAdmission: o.towerAdmission,
 		GachaGroups:    groups, ManagedGachaGroups: o.managedGachaGroups,
-		DefaultGachaGroups: o.defaultGachaPublication, PermanentGachaGroups: map[int]struct{}{},
+		DefaultGachaGroups: o.defaultGachaPublication,
 	}
 	if p := o.playerPolicy.Load(); p != nil {
 		publication.Player = p.Runtime
@@ -35,11 +35,6 @@ func (o *Operations) publishRuntimeLocked() {
 	}
 	if o.content != nil {
 		publication.Content = o.content.configuration
-	}
-	for _, base := range o.gachaBases {
-		if base.PublicationKey == "" && base.GroupID > 0 {
-			publication.PermanentGachaGroups[base.GroupID] = struct{}{}
-		}
 	}
 	o.Runtime.Publish(publication)
 }

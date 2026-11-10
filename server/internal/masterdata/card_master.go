@@ -20,8 +20,6 @@ import (
 const maxCardMasterBytes = 32 * 1024 * 1024
 
 type CardRuntimeMaster struct {
-	SchemaVersion           int                               `json:"schema_version"`
-	ClientProfile           string                            `json:"client_profile"`
 	CardProgressionPolicy   gamestate.CardProgressionPolicy   `json:"card_progression_policy"`
 	CardExperienceTables    map[int][]int                     `json:"card_experience_tables"`
 	SphereProgressionPolicy gamestate.SphereProgressionPolicy `json:"sphere_progression_policy"`
@@ -93,8 +91,7 @@ func validateCardRuntimeMaster(master CardRuntimeMaster) error {
 	if err := validateDeckRankPolicy(master.DeckRankPolicy, master.CardTemplates); err != nil {
 		return err
 	}
-	if master.SchemaVersion != 15 || master.ClientProfile != "cn602-bootstrap" ||
-		master.CardProgressionPolicy.FusionGoldPerMaterialPerBaseLevel <= 0 ||
+	if master.CardProgressionPolicy.FusionGoldPerMaterialPerBaseLevel <= 0 ||
 		master.CardProgressionPolicy.MaximumCardMaterialCount != 100 ||
 		master.SphereProgressionPolicy.MaterialLevelBonusPermillePerLevel <= 0 ||
 		master.BuddyProgressionPolicy.MaximumMaterialCount <= 0 ||
@@ -434,7 +431,7 @@ func validateCardFusionSuccessPolicy(policy gamestate.CardProgressionPolicy) err
 	return nil
 }
 
-func ApplyCardRuntimeMaster(state *gamestate.State, master CardRuntimeMaster) (bool, error) {
+func ApplyCardRuntimeMaster(state *gamestate.State, master CardRuntimeMaster) error {
 	state.DeckRankPolicy = master.DeckRankPolicy
 	state.AlchemistStarterDeck = master.AlchemistStarterDeck
 	state.CardTemplates = append([]gamestate.Card(nil), master.CardTemplates...)
@@ -460,7 +457,6 @@ func ApplyCardRuntimeMaster(state *gamestate.State, master CardRuntimeMaster) (b
 		[]gamestate.SupportDeckSlotUnlockRule(nil),
 		master.SupportDeckSlotUnlockRules...,
 	)
-	changed := false
 	cardTemplates := make(map[int]gamestate.Card, len(master.CardTemplates))
 	for _, template := range master.CardTemplates {
 		cardTemplates[template.CardID] = template
@@ -469,28 +465,25 @@ func ApplyCardRuntimeMaster(state *gamestate.State, master CardRuntimeMaster) (b
 		for index, card := range *inventory {
 			template, exists := cardTemplates[card.CardID]
 			if !exists {
-				return false, fmt.Errorf("CN save inventory references unknown card %d", card.CardID)
+				return fmt.Errorf("CN save inventory references unknown card %d", card.CardID)
 			}
 			values := master.CardExperienceTables[template.ExperienceTableID]
 			normalized, err := normalizeCard(
 				card, template, values, master.CardProgressionPolicy,
 			)
 			if err != nil {
-				return false, err
+				return err
 			}
-			if !reflect.DeepEqual(normalized, card) {
-				(*inventory)[index] = normalized
-				changed = true
-			}
+			(*inventory)[index] = normalized
 		}
 	}
 	state.CardActions.FusionGoldPerCard = master.CardProgressionPolicy.FusionGoldPerMaterialPerBaseLevel
 	if len(state.SupportDeck.UnlockSlotNums) != 4 {
-		return false, errors.New("CN save support-deck progression must contain four Arthur slots")
+		return errors.New("CN save support-deck progression must contain four Arthur slots")
 	}
 	for index, count := range state.SupportDeck.UnlockSlotNums {
 		if count < 0 || int(count) > master.SupportDeckSetCardNum {
-			return false, fmt.Errorf("CN save support-deck slot count for Arthur %d is invalid", index+1)
+			return fmt.Errorf("CN save support-deck slot count for Arthur %d is invalid", index+1)
 		}
 	}
 	knownCardIDs := make(map[int]struct{}, len(master.CardTemplates))
@@ -503,14 +496,14 @@ func ApplyCardRuntimeMaster(state *gamestate.State, master CardRuntimeMaster) (b
 	collected := make(map[int]struct{}, len(state.SupportDeck.CardCollectionIDs)+len(state.Cards)+len(state.ContainerCards))
 	for _, cardID := range state.SupportDeck.CardCollectionIDs {
 		if _, exists := knownCardIDs[cardID]; !exists {
-			return false, fmt.Errorf("CN save card collection references unknown card %d", cardID)
+			return fmt.Errorf("CN save card collection references unknown card %d", cardID)
 		}
 		collected[cardID] = struct{}{}
 	}
 	for _, inventory := range [][]gamestate.Card{state.Cards, state.ContainerCards} {
 		for _, card := range inventory {
 			if _, exists := knownCardIDs[card.CardID]; !exists {
-				return false, fmt.Errorf("CN save inventory references unknown card %d", card.CardID)
+				return fmt.Errorf("CN save inventory references unknown card %d", card.CardID)
 			}
 			collected[card.CardID] = struct{}{}
 		}
@@ -525,14 +518,9 @@ func ApplyCardRuntimeMaster(state *gamestate.State, master CardRuntimeMaster) (b
 		normalizedCollection = append(normalizedCollection, cardID)
 	}
 	sort.Ints(normalizedCollection)
-	if !equalIntSlices(state.SupportDeck.CardCollectionIDs, normalizedCollection) {
-		state.SupportDeck.CardCollectionIDs = normalizedCollection
-		changed = true
-	}
+	state.SupportDeck.CardCollectionIDs = normalizedCollection
 	stackTemplates := make(map[int]gamestate.CardStack, len(master.StackCardTemplates))
-	if normalizeCollectionLoveHistory(state) {
-		changed = true
-	}
+	normalizeCollectionLoveHistory(state)
 	for _, template := range master.StackCardTemplates {
 		stackTemplates[template.CardID] = template
 	}
@@ -540,10 +528,10 @@ func ApplyCardRuntimeMaster(state *gamestate.State, master CardRuntimeMaster) (b
 	for index, inventory := range state.StackCards {
 		template, exists := stackTemplates[inventory.CardID]
 		if !exists {
-			return false, fmt.Errorf("CN save references unknown stack card %d", inventory.CardID)
+			return fmt.Errorf("CN save references unknown stack card %d", inventory.CardID)
 		}
 		if inventory.Num < 0 {
-			return false, fmt.Errorf("CN save stack card %d has negative inventory", inventory.CardID)
+			return fmt.Errorf("CN save stack card %d has negative inventory", inventory.CardID)
 		}
 		template.Num = inventory.Num
 		state.StackCards[index] = template
@@ -559,22 +547,19 @@ func ApplyCardRuntimeMaster(state *gamestate.State, master CardRuntimeMaster) (b
 	for index, sphere := range state.Spheres {
 		definition, exists := definitions[sphere.SphereID]
 		if !exists || sphere.UniqueID <= 0 || sphere.IsLock < 0 || sphere.IsLock > 1 {
-			return false, fmt.Errorf("CN save references invalid sphere %d", sphere.UniqueID)
+			return fmt.Errorf("CN save references invalid sphere %d", sphere.UniqueID)
 		}
 		if _, duplicate := uniqueIDs[sphere.UniqueID]; duplicate {
-			return false, fmt.Errorf("CN save repeats sphere unique ID %d", sphere.UniqueID)
+			return fmt.Errorf("CN save repeats sphere unique ID %d", sphere.UniqueID)
 		}
 		uniqueIDs[sphere.UniqueID] = struct{}{}
 		normalized, err := normalizeSphere(
 			sphere, definition, master.SphereExperienceTables, master.SphereProgressionPolicy,
 		)
 		if err != nil {
-			return false, err
+			return err
 		}
-		if normalized != sphere {
-			state.Spheres[index] = normalized
-			changed = true
-		}
+		state.Spheres[index] = normalized
 	}
 	state.BuddyDefinitions = append([]gamestate.BuddyDefinition(nil), master.BuddyDefinitions...)
 	state.BuddyExperienceTables = cloneBuddyExperienceTables(master.BuddyExperienceTables)
@@ -587,31 +572,28 @@ func ApplyCardRuntimeMaster(state *gamestate.State, master CardRuntimeMaster) (b
 	for index, buddy := range state.Buddies {
 		definition, exists := buddyDefinitions[buddy.BuddyID]
 		if !exists || buddy.UniqueID <= 0 || buddy.IsLock < 0 || buddy.IsLock > 1 {
-			return false, fmt.Errorf("CN save references invalid buddy %d", buddy.UniqueID)
+			return fmt.Errorf("CN save references invalid buddy %d", buddy.UniqueID)
 		}
 		if _, duplicate := buddyUniqueIDs[buddy.UniqueID]; duplicate {
-			return false, fmt.Errorf("CN save repeats buddy unique ID %d", buddy.UniqueID)
+			return fmt.Errorf("CN save repeats buddy unique ID %d", buddy.UniqueID)
 		}
 		buddyUniqueIDs[buddy.UniqueID] = struct{}{}
 		normalized, err := normalizeBuddy(buddy, definition, master.BuddyExperienceTables)
 		if err != nil {
-			return false, err
+			return err
 		}
-		if normalized != buddy {
-			state.Buddies[index] = normalized
-			changed = true
-		}
+		state.Buddies[index] = normalized
 	}
 	for _, deck := range state.Decks {
 		for _, uniqueID := range deck.BuddyUniqueIDs {
 			if uniqueID != 0 {
 				if _, exists := buddyUniqueIDs[uniqueID]; !exists {
-					return false, fmt.Errorf("CN deck references unknown buddy unique ID %d", uniqueID)
+					return fmt.Errorf("CN deck references unknown buddy unique ID %d", uniqueID)
 				}
 			}
 		}
 	}
-	return changed, nil
+	return nil
 }
 
 func validateCardGroupProfiles(master CardRuntimeMaster) error {
@@ -675,18 +657,6 @@ func cloneCardGroupProfiles(source []gamestate.CardGroupProfile) []gamestate.Car
 		result[index].MemberCardIDs = append([]int(nil), group.MemberCardIDs...)
 	}
 	return result
-}
-
-func equalIntSlices(left []int, right []int) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for index := range left {
-		if left[index] != right[index] {
-			return false
-		}
-	}
-	return true
 }
 
 func normalizeCard(

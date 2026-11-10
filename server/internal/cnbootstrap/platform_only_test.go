@@ -66,7 +66,7 @@ func TestPlatformOnlyResourcesAndCDN(t *testing.T) {
 		t.Fatal(err)
 	}
 	exported, err := BuildCDNManifest(manifestPath, profiles...)
-	if err != nil || exported.SchemaVersion != 2 || len(exported.PlatformContents) != 2 || len(exported.Files) != 7 {
+	if err != nil || len(exported.PlatformContents) != 2 || len(exported.Files) != 7 {
 		t.Fatalf("profile-only CDN export: %v, %v", exported, err)
 	}
 	var voiceSources []string

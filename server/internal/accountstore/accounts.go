@@ -311,10 +311,8 @@ func (accounts *Accounts) ensureSystemPartnerAccounts(transaction *sql.Tx) error
 		for index, deck := range partnerDecks {
 			state.Decks[index] = cloneReleaseDeck(deck)
 		}
-		state.BattleLoadoutCardUniqueIDs = make([]int64, 0, len(state.Cards))
 		state.SupportDeck.CardCollectionIDs = make([]int, 0, len(state.Cards))
 		for _, card := range state.Cards {
-			state.BattleLoadoutCardUniqueIDs = append(state.BattleLoadoutCardUniqueIDs, card.UniqueID)
 			state.SupportDeck.CardCollectionIDs = append(state.SupportDeck.CardCollectionIDs, card.CardID)
 		}
 		leader := partnerLeaders[arthurType]
@@ -329,8 +327,7 @@ func (accounts *Accounts) ensureSystemPartnerAccounts(transaction *sql.Tx) error
 		)
 		state.User.TutorialFlag = (int64(1) << gamestate.TutorialFlagCount) - 1
 		state.Onboarding = gamestate.OnboardingState{
-			ConfigVersion: masterdata.OnboardingConfigVersion,
-			Step:          masterdata.OnboardingStepCount,
+			Step: masterdata.OnboardingStepCount,
 		}
 		content, err := EncodeAccountMetadata(state)
 		if err != nil {

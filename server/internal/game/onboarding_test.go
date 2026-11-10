@@ -7,6 +7,10 @@ import (
 	"kairisei.local/server/internal/gamestate"
 )
 
+func completedTestOnboarding() gamestate.OnboardingState {
+	return gamestate.OnboardingState{Step: cnOnboardingStepCount}
+}
+
 func TestTutorialRouteFlagPreservesExistingProgress(t *testing.T) {
 	s := onboardingTestStore()
 	const oldFlags = int64(1)<<26 - 1
@@ -21,10 +25,8 @@ func TestTutorialRouteFlagPreservesExistingProgress(t *testing.T) {
 func onboardingTestStore() *Account {
 	return &Account{
 		currentActiveArthur: 1,
-		onboarding: gamestate.OnboardingState{
-			ConfigVersion: cnOnboardingConfigVersion,
-		},
-		unlockedFeatureIDs: map[uint]struct{}{12: {}},
+		onboarding:          gamestate.OnboardingState{},
+		unlockedFeatureIDs:  map[uint]struct{}{12: {}},
 		items: map[int]gamestate.Item{
 			2001: {ItemID: 2001},
 		},
@@ -67,7 +69,7 @@ func TestStageQuestAreaCompletionRequiresEveryStage(t *testing.T) {
 }
 
 func TestUserCreateSelectsTheChosenArthurStarterLeader(t *testing.T) {
-	store := &Account{
+	store := &Account{onboarding: completedTestOnboarding(),
 		currentActiveArthur: 1,
 		cards: []CardInfo{
 			{UniqueID: 1, CardID: 10000010},
@@ -375,7 +377,7 @@ func TestOnboardingFirstMultiDrawPublishesOnlyReservedGacha(t *testing.T) {
 }
 
 func TestGachaPoolForRarityUsesCardDefinitions(t *testing.T) {
-	store := &Account{cardDefinitions: map[int]gamestate.Card{
+	store := &Account{onboarding: completedTestOnboarding(), cardDefinitions: map[int]gamestate.Card{
 		10: {CardID: 10, RarityRank: 4},
 		20: {CardID: 20, RarityRank: 5},
 		30: {CardID: 30, RarityRank: 4},

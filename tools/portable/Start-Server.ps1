@@ -108,7 +108,7 @@ if (-not $PSBoundParameters.ContainsKey('Port')) { $Port = [int]$deployment.port
 $resourceSetPath = Resolve-PackagePath 'resource-set/resource-set.json'
 . (Resolve-PackagePath 'Read-ResourceSet.ps1')
 $resourceSet = Read-PortableResourceSet -ManifestPath $resourceSetPath
-if ($resourceSet.Manifest.policy.publishable -ne $true -or $deployment.validation_only) {
+if ($deployment.validation_only) {
     if (-not $ValidationOnly) { throw 'This test package requires -ValidationOnly; use the packaged launcher.' }
 }
 $resourceSetSHA256 = (Get-FileHash -LiteralPath $resourceSetPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -122,7 +122,7 @@ $platformHashes = @{}
 foreach ($profilePath in $platformContents) {
     $platformProfile = Get-Content -LiteralPath $profilePath -Raw -Encoding UTF8 | ConvertFrom-Json
     $platform = [string]$platformProfile.platform
-    if ($platformProfile.format -ne 1 -or $platform -cnotin @('StandaloneWindows64', 'Android')) { throw 'Expected a PC or Android platform delivery.' }
+    if ($platform -cnotin @('StandaloneWindows64', 'Android')) { throw 'Expected a PC or Android platform delivery.' }
     if ($platformHashes.ContainsKey($platform)) { throw "Repeated platform delivery: $platform" }
     $platformHashes[$platform] = (Get-FileHash -LiteralPath $profilePath -Algorithm SHA256).Hash.ToLowerInvariant()
 }
@@ -169,7 +169,7 @@ if (Test-Path -LiteralPath $statePath -PathType Leaf) {
                     throw 'Running package uses different resources or network settings; stop it before restarting.'
                 }
                 [ordered]@{
-                    schema_version = 1
+
                     status = 'ALREADY_RUNNING'
                     process_id = [int]$oldState.process_id
                     health_url = $healthURL
@@ -193,8 +193,6 @@ Add-NativeArgument -List $arguments -Name '-request-log' -Value $requestLogPath
 Add-NativeArgument -List $arguments -Name '-admin-log-file' -Value $stdoutPath
 Add-NativeArgument -List $arguments -Name '-cn-save-path' -Value $savePath
 Add-NativeArgument -List $arguments -Name '-resource-set' -Value $resourceSetPath
-if ($null -ne $imageRoot) {
-}
 foreach ($profilePath in $platformContents) {
     Add-NativeArgument -List $arguments -Name '-platform-content' -Value $profilePath
 }
@@ -208,7 +206,7 @@ $shutdownEvent = 'Local\Kairisei-' + [Guid]::NewGuid().ToString('N')
 Add-NativeArgument -List $arguments -Name '-shutdown-event' -Value $shutdownEvent
 
 $preview = [ordered]@{
-    schema_version = 1
+
     action = 'START_PORTABLE_CN602_SERVER'
     executable = $serverPath
     resource_set_sha256 = $resourceSetSHA256
@@ -249,7 +247,7 @@ $process = Start-Process `
 
 # Keep the control channel available even while initialization is pending.
 [ordered]@{
-    schema_version = 1; status = 'STARTING'; process_id = [int]$process.Id
+    status = 'STARTING'; process_id = [int]$process.Id
     executable = $serverPath; shutdown_event = $shutdownEvent
     listen_host = $ListenHost; resource_set_sha256 = $resourceSetSHA256; platform_contents_sha256 = $platformContentsSHA256
     port = $Port; battle_port = $battlePort; admin_port = $adminPort; advertise_host = $AdvertiseHost
@@ -299,7 +297,7 @@ if (-not $ready) {
 }
 
 $state = [ordered]@{
-    schema_version = 1
+
     status = 'RUNNING'
     process_id = [int]$process.Id
     shutdown_event = $shutdownEvent

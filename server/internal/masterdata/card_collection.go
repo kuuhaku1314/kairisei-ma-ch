@@ -41,19 +41,17 @@ func validateCardCollection(master CardRuntimeMaster) error {
 
 // History is separate from the immutable public directory. This also handles
 // a card imported from inventory without erasing discoveries after a sale.
-func normalizeCollectionLoveHistory(state *gamestate.State) bool {
+func normalizeCollectionLoveHistory(state *gamestate.State) {
 	seen := make(map[int]bool, len(state.SupportDeck.CardCollectionLoveMaxIDs))
 	for _, id := range state.SupportDeck.CardCollectionLoveMaxIDs {
 		seen[id] = true
 	}
-	changed := false
 	for _, cards := range [][]gamestate.Card{state.Cards, state.ContainerCards} {
 		for _, card := range cards {
 			if card.LoveMax > 0 && card.Love >= card.LoveMax && !seen[card.CardID] {
-				seen[card.CardID], changed = true, true
+				seen[card.CardID] = true
 				state.SupportDeck.CardCollectionLoveMaxIDs = append(state.SupportDeck.CardCollectionLoveMaxIDs, card.CardID)
 			}
 		}
 	}
-	return changed
 }

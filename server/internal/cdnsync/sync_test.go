@@ -58,7 +58,7 @@ func TestSyncLifecycleThroughEnvironmentProxy(t *testing.T) {
 	}
 	write(source, original)
 	object := cnbootstrap.CDNObject{Key: "cpk/CPK/测试 voice.cpk.v2", Source: "voice.cpk", SourcePath: source, Bytes: int64(len(original)), SHA256: fmt.Sprintf("%x", sha256.Sum256(original))}
-	manifest := cnbootstrap.CDNManifest{SchemaVersion: 1, ResourceSetSHA256: strings.Repeat("a", 64), Root: resourceRoot, Files: []cnbootstrap.CDNObject{object}}
+	manifest := cnbootstrap.CDNManifest{ResourceSetSHA256: strings.Repeat("a", 64), Root: resourceRoot, Files: []cnbootstrap.CDNObject{object}}
 	var lock sync.Mutex
 	var stored []byte
 	var storedSHA string

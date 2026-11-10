@@ -9,8 +9,7 @@ import (
 )
 
 const (
-	cnOnboardingConfigVersion = 2
-	cnOnboardingStepCount     = 9
+	cnOnboardingStepCount = 9
 	// CONFIRMED: GachaMgr recognizes 90000200..90000203 as the one-draw
 	// first-gacha family and switches the original scene into its fixed guide.
 	cnOnboardingGachaID = 90000200
@@ -175,12 +174,8 @@ func emptyOnboardingQuestInfo() map[string]any {
 func (s *Account) HomeOnboardingQuests() ([]any, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.onboarding.ConfigVersion == 0 {
-		return []any{}, nil
-	}
 	result := emptyOnboardingQuestInfo()
-	if s.onboarding.ConfigVersion != cnOnboardingConfigVersion ||
-		s.onboarding.Step < 0 || s.onboarding.Step > cnOnboardingStepCount {
+	if s.onboarding.Step < 0 || s.onboarding.Step > cnOnboardingStepCount {
 		return nil, errors.New("CN onboarding state is invalid")
 	}
 	if s.onboarding.PendingClearQuestID != 0 {
@@ -211,8 +206,7 @@ func (s *Account) HomeOnboardingQuests() ([]any, error) {
 func (s *Account) OnboardingInProgress() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.onboarding.ConfigVersion == cnOnboardingConfigVersion &&
-		s.onboarding.Step < cnOnboardingStepCount
+	return s.onboarding.Step < cnOnboardingStepCount
 }
 
 func (s *Account) UnlockedFeatureState() []uint {
@@ -237,7 +231,7 @@ func (s *Account) FeatureUnlocked(featureID uint) bool {
 // Completing it must release their ordinary menu gates as well as Collection.
 // Profession selection, deck-rank gates and Tower stay separate.
 func (s *Account) reconcileOnboardingFeatureUnlocksLocked() {
-	if s.onboarding.ConfigVersion != cnOnboardingConfigVersion || s.onboarding.Step != cnOnboardingStepCount {
+	if s.onboarding.Step != cnOnboardingStepCount {
 		return
 	}
 	for featureID := uint(4); featureID <= 31; featureID++ {
@@ -246,11 +240,10 @@ func (s *Account) reconcileOnboardingFeatureUnlocksLocked() {
 }
 
 func (s *Account) advanceOnboardingLocked(event onboardingEvent) error {
-	if s.onboarding.ConfigVersion == 0 || s.onboarding.Step == cnOnboardingStepCount {
+	if s.onboarding.Step == cnOnboardingStepCount {
 		return nil
 	}
-	if s.onboarding.ConfigVersion != cnOnboardingConfigVersion ||
-		s.onboarding.Step < 0 || s.onboarding.Step > cnOnboardingStepCount {
+	if s.onboarding.Step < 0 || s.onboarding.Step > cnOnboardingStepCount {
 		return errors.New("CN onboarding state is invalid")
 	}
 	definition, err := onboardingQuestForStep(s.onboarding.Step, s.currentActiveArthur)

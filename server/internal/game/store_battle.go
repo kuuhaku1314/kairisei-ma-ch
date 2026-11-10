@@ -960,8 +960,8 @@ func (s *Account) teamBattleCatalogLocked() (*TeamBattleCatalog, error) {
 	if err != nil {
 		return nil, err
 	}
-	tutorialNormalQuest := s.onboarding.ConfigVersion == cnOnboardingConfigVersion && s.onboarding.Step == 0
-	tutorialActivity := s.onboarding.ConfigVersion == cnOnboardingConfigVersion && s.onboarding.Step == cnOnboardingStepCount-1
+	tutorialNormalQuest := s.onboarding.Step == 0
+	tutorialActivity := s.onboarding.Step == cnOnboardingStepCount-1
 	if err := catalog.project(s.stageQuests, s.teamBattleLimitedGroupIDs, tutorialNormalQuest, tutorialActivity); err != nil {
 		return nil, err
 	}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"kairisei.local/server/internal/protocol"
 	"net/http"
 	"strings"
 
@@ -17,7 +18,7 @@ func cnBootstrapCommon() map[string]any {
 		"res_code":            0,
 		"res_str":             "",
 		"notification":        []any{},
-		"revision":            cn602CatalogVersion,
+		"revision":            protocol.CatalogRevision,
 		"is_appupdate":        0,
 		"res_err_action":      0,
 		"res_is_del_savedata": 0,

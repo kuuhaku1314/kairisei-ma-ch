@@ -111,19 +111,19 @@ func TestAlchemistInventoryCandidate(t *testing.T) {
 		if err := json.Unmarshal(seed, &state); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := masterdata.ApplyCardRuntimeMaster(&state, master); err != nil {
+		if err := masterdata.ApplyCardRuntimeMaster(&state, master); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := masterdata.ApplyAvatarRuntimeMaster(&state, avatar); err != nil {
+		if err := masterdata.ApplyAvatarRuntimeMaster(&state, avatar); err != nil {
 			t.Fatal(err)
 		}
 		if err := masterdata.ApplyItemRuntimeMaster(&state, items); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := masterdata.ApplyLoginBonusRuntimeMaster(&state, login); err != nil {
+		if err := masterdata.ApplyLoginBonusRuntimeMaster(&state, login); err != nil {
 			t.Fatal(err)
 		}
-		state.Onboarding = gamestate.OnboardingState{ConfigVersion: masterdata.OnboardingConfigVersion}
+		state.Onboarding = gamestate.OnboardingState{}
 		if done {
 			state.Onboarding.Step = masterdata.OnboardingStepCount
 		}

@@ -19,52 +19,48 @@ const maxAccountSnapshotBytes = 16 * 1024 * 1024
 // loaded from the versioned seed/runtime catalog, never copied into these rows.
 // Global operator changes remain in cn_global_operation.
 type accountSnapshot struct {
-	Components                     accountComponentHashes                    `json:"row_components,omitempty"`
-	InventorySequence              gamestate.InventorySequenceState          `json:"inventory_sequence,omitempty"`
-	BurstProgress                  [4]uint8                                  `json:"burst_progress"`
-	Navigation                     gamestate.NavigationState                 `json:"navigation,omitempty"`
-	SchemaVersion                  int                                       `json:"schema_version"`
-	TeamBattleScores               map[int]gamestate.TeamBattleScoreProgress `json:"team_battle_scores,omitempty"`
-	TeamBattleSoloScores           map[int]gamestate.TeamBattleScoreProgress `json:"team_battle_solo_scores,omitempty"`
-	LocalShop                      gamestate.LocalShopState                  `json:"local_shop,omitempty"`
-	User                           gamestate.User                            `json:"user"`
-	PlayerProgressionConfigVersion int                                       `json:"player_progression_config_version"`
-	Onboarding                     gamestate.OnboardingState                 `json:"onboarding"`
-	BattleLoadoutCardUniqueIDs     []int64                                   `json:"battle_loadout_card_unique_ids,omitempty"`
-	BattlePoint                    gamestate.BattlePointState                `json:"battle_point"`
-	PVPConfigVersion               int                                       `json:"pvp_config_version"`
-	PVP                            gamestate.PVPPlayerState                  `json:"pvp"`
-	Spheres                        []gamestate.Sphere                        `json:"spheres"`
-	Decks                          []gamestate.Deck                          `json:"decks"`
-	Avatars                        []gamestate.Avatar                        `json:"avatars"`
-	AvatarConfigVersion            int                                       `json:"avatar_config_version,omitempty"`
-	AvatarParts                    []int                                     `json:"avatar_parts,omitempty"`
-	Costume                        json.RawMessage                           `json:"costume,omitempty"`
-	Buddy                          gamestate.Buddy                           `json:"buddy"`
-	Buddies                        []gamestate.Buddy                         `json:"buddies,omitempty"`
-	Friends                        gamestate.FriendCollectionState           `json:"friends"`
-	Stamps                         gamestate.StampCollectionState            `json:"stamps"`
-	Honors                         gamestate.HonorCollectionState            `json:"honors"`
-	Engagement                     gamestate.EngagementState                 `json:"engagement"`
-	Options                        gamestate.OptionState                     `json:"options"`
-	LoginBonus                     gamestate.LoginBonusState                 `json:"login_bonus"`
-	EventShopPurchases             []gamestate.EventShopPurchase             `json:"event_shop_purchases,omitempty"`
-	TradeShopPurchases             []gamestate.TradeShopPurchase             `json:"trade_shop_purchases,omitempty"`
-	GachaSelections                []gamestate.GachaSelection                `json:"gacha_selections,omitempty"`
-	GachaDailyClaims               []gamestate.GachaDailyClaim               `json:"gacha_daily_claims,omitempty"`
-	FriendPointInboxCursor         int64                                     `json:"friend_point_inbox_cursor,omitempty"`
-	CardDevelopment                gamestate.CardDevelopmentState            `json:"card_development"`
-	SupportDeck                    gamestate.SupportDeckState                `json:"support_deck"`
-	TeamBattleSchedule             gamestate.TeamBattleScheduleState         `json:"team_battle_schedule,omitempty"`
-	TeamBattleResultReceipts       []gamestate.TeamBattleResultReceipt       `json:"team_battle_result_receipts,omitempty"`
-	TeamBattleStartReceipts        []gamestate.TeamBattleStartReceipt        `json:"team_battle_start_receipts,omitempty"`
-	TeamBattleContinueReceipts     []gamestate.TeamBattleContinueReceipt     `json:"team_battle_continue_receipts,omitempty"`
-	TeamBattleSoloResultReceipts   []gamestate.TeamBattleSoloResultReceipt   `json:"team_battle_solo_result_receipts,omitempty"`
-	ExploreResultReceipt           *gamestate.ExploreResultReceipt           `json:"explore_result_receipt,omitempty"`
-	PVPResultReceipts              []gamestate.PVPResultReceipt              `json:"pvp_result_receipts,omitempty"`
-	TowerQuestProgress             []gamestate.TowerQuestProgress            `json:"tower_quest_progress,omitempty"`
-	Progress                       catalogProgress                           `json:"progress"`
-	ExploreProgress                exploreProgress                           `json:"explore_progress"`
+	Components                   accountComponentHashes                    `json:"row_components,omitempty"`
+	InventorySequence            gamestate.InventorySequenceState          `json:"inventory_sequence,omitempty"`
+	BurstProgress                [4]uint8                                  `json:"burst_progress"`
+	Navigation                   gamestate.NavigationState                 `json:"navigation,omitempty"`
+	SchemaVersion                int                                       `json:"schema_version"`
+	TeamBattleScores             map[int]gamestate.TeamBattleScoreProgress `json:"team_battle_scores,omitempty"`
+	TeamBattleSoloScores         map[int]gamestate.TeamBattleScoreProgress `json:"team_battle_solo_scores,omitempty"`
+	LocalShop                    gamestate.LocalShopState                  `json:"local_shop,omitempty"`
+	User                         gamestate.User                            `json:"user"`
+	Onboarding                   gamestate.OnboardingState                 `json:"onboarding"`
+	BattlePoint                  gamestate.BattlePointState                `json:"battle_point"`
+	PVP                          gamestate.PVPPlayerState                  `json:"pvp"`
+	Spheres                      []gamestate.Sphere                        `json:"spheres"`
+	Decks                        []gamestate.Deck                          `json:"decks"`
+	Avatars                      []gamestate.Avatar                        `json:"avatars"`
+	AvatarParts                  []int                                     `json:"avatar_parts,omitempty"`
+	Costume                      json.RawMessage                           `json:"costume,omitempty"`
+	Buddy                        gamestate.Buddy                           `json:"buddy"`
+	Buddies                      []gamestate.Buddy                         `json:"buddies,omitempty"`
+	Friends                      gamestate.FriendCollectionState           `json:"friends"`
+	Stamps                       gamestate.StampCollectionState            `json:"stamps"`
+	Honors                       gamestate.HonorCollectionState            `json:"honors"`
+	Engagement                   gamestate.EngagementState                 `json:"engagement"`
+	Options                      gamestate.OptionState                     `json:"options"`
+	LoginBonus                   gamestate.LoginBonusState                 `json:"login_bonus"`
+	EventShopPurchases           []gamestate.EventShopPurchase             `json:"event_shop_purchases,omitempty"`
+	TradeShopPurchases           []gamestate.TradeShopPurchase             `json:"trade_shop_purchases,omitempty"`
+	GachaSelections              []gamestate.GachaSelection                `json:"gacha_selections,omitempty"`
+	GachaDailyClaims             []gamestate.GachaDailyClaim               `json:"gacha_daily_claims,omitempty"`
+	FriendPointInboxCursor       int64                                     `json:"friend_point_inbox_cursor,omitempty"`
+	CardDevelopment              gamestate.CardDevelopmentState            `json:"card_development"`
+	SupportDeck                  gamestate.SupportDeckState                `json:"support_deck"`
+	TeamBattleSchedule           gamestate.TeamBattleScheduleState         `json:"team_battle_schedule,omitempty"`
+	TeamBattleResultReceipts     []gamestate.TeamBattleResultReceipt       `json:"team_battle_result_receipts,omitempty"`
+	TeamBattleStartReceipts      []gamestate.TeamBattleStartReceipt        `json:"team_battle_start_receipts,omitempty"`
+	TeamBattleContinueReceipts   []gamestate.TeamBattleContinueReceipt     `json:"team_battle_continue_receipts,omitempty"`
+	TeamBattleSoloResultReceipts []gamestate.TeamBattleSoloResultReceipt   `json:"team_battle_solo_result_receipts,omitempty"`
+	ExploreResultReceipt         *gamestate.ExploreResultReceipt           `json:"explore_result_receipt,omitempty"`
+	PVPResultReceipts            []gamestate.PVPResultReceipt              `json:"pvp_result_receipts,omitempty"`
+	TowerQuestProgress           []gamestate.TowerQuestProgress            `json:"tower_quest_progress,omitempty"`
+	Progress                     catalogProgress                           `json:"progress"`
+	ExploreProgress              exploreProgress                           `json:"explore_progress"`
 }
 
 type exploreProgress struct {
@@ -84,50 +80,46 @@ func accountSnapshotFromState(state gamestate.State) (accountSnapshot, error) {
 		return accountSnapshot{}, err
 	}
 	return accountSnapshot{
-		InventorySequence:              state.InventorySequence,
-		Navigation:                     state.Navigation,
-		BurstProgress:                  state.BurstProgress,
-		SchemaVersion:                  saveSnapshotSchemaVersion,
-		TeamBattleScores:               state.TeamBattleScores,
-		TeamBattleSoloScores:           state.TeamBattleSoloScores,
-		LocalShop:                      state.LocalShop,
-		User:                           state.User,
-		PlayerProgressionConfigVersion: state.PlayerProgressionConfigVersion,
-		Onboarding:                     state.Onboarding,
-		BattleLoadoutCardUniqueIDs:     state.BattleLoadoutCardUniqueIDs,
-		BattlePoint:                    state.BattlePoint,
-		PVPConfigVersion:               state.PVPConfigVersion,
-		PVP:                            state.PVP,
-		Spheres:                        state.Spheres,
-		Decks:                          state.Decks,
-		Avatars:                        state.Avatars,
-		AvatarConfigVersion:            state.AvatarConfigVersion,
-		AvatarParts:                    state.AvatarParts,
-		Costume:                        state.Costume,
-		Buddy:                          state.Buddy,
-		Buddies:                        state.Buddies,
-		Friends:                        gamestate.FriendCollectionState{Users: []gamestate.Friend{}},
-		Stamps:                         state.Stamps,
-		Honors:                         state.Honors,
-		Engagement:                     state.Engagement,
-		Options:                        state.Options,
-		LoginBonus:                     state.LoginBonus,
-		EventShopPurchases:             state.EventShopPurchases,
-		TradeShopPurchases:             state.TradeShopPurchases,
-		GachaSelections:                state.GachaSelections,
-		GachaDailyClaims:               state.GachaDailyClaims,
-		FriendPointInboxCursor:         state.FriendPointInboxCursor,
-		CardDevelopment:                state.CardDevelopment,
-		SupportDeck:                    state.SupportDeck,
-		TeamBattleSchedule:             state.TeamBattleSchedule,
-		TeamBattleResultReceipts:       state.TeamBattleResultReceipts,
-		TeamBattleStartReceipts:        state.TeamBattleStartReceipts,
-		TeamBattleContinueReceipts:     state.TeamBattleContinueReceipts,
-		TeamBattleSoloResultReceipts:   state.TeamBattleSoloResultReceipts,
-		ExploreResultReceipt:           state.ExploreResultReceipt,
-		PVPResultReceipts:              state.PVPResultReceipts,
-		TowerQuestProgress:             state.TowerQuestProgress,
-		Progress:                       progress,
+		InventorySequence:            state.InventorySequence,
+		Navigation:                   state.Navigation,
+		BurstProgress:                state.BurstProgress,
+		SchemaVersion:                saveSnapshotSchemaVersion,
+		TeamBattleScores:             state.TeamBattleScores,
+		TeamBattleSoloScores:         state.TeamBattleSoloScores,
+		LocalShop:                    state.LocalShop,
+		User:                         state.User,
+		Onboarding:                   state.Onboarding,
+		BattlePoint:                  state.BattlePoint,
+		PVP:                          state.PVP,
+		Spheres:                      state.Spheres,
+		Decks:                        state.Decks,
+		Avatars:                      state.Avatars,
+		AvatarParts:                  state.AvatarParts,
+		Costume:                      state.Costume,
+		Buddy:                        state.Buddy,
+		Buddies:                      state.Buddies,
+		Friends:                      gamestate.FriendCollectionState{Users: []gamestate.Friend{}},
+		Stamps:                       state.Stamps,
+		Honors:                       state.Honors,
+		Engagement:                   state.Engagement,
+		Options:                      state.Options,
+		LoginBonus:                   state.LoginBonus,
+		EventShopPurchases:           state.EventShopPurchases,
+		TradeShopPurchases:           state.TradeShopPurchases,
+		GachaSelections:              state.GachaSelections,
+		GachaDailyClaims:             state.GachaDailyClaims,
+		FriendPointInboxCursor:       state.FriendPointInboxCursor,
+		CardDevelopment:              state.CardDevelopment,
+		SupportDeck:                  state.SupportDeck,
+		TeamBattleSchedule:           state.TeamBattleSchedule,
+		TeamBattleResultReceipts:     state.TeamBattleResultReceipts,
+		TeamBattleStartReceipts:      state.TeamBattleStartReceipts,
+		TeamBattleContinueReceipts:   state.TeamBattleContinueReceipts,
+		TeamBattleSoloResultReceipts: state.TeamBattleSoloResultReceipts,
+		ExploreResultReceipt:         state.ExploreResultReceipt,
+		PVPResultReceipts:            state.PVPResultReceipts,
+		TowerQuestProgress:           state.TowerQuestProgress,
+		Progress:                     progress,
 		ExploreProgress: exploreProgress{
 			ActiveRewards: state.Explore.ActiveRewards,
 			StageCursor:   state.Explore.StageCursor, ActiveStageID: state.Explore.ActiveStageID,
@@ -145,16 +137,12 @@ func (snapshot accountSnapshot) applyAccountData(state *gamestate.State) {
 	state.TeamBattleSoloScores = snapshot.TeamBattleSoloScores
 	state.LocalShop = snapshot.LocalShop
 	state.User = snapshot.User
-	state.PlayerProgressionConfigVersion = snapshot.PlayerProgressionConfigVersion
 	state.Onboarding = snapshot.Onboarding
-	state.BattleLoadoutCardUniqueIDs = snapshot.BattleLoadoutCardUniqueIDs
 	state.BattlePoint = snapshot.BattlePoint
-	state.PVPConfigVersion = snapshot.PVPConfigVersion
 	state.PVP = snapshot.PVP
 	state.Spheres = snapshot.Spheres
 	state.Decks = snapshot.Decks
 	state.Avatars = snapshot.Avatars
-	state.AvatarConfigVersion = snapshot.AvatarConfigVersion
 	state.AvatarParts = snapshot.AvatarParts
 	if len(snapshot.Costume) > 0 {
 		state.Costume = snapshot.Costume
@@ -185,7 +173,6 @@ func (snapshot accountSnapshot) applyAccountData(state *gamestate.State) {
 	state.Navigation = snapshot.Navigation
 	state.BurstProgress = snapshot.BurstProgress
 	state.TowerQuestProgress = snapshot.TowerQuestProgress
-	state.SchemaVersion = 1
 	state.Explore.StageCursor = snapshot.ExploreProgress.StageCursor
 	state.Explore.ActiveStageID = snapshot.ExploreProgress.ActiveStageID
 	state.Explore.Active = snapshot.ExploreProgress.Active
@@ -284,10 +271,8 @@ func (storage *Database) decodeAccount(tx *sql.Tx, content []byte) (gamestate.St
 			state.TowerQuestProgress = append(state.TowerQuestProgress, gamestate.TowerQuestProgress{TowerID: profile.TowerID, Floor: 1})
 		}
 	}
-	if snapshot.Onboarding.ConfigVersion == masterdata.OnboardingConfigVersion {
-		if err := InstallOnboardingGacha(&state); err != nil {
-			return gamestate.State{}, err
-		}
+	if err := InstallOnboardingGacha(&state); err != nil {
+		return gamestate.State{}, err
 	}
 	if err := snapshot.Progress.apply(&state); err != nil {
 		return gamestate.State{}, err

@@ -15,8 +15,6 @@ import (
 const maxPlayerProgressionRuntimeBytes = 64 * 1024
 
 type playerProgressionRuntimeMaster struct {
-	SchemaVersion int    `json:"schema_version"`
-	ClientProfile string `json:"client_profile"`
 	gamestate.PlayerProgressionPolicy
 }
 
@@ -56,8 +54,7 @@ func LoadPlayerProgressionRuntimeMaster(path string) (gamestate.PlayerProgressio
 
 func validatePlayerProgressionRuntimeMaster(master playerProgressionRuntimeMaster) error {
 	policy := master.PlayerProgressionPolicy
-	if master.SchemaVersion != 2 || master.ClientProfile != "cn602-bootstrap" ||
-		policy.ConfigVersion <= 0 || policy.MaxLevel < 2 || policy.MaxLevel > 1000 ||
+	if policy.MaxLevel < 2 || policy.MaxLevel > 1000 ||
 		policy.Experience.Base <= 0 || policy.Experience.PerLevel < 0 ||
 		(policy.Experience.HigherLevels.FromLevel != 0 &&
 			(policy.Experience.HigherLevels.FromLevel < 1 || policy.Experience.HigherLevels.FromLevel >= policy.MaxLevel ||
@@ -94,18 +91,10 @@ func ApplyPlayerProgressionRuntimeMaster(
 	state *gamestate.State,
 	policy gamestate.PlayerProgressionPolicy,
 ) (bool, error) {
-	if state.PlayerProgressionConfigVersion > policy.ConfigVersion {
-		return false, errors.New("CN player progression save is newer than the runtime policy")
-	}
 	state.PlayerProgressionPolicy = policy
-	if state.PlayerProgressionConfigVersion == policy.ConfigVersion {
-		if err := ValidatePlayerProgressionState(state.User, policy); err != nil {
-			return false, err
-		}
-		return false, nil
-	}
+	before := state.User
 	if state.User.Level < 1 || state.User.Level > policy.MaxLevel {
-		return false, errors.New("CN player progression migration has an invalid level")
+		return false, errors.New("CN player progression has an invalid level")
 	}
 	oldBPMax := state.User.BPMax
 	wasBPFull := oldBPMax > 0 && state.User.BP >= oldBPMax
@@ -126,11 +115,14 @@ func ApplyPlayerProgressionRuntimeMaster(
 		state.User.BP = max(state.User.BP, state.User.BPMax)
 	}
 	state.User.Jobs = policy.JobsAtLevel(state.User.Level)
-	state.PlayerProgressionConfigVersion = policy.ConfigVersion
 	if err := ValidatePlayerProgressionState(state.User, policy); err != nil {
 		return false, err
 	}
-	return true, nil
+	return before.Experience != state.User.Experience ||
+		before.NowLevelExperience != state.User.NowLevelExperience ||
+		before.NextLevelExperience != state.User.NextLevelExperience ||
+		before.BPMax != state.User.BPMax || before.BP != state.User.BP ||
+		!slices.Equal(before.Jobs, state.User.Jobs), nil
 }
 
 func ValidatePlayerProgressionState(user gamestate.User, policy gamestate.PlayerProgressionPolicy) error {

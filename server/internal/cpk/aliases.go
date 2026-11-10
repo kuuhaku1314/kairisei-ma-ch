@@ -13,9 +13,7 @@ import (
 )
 
 type AliasManifest struct {
-	SchemaVersion int          `json:"schema_version"`
-	ClientProfile string       `json:"client_profile"`
-	Aliases       []AliasEntry `json:"aliases"`
+	Aliases []AliasEntry `json:"aliases"`
 }
 
 type AliasEntry struct {
@@ -59,9 +57,6 @@ func LoadAliases(cpkRoot string, manifestPath string) ([]Alias, error) {
 	decoder := json.NewDecoder(bytes.NewReader(content))
 	if err := decoder.Decode(&manifest); err != nil {
 		return nil, fmt.Errorf("decode CN CPK alias manifest: %w", err)
-	}
-	if manifest.SchemaVersion != 2 || manifest.ClientProfile != "cn602-bootstrap" {
-		return nil, errors.New("CN CPK alias manifest identity is invalid")
 	}
 	seen := make(map[string]struct{}, len(manifest.Aliases))
 	resolved := make([]Alias, 0, len(manifest.Aliases))

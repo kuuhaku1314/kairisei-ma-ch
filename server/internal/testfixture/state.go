@@ -23,7 +23,7 @@ func RuntimeState(t *testing.T) gamestate.State {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = masterdata.ApplyCardRuntimeMaster(&state, card); err != nil {
+	if err = masterdata.ApplyCardRuntimeMaster(&state, card); err != nil {
 		t.Fatal(err)
 	}
 	item, err := masterdata.LoadItemRuntimeMaster(WriteTestItemMaster(t, root))
@@ -37,7 +37,7 @@ func RuntimeState(t *testing.T) gamestate.State {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = masterdata.ApplyAvatarRuntimeMaster(&state, avatar); err != nil {
+	if err = masterdata.ApplyAvatarRuntimeMaster(&state, avatar); err != nil {
 		t.Fatal(err)
 	}
 	navi, err := masterdata.LoadNaviRuntimeMaster(WriteTestNaviMaster(t, root))
@@ -51,29 +51,30 @@ func RuntimeState(t *testing.T) gamestate.State {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = masterdata.ApplyStampRuntimeMaster(&state, stamps); err != nil {
+	if err = masterdata.ApplyStampRuntimeMaster(&state, stamps); err != nil {
 		t.Fatal(err)
 	}
 	honors, err := masterdata.LoadHonorRuntimeMaster(WriteTestHonorMaster(t, root))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = masterdata.ApplyHonorRuntimeMaster(&state, honors); err != nil {
+	if err = masterdata.ApplyHonorRuntimeMaster(&state, honors); err != nil {
 		t.Fatal(err)
 	}
 	login, err := masterdata.LoadLoginBonusRuntimeMaster("../../config/cn602-login-bonus-runtime.json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = masterdata.ApplyLoginBonusRuntimeMaster(&state, login); err != nil {
+	if err = masterdata.ApplyLoginBonusRuntimeMaster(&state, login); err != nil {
 		t.Fatal(err)
 	}
+	state.Onboarding.Step = masterdata.OnboardingStepCount
 	return state
 }
 
 func WriteCPKVersions(t *testing.T, root string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(root, "versions.json"), []byte(`{"schema_version":1,"versions":[]}`), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "versions.json"), []byte(`{"versions":[]}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 }

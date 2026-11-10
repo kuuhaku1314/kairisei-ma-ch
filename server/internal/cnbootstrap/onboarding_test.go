@@ -29,12 +29,16 @@ func TestFirstAccountUsesOnboardingAndPreservesProgressOnReload(t *testing.T) {
 		t.Fatal(err)
 	}
 	if state.User.Name != "" || state.User.TutorialFlag != 0 || len(state.Cards) != 10 ||
-		state.Onboarding.ConfigVersion != masterdata.OnboardingConfigVersion || state.Onboarding.Step != 0 ||
+		state.Onboarding.Step != 0 ||
 		state.User.CardMax != gamestate.CardCapacityLimit || state.User.CardContainerMax != gamestate.CardContainerCapacityDefault || state.User.NaviID != 0 || state.User.NaviUnlockFlag != 1 || !slices.Equal(state.User.SelectableNaviIDs, []int8{0}) || slices.Contains(state.User.UnlockedFeatureIDs, uint(10)) {
 		t.Fatal("fresh primary account did not enter clean training")
 	}
 	state.User.Name = "保留玩家名字"
 	state.User.Gold = 123
+	state.User.PVPPoint = 321
+	state.PVP.Challenge, state.PVP.NextBattleID = 0, 42
+	state.LoginBonus = gamestate.LoginBonusState{LastClaimDay: "2026-11-10", CycleDay: 1, BeginnerDay: 1, TotalClaims: 1}
+	loginProgress := state.LoginBonus
 	state.User.NaviID = 1 // A player's later choice must survive reload.
 	state.User.NaviUnlockFlag = 3
 	state.User.SelectableNaviIDs = []int8{0, 1}
@@ -46,6 +50,9 @@ func TestFirstAccountUsesOnboardingAndPreservesProgressOnReload(t *testing.T) {
 	state, err = storage.LoadOrImport()
 	if err != nil {
 		t.Fatal(err)
+	}
+	if state.PVP.Challenge != 0 || state.PVP.NextBattleID != 42 || state.User.PVPPoint != 321 || state.LoginBonus != loginProgress {
+		t.Fatal("reload reset PvP or login reward progress")
 	}
 	if state.User.Name != "保留玩家名字" || state.User.Gold != 123 || state.User.NaviID != 1 ||
 		state.Onboarding.Step != masterdata.OnboardingStepCount || !slices.Contains(state.User.UnlockedFeatureIDs, uint(10)) {
@@ -65,7 +72,7 @@ func TestInitializeCNOnboardingSnapshot(t *testing.T) {
 		state.User.TutorialFlag != 0 || state.User.Gold != 0 || state.User.CoinFree != 0 {
 		t.Fatalf("clean user state was not installed: %+v", state.User)
 	}
-	if state.Onboarding.ConfigVersion != masterdata.OnboardingConfigVersion || state.Onboarding.Step != 0 {
+	if state.Onboarding.Step != 0 {
 		t.Fatalf("onboarding state = %+v", state.Onboarding)
 	}
 	if slices.Contains(state.User.UnlockedFeatureIDs, uint(0)) ||

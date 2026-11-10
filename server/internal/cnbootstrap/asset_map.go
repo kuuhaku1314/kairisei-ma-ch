@@ -12,10 +12,7 @@ import (
 )
 
 type cnAssetMapManifest struct {
-	SchemaVersion int    `json:"schema_version"`
-	ClientProfile string `json:"client_profile"`
-	Source        struct {
-		CatalogVersion   int    `json:"catalog_version"`
+	Source struct {
 		VersionDATSHA256 string `json:"version_dat_sha256"`
 	} `json:"source"`
 	Bundles       []cnAssetMapBundle `json:"bundles"`
@@ -70,15 +67,6 @@ func loadCNAssetMap(
 	var manifest cnAssetMapManifest
 	if err := json.Unmarshal(contents, &manifest); err != nil {
 		return nil, nil, fmt.Errorf("parse official CN asset map: %w", err)
-	}
-	if manifest.SchemaVersion != 2 {
-		return nil, nil, fmt.Errorf("official CN asset map has unsupported schema version %d", manifest.SchemaVersion)
-	}
-	if manifest.ClientProfile != "cn602-bootstrap" {
-		return nil, nil, fmt.Errorf("official CN asset map has unexpected client profile %q", manifest.ClientProfile)
-	}
-	if manifest.Source.CatalogVersion != cn602CatalogVersion {
-		return nil, nil, fmt.Errorf("official CN asset map has unexpected catalog version %d", manifest.Source.CatalogVersion)
 	}
 	if !strings.EqualFold(manifest.Source.VersionDATSHA256, versionDATSHA256) {
 		return nil, nil, errors.New("official CN asset map was generated from a different version.dat")

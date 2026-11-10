@@ -27,63 +27,58 @@ const (
 // official-client metadata are deliberately excluded and supplied by the CN
 // profile, so changing character data cannot change the local network boundary.
 type saveState struct {
-	TeamBattleScores               map[int]gamestate.TeamBattleScoreProgress `json:"team_battle_scores,omitempty"`
-	TeamBattleSoloScores           map[int]gamestate.TeamBattleScoreProgress `json:"team_battle_solo_scores,omitempty"`
-	LocalShop                      gamestate.LocalShopState                  `json:"local_shop,omitempty"`
-	SchemaVersion                  int                                       `json:"schema_version"`
-	User                           gamestate.User                            `json:"user"`
-	PlayerProgressionConfigVersion int                                       `json:"player_progression_config_version"`
-	Onboarding                     gamestate.OnboardingState                 `json:"onboarding"`
-	BattleLoadoutCardUniqueIDs     []int64                                   `json:"battle_loadout_card_unique_ids,omitempty"`
-	BattlePoint                    gamestate.BattlePointState                `json:"battle_point"`
-	PVPConfigVersion               int                                       `json:"pvp_config_version"`
-	PVP                            gamestate.PVPPlayerState                  `json:"pvp"`
-	Spheres                        []gamestate.Sphere                        `json:"spheres"`
-	Cards                          []gamestate.Card                          `json:"cards"`
-	ContainerCards                 []gamestate.Card                          `json:"container_cards,omitempty"`
-	StackCards                     []gamestate.CardStack                     `json:"stack_cards"`
-	Decks                          []gamestate.Deck                          `json:"decks"`
-	Avatars                        []gamestate.Avatar                        `json:"avatars"`
-	AvatarConfigVersion            int                                       `json:"avatar_config_version,omitempty"`
-	AvatarParts                    []int                                     `json:"avatar_parts,omitempty"`
-	Buddy                          gamestate.Buddy                           `json:"buddy"`
-	Buddies                        []gamestate.Buddy                         `json:"buddies,omitempty"`
-	Profiles                       []string                                  `json:"profiles"`
-	Friends                        gamestate.FriendCollectionState           `json:"friends"`
-	Stamps                         gamestate.StampCollectionState            `json:"stamps"`
-	Honors                         gamestate.HonorCollectionState            `json:"honors"`
-	Story                          gamestate.StoryCatalogState               `json:"story"`
-	Explore                        gamestate.ExploreProgressState            `json:"explore"`
-	Engagement                     gamestate.EngagementState                 `json:"engagement"`
-	MissionDefinitions             map[int]gamestate.MissionDefinition       `json:"mission_definitions,omitempty"`
-	Options                        gamestate.OptionState                     `json:"options"`
-	LoginBonus                     gamestate.LoginBonusState                 `json:"login_bonus"`
-	Items                          []gamestate.Item                          `json:"items"`
-	ItemShopTabs                   []gamestate.ItemShopTab                   `json:"item_shop_tabs"`
-	EventShopPurchases             []gamestate.EventShopPurchase             `json:"event_shop_purchases,omitempty"`
-	TradeShopPurchases             []gamestate.TradeShopPurchase             `json:"trade_shop_purchases,omitempty"`
-	Gachas                         []gamestate.GachaProfile                  `json:"gachas"`
-	GachaSelections                []gamestate.GachaSelection                `json:"gacha_selections,omitempty"`
-	GachaDailyClaims               []gamestate.GachaDailyClaim               `json:"gacha_daily_claims,omitempty"`
-	FriendPointInboxCursor         int64                                     `json:"friend_point_inbox_cursor,omitempty"`
-	CardActions                    gamestate.CardActionState                 `json:"card_actions"`
-	CardDevelopment                gamestate.CardDevelopmentState            `json:"card_development"`
-	SupportDeck                    gamestate.SupportDeckState                `json:"support_deck"`
-	MainQuest                      json.RawMessage                           `json:"main_quest"`
-	StageQuestAreas                []json.RawMessage                         `json:"stage_quest_areas,omitempty"`
-	TeamBattleSolo                 json.RawMessage                           `json:"team_battle_solo_show"`
-	TeamBattleReplays              []gamestate.TeamBattleReplay              `json:"team_battle_replays"`
-	TeamBattleRewards              []gamestate.TeamBattleRewardProfile       `json:"team_battle_rewards"`
-	TeamBattleSchedule             gamestate.TeamBattleScheduleState         `json:"team_battle_schedule,omitempty"`
-	TeamBattleResultReceipts       []gamestate.TeamBattleResultReceipt       `json:"team_battle_result_receipts,omitempty"`
-	TeamBattleStartReceipts        []gamestate.TeamBattleStartReceipt        `json:"team_battle_start_receipts,omitempty"`
-	TeamBattleContinueReceipts     []gamestate.TeamBattleContinueReceipt     `json:"team_battle_continue_receipts,omitempty"`
-	TeamBattleSoloResultReceipts   []gamestate.TeamBattleSoloResultReceipt   `json:"team_battle_solo_result_receipts,omitempty"`
-	ExploreResultReceipt           *gamestate.ExploreResultReceipt           `json:"explore_result_receipt,omitempty"`
-	PVPResultReceipts              []gamestate.PVPResultReceipt              `json:"pvp_result_receipts,omitempty"`
-	ActiveTeamBattle               *gamestate.TeamBattleActiveState          `json:"active_team_battle,omitempty"`
-	TowerQuestProgress             []gamestate.TowerQuestProgress            `json:"tower_quest_progress,omitempty"`
-	Costume                        json.RawMessage                           `json:"costume"`
+	TeamBattleScores             map[int]gamestate.TeamBattleScoreProgress `json:"team_battle_scores,omitempty"`
+	TeamBattleSoloScores         map[int]gamestate.TeamBattleScoreProgress `json:"team_battle_solo_scores,omitempty"`
+	LocalShop                    gamestate.LocalShopState                  `json:"local_shop,omitempty"`
+	User                         gamestate.User                            `json:"user"`
+	Onboarding                   gamestate.OnboardingState                 `json:"onboarding"`
+	BattlePoint                  gamestate.BattlePointState                `json:"battle_point"`
+	PVP                          gamestate.PVPPlayerState                  `json:"pvp"`
+	Spheres                      []gamestate.Sphere                        `json:"spheres"`
+	Cards                        []gamestate.Card                          `json:"cards"`
+	ContainerCards               []gamestate.Card                          `json:"container_cards,omitempty"`
+	StackCards                   []gamestate.CardStack                     `json:"stack_cards"`
+	Decks                        []gamestate.Deck                          `json:"decks"`
+	Avatars                      []gamestate.Avatar                        `json:"avatars"`
+	AvatarParts                  []int                                     `json:"avatar_parts,omitempty"`
+	Buddy                        gamestate.Buddy                           `json:"buddy"`
+	Buddies                      []gamestate.Buddy                         `json:"buddies,omitempty"`
+	Profiles                     []string                                  `json:"profiles"`
+	Friends                      gamestate.FriendCollectionState           `json:"friends"`
+	Stamps                       gamestate.StampCollectionState            `json:"stamps"`
+	Honors                       gamestate.HonorCollectionState            `json:"honors"`
+	Story                        gamestate.StoryCatalogState               `json:"story"`
+	Explore                      gamestate.ExploreProgressState            `json:"explore"`
+	Engagement                   gamestate.EngagementState                 `json:"engagement"`
+	MissionDefinitions           map[int]gamestate.MissionDefinition       `json:"mission_definitions,omitempty"`
+	Options                      gamestate.OptionState                     `json:"options"`
+	LoginBonus                   gamestate.LoginBonusState                 `json:"login_bonus"`
+	Items                        []gamestate.Item                          `json:"items"`
+	ItemShopTabs                 []gamestate.ItemShopTab                   `json:"item_shop_tabs"`
+	EventShopPurchases           []gamestate.EventShopPurchase             `json:"event_shop_purchases,omitempty"`
+	TradeShopPurchases           []gamestate.TradeShopPurchase             `json:"trade_shop_purchases,omitempty"`
+	Gachas                       []gamestate.GachaProfile                  `json:"gachas"`
+	GachaSelections              []gamestate.GachaSelection                `json:"gacha_selections,omitempty"`
+	GachaDailyClaims             []gamestate.GachaDailyClaim               `json:"gacha_daily_claims,omitempty"`
+	FriendPointInboxCursor       int64                                     `json:"friend_point_inbox_cursor,omitempty"`
+	CardActions                  gamestate.CardActionState                 `json:"card_actions"`
+	CardDevelopment              gamestate.CardDevelopmentState            `json:"card_development"`
+	SupportDeck                  gamestate.SupportDeckState                `json:"support_deck"`
+	MainQuest                    json.RawMessage                           `json:"main_quest"`
+	StageQuestAreas              []json.RawMessage                         `json:"stage_quest_areas,omitempty"`
+	TeamBattleSolo               json.RawMessage                           `json:"team_battle_solo_show"`
+	TeamBattleReplays            []gamestate.TeamBattleReplay              `json:"team_battle_replays"`
+	TeamBattleRewards            []gamestate.TeamBattleRewardProfile       `json:"team_battle_rewards"`
+	TeamBattleSchedule           gamestate.TeamBattleScheduleState         `json:"team_battle_schedule,omitempty"`
+	TeamBattleResultReceipts     []gamestate.TeamBattleResultReceipt       `json:"team_battle_result_receipts,omitempty"`
+	TeamBattleStartReceipts      []gamestate.TeamBattleStartReceipt        `json:"team_battle_start_receipts,omitempty"`
+	TeamBattleContinueReceipts   []gamestate.TeamBattleContinueReceipt     `json:"team_battle_continue_receipts,omitempty"`
+	TeamBattleSoloResultReceipts []gamestate.TeamBattleSoloResultReceipt   `json:"team_battle_solo_result_receipts,omitempty"`
+	ExploreResultReceipt         *gamestate.ExploreResultReceipt           `json:"explore_result_receipt,omitempty"`
+	PVPResultReceipts            []gamestate.PVPResultReceipt              `json:"pvp_result_receipts,omitempty"`
+	ActiveTeamBattle             *gamestate.TeamBattleActiveState          `json:"active_team_battle,omitempty"`
+	TowerQuestProgress           []gamestate.TowerQuestProgress            `json:"tower_quest_progress,omitempty"`
+	Costume                      json.RawMessage                           `json:"costume"`
 }
 
 func LoadSaveState(savePath string) (gamestate.State, error) {
@@ -133,25 +128,20 @@ func DecodeSaveState(content []byte) (gamestate.State, error) {
 
 func releaseStateFromSave(save saveState) gamestate.State {
 	return gamestate.State{
-		SchemaVersion:                  save.SchemaVersion,
-		User:                           save.User,
-		PlayerProgressionConfigVersion: save.PlayerProgressionConfigVersion,
-		Onboarding:                     save.Onboarding,
-		BattleLoadoutCardUniqueIDs:     append([]int64(nil), save.BattleLoadoutCardUniqueIDs...),
-		BattlePoint:                    save.BattlePoint,
-		PVPConfigVersion:               save.PVPConfigVersion,
-		PVP:                            cloneReleasePVPState(save.PVP),
+		User:        save.User,
+		Onboarding:  save.Onboarding,
+		BattlePoint: save.BattlePoint,
+		PVP:         cloneReleasePVPState(save.PVP),
 		// Preserve an explicitly empty inventory as [] rather than nil. The CN
 		// client and save validator distinguish initialized-empty from absent.
-		Spheres:             append([]gamestate.Sphere{}, save.Spheres...),
-		Cards:               save.Cards,
-		ContainerCards:      save.ContainerCards,
-		StackCards:          save.StackCards,
-		Decks:               save.Decks,
-		Avatars:             save.Avatars,
-		AvatarConfigVersion: save.AvatarConfigVersion,
-		AvatarParts:         append([]int(nil), save.AvatarParts...),
-		Buddy:               save.Buddy,
+		Spheres:        append([]gamestate.Sphere{}, save.Spheres...),
+		Cards:          save.Cards,
+		ContainerCards: save.ContainerCards,
+		StackCards:     save.StackCards,
+		Decks:          save.Decks,
+		Avatars:        save.Avatars,
+		AvatarParts:    append([]int(nil), save.AvatarParts...),
+		Buddy:          save.Buddy,
 		// Preserve initialized-empty Buddy inventories across decode/clone for the
 		// same reason as spheres above.
 		Buddies:                      append([]gamestate.Buddy{}, save.Buddies...),
@@ -198,9 +188,6 @@ func releaseStateFromSave(save saveState) gamestate.State {
 }
 
 func ValidateSave(save saveState) error {
-	if save.SchemaVersion != 1 {
-		return errors.New("CN save schema_version must be 1")
-	}
 	if save.FriendPointInboxCursor < 0 {
 		return errors.New("CN save friend-point inbox cursor is invalid")
 	}
@@ -215,10 +202,7 @@ func ValidateSave(save saveState) error {
 		save.User.TutorialFlag >= int64(1)<<gamestate.TutorialFlagCount {
 		return errors.New("CN save user state is invalid")
 	}
-	if save.PlayerProgressionConfigVersion < 0 {
-		return errors.New("CN save player progression state is invalid")
-	}
-	if save.LoginBonus.ConfigVersion < 0 || save.LoginBonus.CycleDay < 0 || save.LoginBonus.BeginnerDay < 0 ||
+	if save.LoginBonus.CycleDay < 0 || save.LoginBonus.BeginnerDay < 0 ||
 		save.LoginBonus.TotalClaims < 0 {
 		return errors.New("CN save login bonus state is invalid")
 	}
@@ -294,9 +278,6 @@ func ValidateSave(save saveState) error {
 			return errors.New("CN save avatar state is invalid")
 		}
 	}
-	if save.AvatarConfigVersion < 0 || (save.AvatarConfigVersion > 0 && save.AvatarParts == nil) {
-		return errors.New("CN save Avatar inventory configuration is invalid")
-	}
 	avatarParts := make(map[int]struct{}, len(save.AvatarParts))
 	for _, partID := range save.AvatarParts {
 		if partID <= 0 {
@@ -316,11 +297,10 @@ func ValidateSave(save saveState) error {
 		(save.User.BP >= save.User.BPMax && save.BattlePoint.NextRecoveryUnix != 0) {
 		return errors.New("CN save battle point recovery configuration is invalid")
 	}
-	if save.PVPConfigVersion < 0 || save.PVP.Challenge < 0 || save.PVP.ChallengeDay < 0 || save.PVP.NextBattleID < 0 ||
-		(save.PVPConfigVersion > 0 && (save.PVP.NextBattleID == 0 || save.PVP.DefenseDecks == nil || save.PVP.History == nil)) {
+	if save.PVP.Challenge < 0 || save.PVP.ChallengeDay < 0 || save.PVP.NextBattleID < 0 {
 		return fmt.Errorf(
-			"CN save PVP state is invalid (version=%d challenge=%d next_battle_id=%d defense_nil=%t history_nil=%t)",
-			save.PVPConfigVersion, save.PVP.Challenge, save.PVP.NextBattleID,
+			"CN save PVP state is invalid (challenge=%d next_battle_id=%d defense_nil=%t history_nil=%t)",
+			save.PVP.Challenge, save.PVP.NextBattleID,
 			save.PVP.DefenseDecks == nil, save.PVP.History == nil,
 		)
 	}
@@ -416,11 +396,6 @@ func ValidateSave(save saveState) error {
 		if err := gamestate.ValidateGachaRules(gacha); err != nil {
 			return err
 		}
-		if !validGachaBannerKey(gacha.BannerKey) ||
-			!validGachaPublicationKey(gacha.PublicationKey) ||
-			(gacha.PublicationKey != "" && gacha.PublicationKey != "operator" && gacha.BannerKey == "") {
-			return errors.New("CN save gacha banner policy is invalid")
-		}
 		if gacha.DailyFirstFree {
 			if gacha.PayType != 2 || gacha.GachaType != 1 {
 				return errors.New("CN save daily-first-free gacha policy is invalid")
@@ -473,16 +448,11 @@ func ValidateSave(save saveState) error {
 		seenDailyClaims[claim.GachaID] = struct{}{}
 	}
 
-	if save.Onboarding.ConfigVersion < 0 || save.Onboarding.ConfigVersion > masterdata.OnboardingConfigVersion ||
-		save.Onboarding.Step < 0 ||
-		(save.Onboarding.ConfigVersion == 0 && (save.Onboarding.Step != 0 ||
-			save.Onboarding.CurrentAnnounced || save.Onboarding.PendingClearQuestID != 0)) ||
-		(save.Onboarding.ConfigVersion == masterdata.OnboardingConfigVersion &&
-			save.Onboarding.Step > masterdata.OnboardingStepCount) ||
-		(save.Onboarding.ConfigVersion > 0 && save.Onboarding.PendingClearQuestID != 0 &&
-			!isOnboardingQuestID(save.Onboarding.PendingClearQuestID)) {
+	if save.Onboarding.Step < 0 || save.Onboarding.Step > masterdata.OnboardingStepCount ||
+		(save.Onboarding.PendingClearQuestID != 0 && !isOnboardingQuestID(save.Onboarding.PendingClearQuestID)) {
 		return errors.New("CN save onboarding state is invalid")
 	}
+
 	seenEventShopPurchases := make(map[int]struct{}, len(save.EventShopPurchases))
 	for _, purchase := range save.EventShopPurchases {
 		if purchase.LineupID <= 0 || purchase.Count <= 0 {
@@ -512,16 +482,6 @@ func ValidateSave(save saveState) error {
 			return fmt.Errorf("CN save popup read state repeats ID %d", popupID)
 		}
 		seenPopupReadIDs[popupID] = struct{}{}
-	}
-	seenBattleLoadoutCardUniqueIDs := make(map[int64]struct{}, len(save.BattleLoadoutCardUniqueIDs))
-	for _, uniqueID := range save.BattleLoadoutCardUniqueIDs {
-		if uniqueID <= 0 {
-			return errors.New("CN save battle loadout card ID is invalid")
-		}
-		if _, exists := seenBattleLoadoutCardUniqueIDs[uniqueID]; exists {
-			return fmt.Errorf("CN save battle loadout card unique ID %d is duplicated", uniqueID)
-		}
-		seenBattleLoadoutCardUniqueIDs[uniqueID] = struct{}{}
 	}
 	seenFeatureIDs := make(map[uint]struct{}, len(save.User.UnlockedFeatureIDs))
 	for _, featureID := range save.User.UnlockedFeatureIDs {
@@ -736,32 +696,6 @@ func validHiddenItemShopLineup(lineup gamestate.ItemShopLineup) bool {
 		lineup.Interiors[0].Num == 1
 }
 
-func validGachaBannerKey(value string) bool {
-	switch value {
-	case "historical_duozi", "historical_tianke", "historical_youmo", "historical_youmo10",
-		"", "local_new_year", "local_standard", "local_friend", "local_first", "local_first_multi",
-		"five_star_ticket", "element_fire", "element_ice", "element_wind",
-		"element_light", "element_dark", "rare_ticket_201805", "unowned_ticket_201805", "lucky_bag_opera",
-		"lucky_bag_skuld", "lucky_bag_constantine", "lucky_bag_merchant",
-		"lucky_bag_summer_duo", "lucky_bag_yalin":
-		return true
-	default:
-		return false
-	}
-}
-
-func validGachaPublicationKey(value string) bool {
-	switch value {
-	case "historical_duozi", "historical_tianke", "historical_youmo", "", "water_coin", "operator", "element_fire", "element_ice", "element_wind",
-		"element_light", "element_dark", "rare_ticket_201805", "unowned_ticket_201805", "lucky_bag_opera",
-		"lucky_bag_skuld", "lucky_bag_constantine", "lucky_bag_merchant",
-		"lucky_bag_summer_duo", "lucky_bag_yalin":
-		return true
-	default:
-		return false
-	}
-}
-
 func validGachaResultPolicy(gacha gamestate.GachaProfile) bool {
 	configured := gacha.GuaranteedRarityRank != 0 || gacha.GuaranteedCount != 0 ||
 		gacha.RemainderRarityRank != 0
@@ -786,63 +720,58 @@ func SaveFromState(state gamestate.State) saveState {
 	// copied into the mutable player save after every state change.
 	cardActions.EvolutionTransitions = []gamestate.EvolutionTransition{}
 	save := saveState{
-		SchemaVersion:                  state.SchemaVersion,
-		User:                           state.User,
-		PlayerProgressionConfigVersion: state.PlayerProgressionConfigVersion,
-		Onboarding:                     state.Onboarding,
-		BattleLoadoutCardUniqueIDs:     append([]int64(nil), state.BattleLoadoutCardUniqueIDs...),
-		BattlePoint:                    state.BattlePoint,
-		PVPConfigVersion:               state.PVPConfigVersion,
-		PVP:                            cloneReleasePVPState(state.PVP),
-		Spheres:                        append([]gamestate.Sphere{}, state.Spheres...),
-		Cards:                          state.Cards,
-		ContainerCards:                 state.ContainerCards,
-		StackCards:                     state.StackCards,
-		Decks:                          state.Decks,
-		Avatars:                        state.Avatars,
-		AvatarConfigVersion:            state.AvatarConfigVersion,
-		AvatarParts:                    append([]int(nil), state.AvatarParts...),
-		Buddy:                          state.Buddy,
-		Buddies:                        append([]gamestate.Buddy{}, state.Buddies...),
-		Profiles:                       state.Profiles,
-		Friends:                        state.Friends,
-		Stamps:                         state.Stamps,
-		Honors:                         state.Honors,
-		Story:                          state.Story,
-		Explore:                        state.Explore,
-		Engagement:                     state.Engagement,
-		MissionDefinitions:             state.MissionDefinitions,
-		Options:                        state.Options,
-		LoginBonus:                     state.LoginBonus,
-		Items:                          state.Items,
-		ItemShopTabs:                   state.ItemShopTabs,
-		EventShopPurchases:             append([]gamestate.EventShopPurchase(nil), state.EventShopPurchases...),
-		TradeShopPurchases:             append([]gamestate.TradeShopPurchase(nil), state.TradeShopPurchases...),
-		TeamBattleScores:               state.TeamBattleScores,
-		TeamBattleSoloScores:           state.TeamBattleSoloScores,
-		LocalShop:                      state.LocalShop,
-		Gachas:                         state.Gachas,
-		GachaSelections:                cloneGachaSelections(state.GachaSelections),
-		GachaDailyClaims:               append([]gamestate.GachaDailyClaim(nil), state.GachaDailyClaims...),
-		FriendPointInboxCursor:         state.FriendPointInboxCursor,
-		CardActions:                    cardActions,
-		CardDevelopment:                cloneCardDevelopmentState(state.CardDevelopment),
-		SupportDeck:                    cloneSupportDeckState(state.SupportDeck),
-		MainQuest:                      state.MainQuest,
-		StageQuestAreas:                cloneRawMessages(state.StageQuestAreas),
-		TeamBattleSolo:                 state.TeamBattleSolo,
-		TeamBattleReplays:              state.TeamBattleReplays,
-		TeamBattleRewards:              state.TeamBattleRewards,
-		TeamBattleSchedule:             cloneTeamBattleScheduleState(state.TeamBattleSchedule),
-		TeamBattleResultReceipts:       cloneTeamBattleResultReceipts(state.TeamBattleResultReceipts),
-		TeamBattleStartReceipts:        append([]gamestate.TeamBattleStartReceipt(nil), state.TeamBattleStartReceipts...),
-		TeamBattleContinueReceipts:     append([]gamestate.TeamBattleContinueReceipt(nil), state.TeamBattleContinueReceipts...),
-		TeamBattleSoloResultReceipts:   cloneTeamBattleSoloResultReceipts(state.TeamBattleSoloResultReceipts),
-		ExploreResultReceipt:           cloneExploreResultReceipt(state.ExploreResultReceipt),
-		PVPResultReceipts:              clonePVPResultReceipts(state.PVPResultReceipts),
-		ActiveTeamBattle:               cloneActiveTeamBattleState(state.ActiveTeamBattle),
-		TowerQuestProgress:             cloneTowerQuestProgressState(state.TowerQuestProgress),
-		Costume:                        state.Costume,
+		User:                         state.User,
+		Onboarding:                   state.Onboarding,
+		BattlePoint:                  state.BattlePoint,
+		PVP:                          cloneReleasePVPState(state.PVP),
+		Spheres:                      append([]gamestate.Sphere{}, state.Spheres...),
+		Cards:                        state.Cards,
+		ContainerCards:               state.ContainerCards,
+		StackCards:                   state.StackCards,
+		Decks:                        state.Decks,
+		Avatars:                      state.Avatars,
+		AvatarParts:                  append([]int(nil), state.AvatarParts...),
+		Buddy:                        state.Buddy,
+		Buddies:                      append([]gamestate.Buddy{}, state.Buddies...),
+		Profiles:                     state.Profiles,
+		Friends:                      state.Friends,
+		Stamps:                       state.Stamps,
+		Honors:                       state.Honors,
+		Story:                        state.Story,
+		Explore:                      state.Explore,
+		Engagement:                   state.Engagement,
+		MissionDefinitions:           state.MissionDefinitions,
+		Options:                      state.Options,
+		LoginBonus:                   state.LoginBonus,
+		Items:                        state.Items,
+		ItemShopTabs:                 state.ItemShopTabs,
+		EventShopPurchases:           append([]gamestate.EventShopPurchase(nil), state.EventShopPurchases...),
+		TradeShopPurchases:           append([]gamestate.TradeShopPurchase(nil), state.TradeShopPurchases...),
+		TeamBattleScores:             state.TeamBattleScores,
+		TeamBattleSoloScores:         state.TeamBattleSoloScores,
+		LocalShop:                    state.LocalShop,
+		Gachas:                       state.Gachas,
+		GachaSelections:              cloneGachaSelections(state.GachaSelections),
+		GachaDailyClaims:             append([]gamestate.GachaDailyClaim(nil), state.GachaDailyClaims...),
+		FriendPointInboxCursor:       state.FriendPointInboxCursor,
+		CardActions:                  cardActions,
+		CardDevelopment:              cloneCardDevelopmentState(state.CardDevelopment),
+		SupportDeck:                  cloneSupportDeckState(state.SupportDeck),
+		MainQuest:                    state.MainQuest,
+		StageQuestAreas:              cloneRawMessages(state.StageQuestAreas),
+		TeamBattleSolo:               state.TeamBattleSolo,
+		TeamBattleReplays:            state.TeamBattleReplays,
+		TeamBattleRewards:            state.TeamBattleRewards,
+		TeamBattleSchedule:           cloneTeamBattleScheduleState(state.TeamBattleSchedule),
+		TeamBattleResultReceipts:     cloneTeamBattleResultReceipts(state.TeamBattleResultReceipts),
+		TeamBattleStartReceipts:      append([]gamestate.TeamBattleStartReceipt(nil), state.TeamBattleStartReceipts...),
+		TeamBattleContinueReceipts:   append([]gamestate.TeamBattleContinueReceipt(nil), state.TeamBattleContinueReceipts...),
+		TeamBattleSoloResultReceipts: cloneTeamBattleSoloResultReceipts(state.TeamBattleSoloResultReceipts),
+		ExploreResultReceipt:         cloneExploreResultReceipt(state.ExploreResultReceipt),
+		PVPResultReceipts:            clonePVPResultReceipts(state.PVPResultReceipts),
+		ActiveTeamBattle:             cloneActiveTeamBattleState(state.ActiveTeamBattle),
+		TowerQuestProgress:           cloneTowerQuestProgressState(state.TowerQuestProgress),
+		Costume:                      state.Costume,
 	}
 	return save
 }

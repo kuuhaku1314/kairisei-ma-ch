@@ -13,7 +13,7 @@ func TestBuddyGiftLevelExperienceAndRetry(t *testing.T) {
 	}{
 		{0, 1, 0, 10}, {2, 2, 10, 20}, {3, 3, 30, 0},
 	} {
-		s := &Account{buddyMax: 10, nextBuddyUniqueID: 1,
+		s := &Account{onboarding: completedTestOnboarding(), buddyMax: 10, nextBuddyUniqueID: 1,
 			buddyDefinitions: map[int]gamestate.BuddyDefinition{7: {BuddyID: 7, MaxLevel: 3, ExperienceTableID: 2}},
 			buddyExperience:  map[int][]int{2: {10, 20}},
 			presents:         []gamestate.Present{{PresentID: 1, Reward: gamestate.Reward{Type: 19, RewardTypeID: 7, Num: 2, CardLevel: tc.level}}},

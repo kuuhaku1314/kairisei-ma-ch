@@ -10,7 +10,7 @@ func TestDeletedPresentHistoryDropsOldestFiftyAfterHundred(t *testing.T) {
 	present := func(id int64, state int8) gamestate.Present {
 		return gamestate.Present{PresentID: id, State: state, Title: "gift"}
 	}
-	s := &Account{}
+	s := &Account{onboarding: completedTestOnboarding()}
 	for id := int64(1); id <= 100; id++ {
 		s.presentHistories = append(s.presentHistories, present(id, 1))
 	}

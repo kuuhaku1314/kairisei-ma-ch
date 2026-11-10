@@ -12,8 +12,8 @@ func TestPlayerPolicyKeepsClaimsAndMatchesNaviPrice(t *testing.T) {
 	day := func(n int) []gamestate.LoginBonusDay {
 		return []gamestate.LoginBonusDay{{Day: 1, Comment: "签到", Reward: reward(n)}}
 	}
-	config := PlayerConfiguration{Revision: 1, StoryCrystals: 75, LoginBonus: gamestate.LoginBonusPolicy{ConfigVersion: 1, Cycle: day(10), Beginner: day(20), TotalMilestones: day(30)}, Navigators: []NaviSetting{{NaviID: 1, Enabled: true, Price: 77}}}
-	s := &Account{currentName: "亚瑟", coinFree: 100, loginBonusState: gamestate.LoginBonusState{ConfigVersion: 1},
+	config := PlayerConfiguration{Revision: 1, StoryCrystals: 75, LoginBonus: gamestate.LoginBonusPolicy{Cycle: day(10), Beginner: day(20), TotalMilestones: day(30)}, Navigators: []NaviSetting{{NaviID: 1, Enabled: true, Price: 77}}}
+	s := &Account{onboarding: completedTestOnboarding(), currentName: "亚瑟", coinFree: 100, loginBonusState: gamestate.LoginBonusState{},
 		naviCatalogIDs: map[int8]struct{}{0: {}, 1: {}}, selectableNaviIDs: map[int8]struct{}{0: {}}, naviPurchasePrice: 500,
 		storyRewardPolicy: gamestate.StoryRewardPolicy{MainFirstClear: reward(50), SubFirstClear: reward(50), EventFirstClear: reward(50)},
 		storyMainParts:    []gamestate.StoryMainPart{{Sections: []gamestate.StoryMainSection{{Stories: []gamestate.StoryMain{{StoryMainID: 1, StateFlag: 1}}}}}},

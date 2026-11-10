@@ -60,10 +60,6 @@ func InitializeOnboardingSnapshot(state *gamestate.State, userID int) error {
 	state.ContainerCards = []gamestate.Card{}
 	state.StackCards = []gamestate.CardStack{}
 	state.Spheres = []gamestate.Sphere{}
-	state.BattleLoadoutCardUniqueIDs = make([]int64, 0, len(state.Cards))
-	for _, card := range state.Cards {
-		state.BattleLoadoutCardUniqueIDs = append(state.BattleLoadoutCardUniqueIDs, card.UniqueID)
-	}
 
 	decksByArthur := make(map[int8]gamestate.Deck, 4)
 	for _, deck := range state.Decks {
@@ -126,7 +122,7 @@ func InitializeOnboardingSnapshot(state *gamestate.State, userID int) error {
 	// The profession bit is finalized by UserCreate after the player chooses one
 	// Arthur.  Do not pre-open the other three professions on a clean account.
 	state.User.UnlockedFeatureIDs = []uint{4, 5, 6, 7, 12}
-	state.Onboarding = gamestate.OnboardingState{ConfigVersion: masterdata.OnboardingConfigVersion}
+	state.Onboarding = gamestate.OnboardingState{}
 
 	state.Items = []gamestate.Item{
 		{ItemID: 1000}, {ItemID: 1200}, {ItemID: 2000}, {ItemID: 2001},
@@ -153,9 +149,10 @@ func InitializeOnboardingSnapshot(state *gamestate.State, userID int) error {
 	state.ExploreResultReceipt = nil
 	state.PVPResultReceipts = []gamestate.PVPResultReceipt{}
 	state.ActiveTeamBattle = nil
-	state.PVP.ActiveMatch = nil
-	state.PVP.History = []gamestate.PVPMatch{}
-	state.PVP.DefenseDecks = []gamestate.PVPDeckSelection{}
+	state.PVP = gamestate.PVPPlayerState{
+		Challenge: state.PVP.Challenge, NextBattleID: 1,
+		History: []gamestate.PVPMatch{}, DefenseDecks: []gamestate.PVPDeckSelection{},
+	}
 	state.FriendPointInboxCursor = 0
 	state.TeamBattleScores = nil
 	state.TeamBattleSoloScores = nil

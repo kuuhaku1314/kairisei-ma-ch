@@ -64,7 +64,6 @@ func (a *API) writeProtocolResponse(
 	common.ResultCode = resultCode
 	common.ResultString = resultString
 	common.ResultErrorAction = resultAction
-	common.Revision = a.initialState.CatalogVersion
 	if resultCode == 0 && !a.requestRejected {
 		common.Missions = a.account.TakeMissionUpdates()
 	}

@@ -68,13 +68,12 @@ type JobParameter struct {
 }
 
 // PlayerProgressionPolicy is static local publication policy. It is loaded
-// from the versioned CN progression runtime JSON and deliberately excluded
+// from the CN progression runtime JSON and deliberately excluded
 // from mutable account snapshots. Current level, EXP, caps and derived job
 // parameters remain in User and are persisted in SQLite.
 type PlayerProgressionPolicy struct {
-	ConfigVersion int `json:"config_version"`
-	MaxLevel      int `json:"max_level"`
-	Experience    struct {
+	MaxLevel   int `json:"max_level"`
+	Experience struct {
 		Base         int `json:"base"`
 		PerLevel     int `json:"per_level"`
 		HigherLevels struct {
@@ -227,7 +226,7 @@ type SphereDefinition struct {
 
 // SphereProgressionPolicy contains static server publication policy which is
 // not present in the official sphr.csv itself. Mutable Sphere instances stay
-// in the account snapshot; the policy is versioned with the runtime master.
+// in the account snapshot; the policy comes from the runtime master.
 type SphereProgressionPolicy struct {
 	MaterialLevelBonusPermillePerLevel int `json:"material_level_bonus_permille_per_level"`
 }
@@ -656,7 +655,6 @@ type Reward struct {
 // absent from the supplied data; configured rewards therefore remain explicit
 // local policy rather than player-save data.
 type LoginBonusPolicy struct {
-	ConfigVersion            int             `json:"config_version"`
 	DayBoundaryOffsetMinutes int             `json:"day_boundary_offset_minutes"`
 	Cycle                    []LoginBonusDay `json:"cycle"`
 	Beginner                 []LoginBonusDay `json:"beginner"`
@@ -672,11 +670,10 @@ type LoginBonusDay struct {
 // LoginBonusState is the per-account dynamic cursor. LastClaimDay is the
 // YYYY-MM-DD calendar key in the configured fixed offset, not host-local time.
 type LoginBonusState struct {
-	ConfigVersion int    `json:"config_version"`
-	LastClaimDay  string `json:"last_claim_day"`
-	CycleDay      int    `json:"cycle_day"`
-	BeginnerDay   int    `json:"beginner_day"`
-	TotalClaims   int    `json:"total_claims"`
+	LastClaimDay string `json:"last_claim_day"`
+	CycleDay     int    `json:"cycle_day"`
+	BeginnerDay  int    `json:"beginner_day"`
+	TotalClaims  int    `json:"total_claims"`
 }
 
 type MissionInfo struct {
@@ -1010,7 +1007,7 @@ type ItemGachaProfile struct {
 // ItemExchangeProfile is immutable publication metadata for the original
 // inventory exchange picker. The official item/card identities may constrain
 // a local policy, but service-owned event IDs and costs remain explicitly
-// versioned outside handlers.
+// configured outside handlers.
 type ItemExchangeProfile struct {
 	ItemID        int    `json:"item_id"`
 	IsAppearEvent int8   `json:"is_appear_event"`
@@ -1420,7 +1417,6 @@ type TeamBattleScheduleState struct {
 // the unmodified client; this state only publishes the matching quest/reward
 // sequence and unlocks features after the corresponding server event.
 type OnboardingState struct {
-	ConfigVersion       int  `json:"config_version"`
 	Step                int  `json:"step"`
 	CurrentAnnounced    bool `json:"current_announced"`
 	PendingClearQuestID int  `json:"pending_clear_questid,omitempty"`
@@ -1454,79 +1450,72 @@ type State struct {
 	TeamBattleScores          map[int]TeamBattleScoreProgress `json:"team_battle_scores,omitempty"`
 	TeamBattleSoloScores      map[int]TeamBattleScoreProgress `json:"team_battle_solo_scores,omitempty"`
 	LocalShop                 LocalShopState                  `json:"local_shop,omitempty"`
-	SchemaVersion             int                             `json:"schema_version"`
-	ReleaseID                 string                          `json:"release_id"`
-	CatalogVersion            int                             `json:"catalog_version"`
 
-	User                           User                     `json:"user"`
-	PlayerProgressionConfigVersion int                      `json:"player_progression_config_version"`
-	PlayerProgressionPolicy        PlayerProgressionPolicy  `json:"-"`
-	CardProgressionPolicy          CardProgressionPolicy    `json:"-"`
-	DeckRankPolicy                 DeckRankPolicy           `json:"-"`
-	AlchemistStarterDeck           *AlchemistStarterDeck    `json:"-"`
-	CardExperienceTables           map[int][]int            `json:"-"`
-	Onboarding                     OnboardingState          `json:"onboarding"`
-	BattleLoadoutCardUniqueIDs     []int64                  `json:"battle_loadout_card_unique_ids,omitempty"`
-	BattlePoint                    BattlePointState         `json:"battle_point"`
-	PVPConfigVersion               int                      `json:"pvp_config_version"`
-	PVP                            PVPPlayerState           `json:"pvp"`
-	SphereProgressionPolicy        SphereProgressionPolicy  `json:"-"`
-	Spheres                        []Sphere                 `json:"spheres"`
-	SphereDefinitions              []SphereDefinition       `json:"-"`
-	SphereExperienceTables         map[int][]int            `json:"-"`
-	SphereEvolutionPrices          map[string][]int         `json:"-"`
-	Cards                          []Card                   `json:"cards"`
-	ContainerCards                 []Card                   `json:"container_cards,omitempty"`
-	CardTemplates                  []Card                   `json:"card_templates,omitempty"`
-	CardSellExtract                *CardSellExtractPolicy   `json:"-"`
-	CardCategoryProfiles           []CardCategoryProfile    `json:"-"`
-	CardGroupProfiles              []CardGroupProfile       `json:"-"`
-	CardCollectionPages            [][10]int                `json:"-"`
-	StackCardTemplates             []CardStack              `json:"-"`
-	StackCards                     []CardStack              `json:"stack_cards"`
-	Decks                          []Deck                   `json:"decks"`
-	Avatars                        []Avatar                 `json:"avatars"`
-	AvatarConfigVersion            int                      `json:"avatar_config_version"`
-	AvatarParts                    []int                    `json:"avatar_parts"`
-	AvatarPartDefinitions          []AvatarPartDefinition   `json:"-"`
-	AvatarShopPartIDs              []int                    `json:"-"`
-	AvatarDefaultDecks             [][]int                  `json:"-"`
-	AvatarSeries                   []AvatarSeriesDefinition `json:"-"`
-	AvatarSeriesCompletions        []AvatarSeriesCompletion `json:"-"`
-	AvatarShopPolicy               AvatarShopPolicy         `json:"-"`
-	Buddy                          Buddy                    `json:"buddy"`
-	BuddyProgressionPolicy         BuddyProgressionPolicy   `json:"-"`
-	Buddies                        []Buddy                  `json:"buddies"`
-	BuddyDefinitions               []BuddyDefinition        `json:"-"`
-	BuddyExperienceTables          map[int][]int            `json:"-"`
-	BuddyEvolutionPrices           map[string][]int         `json:"-"`
-	Profiles                       []string                 `json:"profiles"`
-	Friends                        FriendCollectionState    `json:"friends"`
-	Stamps                         StampCollectionState     `json:"stamps"`
-	Honors                         HonorCollectionState     `json:"honors"`
-	Story                          StoryCatalogState        `json:"story"`
-	StoryRewardPolicy              StoryRewardPolicy        `json:"-"`
-	EventPageProfile               EventPageProfile         `json:"-"`
-	PopupProfile                   PopupProfile             `json:"-"`
-	Explore                        ExploreProgressState     `json:"explore"`
-	Engagement                     EngagementState          `json:"engagement"`
-	Options                        OptionState              `json:"options"`
-	LoginBonus                     LoginBonusState          `json:"login_bonus"`
-	LoginBonusPolicy               LoginBonusPolicy         `json:"-"`
-	TeamBattleMedalItemID          int                      `json:"-"`
-	BossCoinItemID                 int                      `json:"-"`
-	Items                          []Item                   `json:"items"`
-	ItemShopTabs                   []ItemShopTab            `json:"item_shop_tabs"`
-	ItemDefinitions                []ItemDefinition         `json:"-"`
-	UserBuffProfiles               []UserBuffProfile        `json:"-"`
-	ItemGachaProfiles              []ItemGachaProfile       `json:"-"`
-	ItemExchangeProfiles           []ItemExchangeProfile    `json:"-"`
-	ItemLackTipProfiles            []ItemLackTipProfile     `json:"-"`
-	EventShopProfiles              []EventShopProfile       `json:"-"`
-	EventShopPurchases             []EventShopPurchase      `json:"event_shop_purchases,omitempty"`
-	TradeShopProfiles              []TradeShopProfile       `json:"-"`
-	TradeShopPurchases             []TradeShopPurchase      `json:"trade_shop_purchases,omitempty"`
-	Gachas                         []GachaProfile           `json:"gachas"`
+	User                    User                     `json:"user"`
+	PlayerProgressionPolicy PlayerProgressionPolicy  `json:"-"`
+	CardProgressionPolicy   CardProgressionPolicy    `json:"-"`
+	DeckRankPolicy          DeckRankPolicy           `json:"-"`
+	AlchemistStarterDeck    *AlchemistStarterDeck    `json:"-"`
+	CardExperienceTables    map[int][]int            `json:"-"`
+	Onboarding              OnboardingState          `json:"onboarding"`
+	BattlePoint             BattlePointState         `json:"battle_point"`
+	PVP                     PVPPlayerState           `json:"pvp"`
+	SphereProgressionPolicy SphereProgressionPolicy  `json:"-"`
+	Spheres                 []Sphere                 `json:"spheres"`
+	SphereDefinitions       []SphereDefinition       `json:"-"`
+	SphereExperienceTables  map[int][]int            `json:"-"`
+	SphereEvolutionPrices   map[string][]int         `json:"-"`
+	Cards                   []Card                   `json:"cards"`
+	ContainerCards          []Card                   `json:"container_cards,omitempty"`
+	CardTemplates           []Card                   `json:"card_templates,omitempty"`
+	CardSellExtract         *CardSellExtractPolicy   `json:"-"`
+	CardCategoryProfiles    []CardCategoryProfile    `json:"-"`
+	CardGroupProfiles       []CardGroupProfile       `json:"-"`
+	CardCollectionPages     [][10]int                `json:"-"`
+	StackCardTemplates      []CardStack              `json:"-"`
+	StackCards              []CardStack              `json:"stack_cards"`
+	Decks                   []Deck                   `json:"decks"`
+	Avatars                 []Avatar                 `json:"avatars"`
+	AvatarParts             []int                    `json:"avatar_parts"`
+	AvatarPartDefinitions   []AvatarPartDefinition   `json:"-"`
+	AvatarShopPartIDs       []int                    `json:"-"`
+	AvatarDefaultDecks      [][]int                  `json:"-"`
+	AvatarSeries            []AvatarSeriesDefinition `json:"-"`
+	AvatarSeriesCompletions []AvatarSeriesCompletion `json:"-"`
+	AvatarShopPolicy        AvatarShopPolicy         `json:"-"`
+	Buddy                   Buddy                    `json:"buddy"`
+	BuddyProgressionPolicy  BuddyProgressionPolicy   `json:"-"`
+	Buddies                 []Buddy                  `json:"buddies"`
+	BuddyDefinitions        []BuddyDefinition        `json:"-"`
+	BuddyExperienceTables   map[int][]int            `json:"-"`
+	BuddyEvolutionPrices    map[string][]int         `json:"-"`
+	Profiles                []string                 `json:"profiles"`
+	Friends                 FriendCollectionState    `json:"friends"`
+	Stamps                  StampCollectionState     `json:"stamps"`
+	Honors                  HonorCollectionState     `json:"honors"`
+	Story                   StoryCatalogState        `json:"story"`
+	StoryRewardPolicy       StoryRewardPolicy        `json:"-"`
+	EventPageProfile        EventPageProfile         `json:"-"`
+	PopupProfile            PopupProfile             `json:"-"`
+	Explore                 ExploreProgressState     `json:"explore"`
+	Engagement              EngagementState          `json:"engagement"`
+	Options                 OptionState              `json:"options"`
+	LoginBonus              LoginBonusState          `json:"login_bonus"`
+	LoginBonusPolicy        LoginBonusPolicy         `json:"-"`
+	TeamBattleMedalItemID   int                      `json:"-"`
+	BossCoinItemID          int                      `json:"-"`
+	Items                   []Item                   `json:"items"`
+	ItemShopTabs            []ItemShopTab            `json:"item_shop_tabs"`
+	ItemDefinitions         []ItemDefinition         `json:"-"`
+	UserBuffProfiles        []UserBuffProfile        `json:"-"`
+	ItemGachaProfiles       []ItemGachaProfile       `json:"-"`
+	ItemExchangeProfiles    []ItemExchangeProfile    `json:"-"`
+	ItemLackTipProfiles     []ItemLackTipProfile     `json:"-"`
+	EventShopProfiles       []EventShopProfile       `json:"-"`
+	EventShopPurchases      []EventShopPurchase      `json:"event_shop_purchases,omitempty"`
+	TradeShopProfiles       []TradeShopProfile       `json:"-"`
+	TradeShopPurchases      []TradeShopPurchase      `json:"trade_shop_purchases,omitempty"`
+	Gachas                  []GachaProfile           `json:"gachas"`
 	// OperatorGachaPlays keeps play counts of operator-created pools that are not in the catalog list;
 	// the account appends those pools when their configuration is applied. Persisted through progress only.
 	OperatorGachaPlays           map[int]int                         `json:"-"`
@@ -1567,5 +1556,4 @@ type State struct {
 	Costume                      json.RawMessage                     `json:"costume"`
 	CollectionRewards            []CollectionRewardDefinition        `json:"-"`
 	InventorySequence            InventorySequenceState              `json:"inventory_sequence,omitempty"`
-	State                        string                              `json:"state"`
 }

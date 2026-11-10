@@ -9,7 +9,7 @@ import (
 )
 
 func TestExperienceRewardRefillsPointsOnlyOnLevelUp(t *testing.T) {
-	policy := gamestate.PlayerProgressionPolicy{ConfigVersion: 1, MaxLevel: 3}
+	policy := gamestate.PlayerProgressionPolicy{MaxLevel: 3}
 	policy.Experience.Base = 100
 	policy.BattlePoints.Base, policy.BattlePoints.LevelsPerPoint, policy.BattlePoints.Maximum = 20, 2, 21
 	policy.Friends.Base, policy.Friends.IncreaseFromLevel, policy.Friends.Maximum = 100, 201, 200
@@ -24,7 +24,7 @@ func TestExperienceRewardRefillsPointsOnlyOnLevelUp(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			clock := time.Unix(1000, 0)
-			s := &Account{playerProgression: policy, currentLevel: 1, ap: 1, apMax: 3, bp: 2, bpMax: 20,
+			s := &Account{onboarding: completedTestOnboarding(), playerProgression: policy, currentLevel: 1, ap: 1, apMax: 3, bp: 2, bpMax: 20,
 				apNextRecovery: clock, bpNextRecovery: clock}
 			s.applyPlayerExperienceLocked(tc.amount)
 			if s.currentLevel != tc.level {
@@ -45,7 +45,7 @@ func TestSettlementOverflowPreservesProgressAndClaimableReward(t *testing.T) {
 	for _, kind := range []string{"battle", "explore", "story", "gacha", "item-gacha"} {
 		t.Run(kind, func(t *testing.T) {
 			reward := gamestate.Reward{Type: 8, RewardTypeID: 10, Num: 1, CardSkillLevels: []int16{}}
-			s := &Account{items: map[int]gamestate.Item{10: {ItemID: 10, Num: 1}},
+			s := &Account{onboarding: completedTestOnboarding(), items: map[int]gamestate.Item{10: {ItemID: 10, Num: 1}},
 				itemDefinitions: map[int]gamestate.ItemDefinition{10: {ItemID: 10, MaxOwned: 1}},
 			}
 			var complete func() (PresentReceiveResult, error)
@@ -119,7 +119,7 @@ func TestSettlementOverflowPreservesProgressAndClaimableReward(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			reloaded := &Account{items: map[int]gamestate.Item{10: {ItemID: 10}}, itemDefinitions: s.itemDefinitions}
+			reloaded := &Account{onboarding: completedTestOnboarding(), items: map[int]gamestate.Item{10: {ItemID: 10}}, itemDefinitions: s.itemDefinitions}
 			if err := json.Unmarshal(encoded, &reloaded.presents); err != nil {
 				t.Fatal(err)
 			}

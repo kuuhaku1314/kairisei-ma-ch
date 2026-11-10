@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"kairisei.local/server/internal/protocol"
 	"os"
 	"path"
 	"path/filepath"
@@ -104,7 +105,7 @@ func cnPatchVersionNamespace(encoded []byte) (string, error) {
 		}
 		switch strings.TrimSpace(row[0]) {
 		case "<version>":
-			if len(row) != 2 || foundVersion || strings.TrimSpace(row[1]) != strconv.Itoa(cn602CatalogVersion) {
+			if len(row) != 2 || foundVersion || strings.TrimSpace(row[1]) != strconv.Itoa(protocol.CatalogRevision) {
 				return "", errors.New("official CN version.dat has an invalid or duplicate version row")
 			}
 			foundVersion = true
@@ -162,7 +163,7 @@ func buildCN602Catalog(patchRoots []string, assetMapPath string) ([]byte, error)
 	}
 
 	var catalog strings.Builder
-	fmt.Fprintf(&catalog, "<v>,%d\n", cn602CatalogVersion)
+	fmt.Fprintf(&catalog, "<v>,%d\n", protocol.CatalogRevision)
 	foundVersion := false
 	foundMenu := false
 	bundleCount := 0
@@ -171,7 +172,7 @@ func buildCN602Catalog(patchRoots []string, assetMapPath string) ([]byte, error)
 	for _, row := range rows {
 		if len(row) == 2 && strings.TrimSpace(row[0]) == "<version>" {
 			version, parseErr := strconv.Atoi(strings.TrimSpace(row[1]))
-			if parseErr != nil || version != cn602CatalogVersion {
+			if parseErr != nil || version != protocol.CatalogRevision {
 				return nil, fmt.Errorf("official CN version.dat has unexpected version %q", row[1])
 			}
 			foundVersion = true

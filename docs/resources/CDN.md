@@ -78,7 +78,7 @@ Linux 可执行 `HTTPS_PROXY=http://127.0.0.1:7890 sh Sync-CDN.sh`。`NO_PROXY` 
 - CPK 使用原客户端的整数版本协议，与 bundle 的 CRC 不是同一种字段。完整资源集的CPK根目录必须提供
   `versions.json`，并在 `resource-set.json` 登记大小／SHA。它是版本唯一来源，未登记的文件默认1；
   别名至少继承物理源版本。格式示例：
-  `{"schema_version":1,"versions":[{"name":"cv_navi_5.cpk","version":4}]}`。
+  `{"versions":[{"name":"cv_navi_5.cpk","version":4}]}`。
   资源维护时应沿用已发布版本并为变更字节递增；CDN导出拒绝未登记或哈希不符的元数据，不把它上传为音频对象。
   **今后修改CPK内容必须提升对应版本并登记新完整集**；无需修改服务端角色判断或重新编译。
   不直接改动既有只读来源／完整集。上传冲突检查是最后一道保护，不代替版本登记。

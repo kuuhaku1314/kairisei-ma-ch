@@ -71,8 +71,7 @@ type LoginBonusClaims struct {
 func (s *Account) validateLoginBonusLocked() error {
 	policy := s.loginBonusPolicy
 	state := s.loginBonusState
-	if policy.ConfigVersion <= 0 || state.ConfigVersion != policy.ConfigVersion ||
-		len(policy.Cycle) == 0 || state.CycleDay < 0 || state.CycleDay > len(policy.Cycle) ||
+	if len(policy.Cycle) == 0 || state.CycleDay < 0 || state.CycleDay > len(policy.Cycle) ||
 		len(policy.Beginner) == 0 || state.BeginnerDay < 0 || state.BeginnerDay > len(policy.Beginner) ||
 		len(policy.TotalMilestones) == 0 || state.TotalClaims < state.CycleDay ||
 		state.TotalClaims < state.BeginnerDay ||
@@ -362,7 +361,7 @@ func (s *Account) validateRewardLocked(reward gamestate.Reward) error {
 	}
 	switch reward.Type {
 	case 0:
-		if s.playerProgression.ConfigVersion <= 0 {
+		if s.playerProgression.MaxLevel <= 0 {
 			return errors.New("player EXP reward requires a progression policy")
 		}
 		return nil

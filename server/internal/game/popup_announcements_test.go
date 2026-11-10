@@ -6,7 +6,7 @@ import (
 )
 
 func TestPopupAnnouncementWindowBoundaries(t *testing.T) {
-	s := &Account{popupReadIDs: make(map[int]struct{})}
+	s := &Account{onboarding: completedTestOnboarding(), popupReadIDs: make(map[int]struct{})}
 	p := PopupAnnouncement{ID: 610000001, Enabled: true, PublishedAt: 1, StartUnix: 100, EndUnix: 200}
 	for _, tc := range []struct {
 		now  int64

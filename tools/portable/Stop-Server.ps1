@@ -9,13 +9,13 @@ $serverPath = Join-Path $packageRoot 'kairi-server.exe'
 $statePath = Join-Path $packageRoot '_local\data\server-state.json'
 
 if (-not (Test-Path -LiteralPath $statePath -PathType Leaf)) {
-    [ordered]@{ schema_version = 1; status = 'NOT_RUNNING' } | ConvertTo-Json
+    [ordered]@{ status = 'NOT_RUNNING' } | ConvertTo-Json
     return
 }
 
 $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
 if ($null -eq $state.process_id -or [int]$state.process_id -le 0) {
-    [ordered]@{ schema_version = 1; status = 'NOT_RUNNING' } | ConvertTo-Json
+    [ordered]@{ status = 'NOT_RUNNING' } | ConvertTo-Json
     return
 }
 
@@ -25,7 +25,7 @@ if ($null -eq $process) {
         $state.status = 'STOPPED'
         $state | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $statePath -Encoding UTF8
     }
-    [ordered]@{ schema_version = 1; status = 'ALREADY_STOPPED'; process_id = [int]$state.process_id } |
+    [ordered]@{ status = 'ALREADY_STOPPED'; process_id = [int]$state.process_id } |
         ConvertTo-Json
     return
 }
@@ -38,7 +38,7 @@ if ($null -eq $actualPath -or
 }
 
 if ($DryRun -or -not $PSCmdlet.ShouldProcess("PID $($state.process_id)", 'Request graceful portable server shutdown')) {
-    [ordered]@{ schema_version = 1; status = 'UNCHANGED'; process_id = [int]$state.process_id } |
+    [ordered]@{ status = 'UNCHANGED'; process_id = [int]$state.process_id } |
         ConvertTo-Json
     return
 }
@@ -61,5 +61,5 @@ $state.status = 'STOPPED'
 $state | Add-Member -NotePropertyName stopped_utc -NotePropertyValue ([DateTime]::UtcNow.ToString('o')) -Force
 $state | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $statePath -Encoding UTF8
 
-[ordered]@{ schema_version = 1; status = 'STOPPED'; process_id = [int]$state.process_id } |
+[ordered]@{ status = 'STOPPED'; process_id = [int]$state.process_id } |
     ConvertTo-Json

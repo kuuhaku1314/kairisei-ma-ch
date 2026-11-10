@@ -18,9 +18,8 @@ import (
 )
 
 const (
-	cn602CatalogVersion = 790
-	cn602MenuBundle     = "main_c/scenes/scene_Menu.dat"
-	cn602LocalSession   = "local-cn-session-key"
+	cn602MenuBundle   = "main_c/scenes/scene_Menu.dat"
+	cn602LocalSession = "local-cn-session-key"
 )
 
 var cn602ScrambleKey = [...]byte{0x01, 0xcd, 0x45, 0x89, 0x67, 0xab, 0x23, 0xef}
@@ -76,12 +75,9 @@ func assembleApplication(config Config) (*application, error) {
 			_ = saveDatabase.Close()
 		}
 	}()
-	var pvpConfig game.PVPConfig
-	if config.Masters.PVP != "" {
-		pvpConfig, err = masterdata.LoadPVPRuntimeMaster(config.Masters.PVP)
-		if err != nil {
-			return nil, err
-		}
+	pvpConfig, err := masterdata.LoadPVPRuntimeMaster(config.Masters.PVP)
+	if err != nil {
+		return nil, err
 	}
 	playerProgression, err := masterdata.LoadPlayerProgressionRuntimeMaster(config.Masters.PlayerProgression)
 	if err != nil {
@@ -95,7 +91,7 @@ func assembleApplication(config Config) (*application, error) {
 	if err != nil {
 		return nil, err
 	}
-	prepareRuntimeState, err := loadCNRuntimeStatePreparer(config.Masters, pvpConfig, playerProgression, loginBonusPolicy, resources.AvailableBundles)
+	prepareRuntimeState, err := loadCNRuntimeStatePreparer(config.Masters, playerProgression, loginBonusPolicy, resources.AvailableBundles)
 	if err != nil {
 		return nil, err
 	}
@@ -103,6 +99,26 @@ func assembleApplication(config Config) (*application, error) {
 	if err != nil {
 		return nil, err
 	}
+	app, err := assembleAccountServices(config, resources, saveDatabase, catalog,
+		prepareRuntimeState.prepareAccount, playerProgression, pvpConfig)
+	if err != nil {
+		return nil, err
+	}
+	assembled = true
+	return app, nil
+}
+
+// assembleAccountServices connects already loaded definitions and account services.
+// The caller owns the database and closes it if assembly fails.
+func assembleAccountServices(
+	config Config,
+	resources *clientResources,
+	saveDatabase *accountstore.Database,
+	catalog gamestate.State,
+	prepareAccount func(gamestate.State) (gamestate.State, error),
+	playerProgression gamestate.PlayerProgressionPolicy,
+	pvpConfig game.PVPConfig,
+) (*application, error) {
 	cardCatalog, err := game.NewCardCatalog(catalog)
 	if err != nil {
 		return nil, err
@@ -136,11 +152,10 @@ func assembleApplication(config Config) (*application, error) {
 	if err := operationStore.InitializePlayerPolicy(catalog, config.Masters.Navi); err != nil {
 		return nil, err
 	}
-	basePreparer := prepareRuntimeState.prepareAccount
 	buildBusinessHandler := func(userID int, state gamestate.State) (http.Handler, error) {
 		content := operationStore.ContentConfiguration()
 		prepare := func(state gamestate.State) (gamestate.State, error) {
-			prepared, err := basePreparer(state)
+			prepared, err := prepareAccount(state)
 			if err != nil {
 				return prepared, err
 			}
@@ -221,6 +236,5 @@ func assembleApplication(config Config) (*application, error) {
 		operations: operationStore.Runtime, editor: operationStore, business: businessHandler, recorder: r, progression: playerProgression,
 		pvpRanks: pvpConfig.Ranks,
 	}
-	assembled = true
 	return app, nil
 }

@@ -22,7 +22,7 @@ func TestRarityFiveTicketGachaConsumesOfficialItemAndAddsCard(t *testing.T) {
 		FameMax:           100,
 		ExperienceTableID: 1,
 	}
-	cardStore := &Account{
+	cardStore := &Account{onboarding: completedTestOnboarding(),
 		gachas: []gamestate.GachaProfile{{
 			GachaID: gachaID, PayType: 4, PayTypeID: itemID, Price: 1,
 			CardNum: 1, CardNumMax: 1, CardIDs: []int{cardID}, CardWeights: []int{1},
@@ -106,7 +106,7 @@ func TestUnavailableOnlyTicketSingleRemainsVisibleForItemLackTips(t *testing.T) 
 		multiID  = 60200302
 		itemID   = 9010
 	)
-	cardStore := &Account{
+	cardStore := &Account{onboarding: completedTestOnboarding(),
 		gachas: []gamestate.GachaProfile{
 			{GachaID: singleID, GroupID: singleID, CategoryNum: 5, PayType: 4, PayTypeID: itemID, Price: 1, CardNum: 1, CardNumMax: 1},
 			{GachaID: multiID, GroupID: singleID, CategoryNum: 5, PayType: 4, PayTypeID: itemID, Price: 10, CardNum: 10, CardNumMax: 10},
@@ -127,7 +127,7 @@ func TestUnavailableTicketSingleYieldsToUsableCrystalSingle(t *testing.T) {
 		multiID   = 60200212
 		itemID    = 2000
 	)
-	cardStore := &Account{
+	cardStore := &Account{onboarding: completedTestOnboarding(),
 		gachas: []gamestate.GachaProfile{
 			{GachaID: ticketID, GroupID: ticketID, CategoryNum: 4, PayType: 4, PayTypeID: itemID, Price: 1, CardNum: 1, CardNumMax: 1},
 			{GachaID: crystalID, GroupID: ticketID, CategoryNum: 4, PayType: 3, Price: 5, CardNum: 1, CardNumMax: 1},
@@ -147,7 +147,7 @@ func TestCrystalGachaTicketQuickBuyConsumesFreeCrystalAndStaysHidden(t *testing.
 		lineupID = 992001
 		itemID   = 9010
 	)
-	cardStore := &Account{
+	cardStore := &Account{onboarding: completedTestOnboarding(),
 		coin:     3,
 		coinFree: 2,
 		itemShopTabs: []gamestate.ItemShopTab{{

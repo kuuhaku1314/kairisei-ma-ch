@@ -35,9 +35,6 @@ type PVPResultCommand struct {
 // PVPConfig contains static local rules. Official client-owned field and rank
 // rows are kept separate from mutable account state in SQLite.
 type PVPConfig struct {
-	SchemaVersion  int                `json:"schema_version"`
-	ClientProfile  string             `json:"client_profile"`
-	ConfigVersion  int                `json:"config_version"`
 	ResultSource   string             `json:"result_source"`
 	EngineMode     string             `json:"engine_mode"`
 	ChallengeMax   int                `json:"challenge_max"`

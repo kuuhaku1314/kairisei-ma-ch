@@ -4,8 +4,6 @@ function Read-PortableResourceSet {
     $ManifestPath = [IO.Path]::GetFullPath($ManifestPath)
     $root = Split-Path -Parent ([IO.Path]::GetFullPath($ManifestPath))
     $manifest = Get-Content -LiteralPath $ManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
-    if ($manifest.schema_version -ne 1 -or $manifest.client_profile -ne 'cn602-bootstrap' -or
-        $manifest.path_base -ne 'RESOURCE_SET_ROOT') { throw 'Unsupported resource-set identity.' }
     function Resolve-ResourcePath {
         param([string]$Name)
         if (-not $Name -or $Name.Contains('\') -or $Name.Contains(':') -or
@@ -23,19 +21,25 @@ function Read-PortableResourceSet {
     }
     $entrypoints = @{}
     $critical = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $editableConfigs = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     foreach ($entry in $manifest.entrypoints.PSObject.Properties) {
         $entrypoints[$entry.Name] = Resolve-ResourcePath -Name ([string]$entry.Value)
         [void]$critical.Add([string]$entry.Value)
+        if ($entry.Name -ne 'cn-asset-map' -and ([string]$entry.Value).EndsWith('.json', [StringComparison]::OrdinalIgnoreCase)) {
+            [void]$editableConfigs.Add([string]$entry.Value)
+        }
     }
     $listed = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-    [long]$totalBytes = 0
     foreach ($row in $manifest.files) {
         $name = [string]$row.path
         $path = Resolve-ResourcePath -Name $name
         $item = $inventory[$path]
-        if (-not $listed.Add($name) -or $item.PSIsContainer -or $item.Length -ne $row.bytes -or
-            [string]$row.sha256 -notmatch '^[0-9a-f]{64}$') { throw "Invalid resource inventory entry: $name" }
-        $totalBytes += $item.Length
+        if (-not $listed.Add($name) -or $item.PSIsContainer) { throw "Invalid resource inventory entry: $name" }
+        # Editable masters are validated by their loaders; the manifest does not lock their bytes.
+        if ($editableConfigs.Contains($name)) { continue }
+        if ($item.Length -ne $row.bytes -or [string]$row.sha256 -notmatch '^[0-9a-f]{64}$') {
+            throw "Invalid fixed-resource inventory entry: $name"
+        }
         if ($critical.Contains($name) -and
             (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -ne $row.sha256) {
             throw "Resource entrypoint hash mismatch: $name"
@@ -47,7 +51,6 @@ function Read-PortableResourceSet {
         }
     }
     $actual = @($inventory.Values | Where-Object { -not $_.PSIsContainer -and $_.FullName -ne $ManifestPath })
-    if ($actual.Count -ne $listed.Count -or $listed.Count -ne $manifest.summary.file_count -or
-        $totalBytes -ne $manifest.summary.bytes) { throw 'Resource inventory differs from manifest.' }
+    if ($actual.Count -ne $listed.Count) { throw 'Resource inventory differs from manifest.' }
     return @{ Manifest = $manifest; Entrypoints = $entrypoints }
 }

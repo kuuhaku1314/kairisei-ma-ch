@@ -10,7 +10,7 @@ import (
 )
 
 func TestMultiplayerStartDebitIsDurableAndAtomic(t *testing.T) {
-	s := &Account{bp: 20, bpMax: 20, bpRecoveryInterval: 3 * time.Minute}
+	s := &Account{onboarding: completedTestOnboarding(), bp: 20, bpMax: 20, bpRecoveryInterval: 3 * time.Minute}
 	start := MultiplayerAdmission{RoomID: 6020000001, BossID: 30010102, BPUse: 15}
 	var saved gamestate.State
 	writes := 0
@@ -25,7 +25,7 @@ func TestMultiplayerStartDebitIsDurableAndAtomic(t *testing.T) {
 		t.Fatal("repeated start charged twice")
 	}
 	// Rehydrated debit state must also acknowledge the same accepted start.
-	restarted := &Account{bp: saved.User.BP, bpMax: 20, bpRecoveryInterval: 3 * time.Minute, teamBattleStartReceipts: append([]gamestate.TeamBattleStartReceipt(nil), saved.TeamBattleStartReceipts...)}
+	restarted := &Account{onboarding: completedTestOnboarding(), bp: saved.User.BP, bpMax: 20, bpRecoveryInterval: 3 * time.Minute, teamBattleStartReceipts: append([]gamestate.TeamBattleStartReceipt(nil), saved.TeamBattleStartReceipts...)}
 	if err := restarted.ChargeMultiplayerStart(start, gamestate.State{}, persist); err != nil || writes != 1 || restarted.bp != 5 {
 		t.Fatal("restart replay charged twice")
 	}
@@ -41,7 +41,7 @@ func TestMultiplayerStartDebitIsDurableAndAtomic(t *testing.T) {
 }
 
 func TestMultiplayerContinueDebitIsDurableAndAtomic(t *testing.T) {
-	s := &Account{coin: 102, coinFree: 20}
+	s := &Account{onboarding: completedTestOnboarding(), coin: 102, coinFree: 20}
 	request := MultiplayerContinuation{RoomID: 6020000001, BossID: 30010102, Sequence: 1}
 	var saved gamestate.State
 	writes := 0
@@ -52,7 +52,7 @@ func TestMultiplayerContinueDebitIsDurableAndAtomic(t *testing.T) {
 	if s.coin != 72 || s.coinFree != 0 || len(saved.TeamBattleContinueReceipts) != 1 {
 		t.Fatal("continue debit and receipt did not persist together")
 	}
-	restored := &Account{coin: saved.User.Coin, coinFree: saved.User.CoinFree, teamBattleContinueReceipts: saved.TeamBattleContinueReceipts}
+	restored := &Account{onboarding: completedTestOnboarding(), coin: saved.User.Coin, coinFree: saved.User.CoinFree, teamBattleContinueReceipts: saved.TeamBattleContinueReceipts}
 	if _, err := restored.ChargeMultiplayerContinue(request, gamestate.State{}, persist); err != nil || writes != 1 {
 		t.Fatal("durable retry charged twice")
 	}
@@ -77,7 +77,7 @@ func TestMultiplayerContinueDebitIsDurableAndAtomic(t *testing.T) {
 func TestPrepaidHostAndFreeGuestCanSettleAtZeroBP(t *testing.T) {
 	const boss = 30010102
 	for _, host := range []bool{true, false} {
-		s := &Account{bpMax: 20, bpRecoveryInterval: 3 * time.Minute,
+		s := &Account{onboarding: completedTestOnboarding(), bpMax: 20, bpRecoveryInterval: 3 * time.Minute,
 			teamBattleSolo: battleCatalogFixture(t, json.RawMessage(`{"9":[],"10":[{"0":300101,"9":0,"10":[{"0":30010102,"5":15,"10":0}]}],"11":[],"12":[]}`)),
 		}
 		helper := &s.playerProgression.Friends.HelperReward

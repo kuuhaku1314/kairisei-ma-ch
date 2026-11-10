@@ -24,7 +24,7 @@ func TestFollowCapacityGrowthSurvivesLevelUpAndSnapshot(t *testing.T) {
 		}
 	}
 	for _, level := range []int{47, 199, 200, 299, 300} {
-		s := &Account{playerProgression: policy, currentLevel: level, currentFollowMax: policy.FollowMaximum(level),
+		s := &Account{onboarding: completedTestOnboarding(), playerProgression: policy, currentLevel: level, currentFollowMax: policy.FollowMaximum(level),
 			bp: 10, bpMax: policy.BattlePointMaximum(level), bpRecoveryInterval: 3 * time.Minute, apRecoveryInterval: 2 * time.Hour}
 		s.applyPlayerExperienceLocked(policy.ExperienceRequired(level))
 		view := s.PlayerProgressionState()

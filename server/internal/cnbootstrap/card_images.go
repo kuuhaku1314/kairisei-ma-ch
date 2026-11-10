@@ -49,13 +49,12 @@ func loadCardImages(root string) (cardImages, error) {
 		return result, err
 	}
 	var manifest struct {
-		SchemaVersion int         `json:"schema_version"`
-		Files         []cardImage `json:"files"`
+		Files []cardImage `json:"files"`
 	}
 	if err := json.Unmarshal(content, &manifest); err != nil {
 		return result, err
 	}
-	if manifest.SchemaVersion != 1 || len(manifest.Files) == 0 {
+	if len(manifest.Files) == 0 {
 		return result, fmt.Errorf("invalid card image manifest")
 	}
 	for _, file := range manifest.Files {

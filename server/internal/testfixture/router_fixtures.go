@@ -146,9 +146,7 @@ func WriteTestCardMaster(t *testing.T, root string) string {
 		}
 	}
 	master := map[string]any{
-		"schema_version":        15,
 		"card_collection_pages": [][]int{{10000010, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
-		"client_profile":        "cn602-bootstrap",
 		"card_progression_policy": map[string]any{
 			"fusion_gold_per_material_per_base_level": 100,
 			"maximum_card_material_count":             100,
@@ -305,9 +303,6 @@ func WriteTestExploreMaster(t *testing.T, root string) string {
 		"card_skill_lv": []int{},
 	}
 	master := map[string]any{
-		"schema_version": 1,
-		"client_profile": "cn602-bootstrap",
-
 		"maps": []map[string]any{{
 			"id": 1000, "map_type": "GRASS", "map_ids": []int{1000, 1000}, "bgm_id": 10020,
 		}},
@@ -356,8 +351,6 @@ func WriteTestStoryMaster(t *testing.T, root string) string {
 		}}
 	}
 	master := map[string]any{
-		"schema_version": 5, "client_profile": "cn602-bootstrap",
-
 		"normal_parts": part(1, "第一部", 10001),
 		"cn_parts":     part(1, "国服专属剧情", 100001),
 		"sub_characters": []map[string]any{{
@@ -454,9 +447,6 @@ func WriteTestNaviMaster(t *testing.T, root string) string {
 		})
 	}
 	master := map[string]any{
-		"schema_version": 3,
-		"client_profile": "cn602-bootstrap",
-
 		"local_purchase": map[string]any{
 
 			"currency": "CRYSTAL",
@@ -539,8 +529,6 @@ func WriteTestItemMaster(t *testing.T, root string) string {
 		}
 	}
 	master := map[string]any{
-		"schema_version":    9,
-		"client_profile":    "cn602-bootstrap",
 		"boss_coin_item_id": 4000,
 
 		"user_buff_profiles":  userBuffProfiles,
@@ -589,9 +577,7 @@ func WriteTestAvatarMaster(t *testing.T, root string) string {
 		}
 	}
 	master := map[string]any{
-		"schema_version": 1, "client_profile": "cn602-bootstrap",
-		"local_account_config_version": 1,
-		"initial_owned_part_ids":       []int{1, 2, 3, 4, 11, 12, 13, 14},
+		"initial_owned_part_ids": []int{1, 2, 3, 4, 11, 12, 13, 14},
 		"default_decks": map[string]any{
 			"1": []int{0, 1, 1, 0, 0, 0, 0}, "2": []int{11, 2, 2, 0, 11, 0, 0},
 			"3": []int{0, 3, 3, 3, 0, 0, 14}, "4": []int{12, 4, 4, 0, 12, 0, 13},
@@ -628,9 +614,6 @@ func WriteTestAvatarMaster(t *testing.T, root string) string {
 func WriteTestStampMaster(t *testing.T, root string) string {
 	t.Helper()
 	master := map[string]any{
-		"schema_version": 1,
-		"client_profile": "cn602-bootstrap",
-
 		"category_order": []int{1, 7, 2, 3, 4, 5, 6},
 		"stamps": []map[string]any{{
 			"stamp_id": 100001, "category": 1, "label": "Test Stamp",
@@ -651,9 +634,6 @@ func WriteTestStampMaster(t *testing.T, root string) string {
 func WriteTestHonorMaster(t *testing.T, root string) string {
 	t.Helper()
 	master := map[string]any{
-		"schema_version": 1,
-		"client_profile": "cn602-bootstrap",
-
 		"honors": []map[string]any{{
 			"honor_id": 10100001, "name": "Test Honor", "slot_mask": 5,
 			"same_card_id": 0, "get_type": 0, "default_owned": true,

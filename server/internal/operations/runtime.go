@@ -15,23 +15,22 @@ import (
 // Publication combines immutable, independently versioned policies. Publishing
 // one atomic pointer prevents a request observing half a group update.
 type Publication struct {
-	PopupAnnouncements   []game.PopupAnnouncement
-	IPBlacklist          IPBlacklist
-	LoginWhitelist       accountstore.LoginWhitelist
-	DisabledModules      protocol.ModuleSwitch
-	HomeBanners          HomeBannerPolicy
-	Missions             game.MissionConfiguration
-	Evolution            *game.EvolutionRestrictions
-	Player               game.PlayerConfiguration
-	Content              game.ContentConfiguration
-	TowerAdmission       game.TowerAdmission
-	Settings             game.RuntimeSettings
-	GachaRevision        uint64
-	Gachas               []game.GachaConfiguration
-	GachaGroups          map[int]int
-	ManagedGachaGroups   map[int]struct{}
-	DefaultGachaGroups   map[int]struct{}
-	PermanentGachaGroups map[int]struct{}
+	PopupAnnouncements []game.PopupAnnouncement
+	IPBlacklist        IPBlacklist
+	LoginWhitelist     accountstore.LoginWhitelist
+	DisabledModules    protocol.ModuleSwitch
+	HomeBanners        HomeBannerPolicy
+	Missions           game.MissionConfiguration
+	Evolution          *game.EvolutionRestrictions
+	Player             game.PlayerConfiguration
+	Content            game.ContentConfiguration
+	TowerAdmission     game.TowerAdmission
+	Settings           game.RuntimeSettings
+	GachaRevision      uint64
+	Gachas             []game.GachaConfiguration
+	GachaGroups        map[int]int
+	ManagedGachaGroups map[int]struct{}
+	DefaultGachaGroups map[int]struct{}
 }
 
 type Runtime struct {
@@ -60,7 +59,6 @@ func (runtime *Runtime) Publish(publication Publication) {
 	publication.GachaGroups = maps.Clone(publication.GachaGroups)
 	publication.ManagedGachaGroups = maps.Clone(publication.ManagedGachaGroups)
 	publication.DefaultGachaGroups = maps.Clone(publication.DefaultGachaGroups)
-	publication.PermanentGachaGroups = maps.Clone(publication.PermanentGachaGroups)
 	runtime.current.Store(&publication)
 }
 

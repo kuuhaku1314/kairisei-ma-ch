@@ -45,7 +45,7 @@ func writePlatformFixture(t *testing.T, root, platform string, payload []byte) s
 	}
 	hash := func(value []byte) string { sum := sha256.Sum256(value); return hex.EncodeToString(sum[:]) }
 	profile := platformDeliveryProfile{
-		Format: 1, Platform: platform, UnityVersion: "6000.3.26f1", ContentID: hash([]byte(platform)), ArtifactRoot: ".",
+		Platform: platform, UnityVersion: "6000.3.26f1", ContentID: hash([]byte(platform)), ArtifactRoot: ".",
 		Catalog: platformDeliveryCatalog{File: "catalog.dat", Bytes: int64(catalog.Len()), SHA256: hash(catalog.Bytes())},
 		Bundles: []platformDeliveryBundle{{Name: "main_c/menu.dat", File: "bundles/menu.dat", Bytes: int64(len(payload)), SHA256: hash(payload), CRC32: crc}},
 	}

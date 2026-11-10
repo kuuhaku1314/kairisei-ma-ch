@@ -9,7 +9,7 @@ import (
 
 func TestCollectedCardUnlocksCharacterStoryWithoutReload(t *testing.T) {
 	for _, listFirst := range []bool{false, true} {
-		s := &Account{cardCollectionIDs: map[int]struct{}{}, storySubCharacters: []gamestate.StorySubCharacter{
+		s := &Account{onboarding: completedTestOnboarding(), cardCollectionIDs: map[int]struct{}{}, storySubCharacters: []gamestate.StorySubCharacter{
 			{Sections: []gamestate.StorySubSection{{StorySubSectionID: 101, Stories: []gamestate.StorySub{
 				{StorySubID: 1, StateFlag: 4 | 8, UnlockText: "获得卡牌后解锁"},
 				{StorySubID: 2, StateFlag: 4},
@@ -34,7 +34,7 @@ func TestCollectedCardUnlocksCharacterStoryWithoutReload(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		reloaded := &Account{}
+		reloaded := &Account{onboarding: completedTestOnboarding()}
 		if err := json.Unmarshal(content, &reloaded.storySubCharacters); err != nil || !reloaded.BeginSubStory(1) {
 			t.Fatalf("saved story unlock was lost after card disposal: %v", err)
 		}
@@ -45,7 +45,7 @@ func TestStoryReplayPreservesLaterClearAndFirstClearReward(t *testing.T) {
 	for _, kind := range []string{"main", "cn main", "character", "event"} {
 		t.Run(kind, func(t *testing.T) {
 			reward := gamestate.Reward{Type: 4, Num: 5}
-			s := &Account{storyRewardPolicy: gamestate.StoryRewardPolicy{
+			s := &Account{onboarding: completedTestOnboarding(), storyRewardPolicy: gamestate.StoryRewardPolicy{
 				MainFirstClear: reward, SubFirstClear: reward, EventFirstClear: reward,
 			}}
 			var begin func(int) bool

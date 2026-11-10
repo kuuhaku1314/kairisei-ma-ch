@@ -20,6 +20,8 @@ import (
 
 	"kairisei.local/server/internal/accounthttp"
 	"kairisei.local/server/internal/accountstore"
+	"kairisei.local/server/internal/gamestate"
+	"kairisei.local/server/internal/masterdata"
 	"kairisei.local/server/internal/multiplayer"
 	"kairisei.local/server/internal/protocol"
 	"kairisei.local/server/internal/testfixture"
@@ -89,7 +91,6 @@ func newTestHandler(t *testing.T, root string, logPath string) http.Handler {
 			t.Fatal(err)
 		}
 	}
-	cardMasterPath := testfixture.WriteTestCardMaster(t, root)
 	handler, err := newProtocolTestHandler(t, Config{
 		Persistence: PersistenceConfig{
 			RequestLog: logPath,
@@ -105,17 +106,13 @@ func newTestHandler(t *testing.T, root string, logPath string) http.Handler {
 			PlatformDeliveries: []string{profile},
 		},
 		Masters: MastersConfig{
-			Cards:             cardMasterPath,
+			Cards:             testfixture.WriteTestCardMaster(t, root),
 			Explore:           testfixture.WriteTestExploreMaster(t, root),
 			Story:             testfixture.WriteTestStoryMaster(t, root),
-			Battle:            "",
 			Navi:              testfixture.WriteTestNaviMaster(t, root),
-			Items:             testfixture.WriteTestItemMaster(t, root),
 			Avatar:            testfixture.WriteTestAvatarMaster(t, root),
-			Stamps:            testfixture.WriteTestStampMaster(t, root),
-			Honors:            testfixture.WriteTestHonorMaster(t, root),
+			PVP:               filepath.Join("..", "..", "config", "cn602-pvp-runtime.json"),
 			PlayerProgression: filepath.Join("..", "..", "config", "cn602-player-progression-runtime.json"),
-			LoginBonus:        filepath.Join("..", "..", "config", "cn602-login-bonus-runtime.json"),
 		},
 		Network: NetworkConfig{
 			AdvertiseHost: "10.0.2.2",
@@ -202,7 +199,7 @@ func writeTestAssetMap(t *testing.T, root string, version []byte, catalogAssets 
 		"schema_version": 2,
 		"client_profile": "cn602-bootstrap",
 		"source": map[string]any{
-			"catalog_version":                    cn602CatalogVersion,
+			"catalog_version":                    protocol.CatalogRevision,
 			"version_dat_sha256":                 fmt.Sprintf("%x", digest),
 			"parsed_unity_bundle_count":          len(bundles),
 			"non_unity_bundle_count":             0,
@@ -837,15 +834,84 @@ func TestCN602PushNoOpAndPreloadedCPKList(t *testing.T) {
 
 func newProtocolTestHandler(t *testing.T, config Config) (http.Handler, error) {
 	t.Helper()
-	app, err := assembleApplication(config)
+	// Transport tests use the small shared catalog and real account services.
+	// Complete production master/resource construction has its own runtime gate.
+	resources, err := loadClientResources(config.Resources)
+	if err != nil {
+		return nil, err
+	}
+	storage, err := accountstore.OpenDatabase(config.Persistence.SavePath, config.Persistence.SeedPath, config.Logger)
 	if err != nil {
 		return nil, err
 	}
 	t.Cleanup(func() {
-		if err := app.accounts.Database().Close(); err != nil {
+		if err := storage.Close(); err != nil {
 			t.Error(err)
 		}
 	})
+	progression, err := masterdata.LoadPlayerProgressionRuntimeMaster(config.Masters.PlayerProgression)
+	if err != nil {
+		return nil, err
+	}
+	pvp, err := masterdata.LoadPVPRuntimeMaster(config.Masters.PVP)
+	if err != nil {
+		return nil, err
+	}
+	cards, err := masterdata.LoadCardRuntimeMaster(config.Masters.Cards)
+	if err != nil {
+		return nil, err
+	}
+	avatar, err := masterdata.LoadAvatarRuntimeMaster(config.Masters.Avatar)
+	if err != nil {
+		return nil, err
+	}
+	navi, err := masterdata.LoadNaviRuntimeMaster(config.Masters.Navi)
+	if err != nil {
+		return nil, err
+	}
+	explore, err := masterdata.LoadExploreRuntimeMaster(config.Masters.Explore)
+	if err != nil {
+		return nil, err
+	}
+	story, err := masterdata.LoadStoryRuntimeMaster(config.Masters.Story)
+	if err != nil {
+		return nil, err
+	}
+	prepareAccount := func(state gamestate.State) (gamestate.State, error) {
+		state.User.InviteID = accountstore.InviteID(state.User.UserID)
+		state.User.CardMax = gamestate.CardCapacityLimit
+		state.User.CardContainerMax = max(state.User.CardContainerMax, gamestate.CardContainerCapacityDefault)
+		state.User.SphereMax = max(state.User.SphereMax, gamestate.SphereCapacityDefault)
+		state.User.BuddyMax = max(state.User.BuddyMax, gamestate.BuddyCapacityDefault)
+		if _, err := masterdata.ApplyPlayerProgressionRuntimeMaster(&state, progression); err != nil {
+			return state, err
+		}
+		if err := masterdata.ApplyCardRuntimeMaster(&state, cards); err != nil {
+			return state, err
+		}
+		if err := masterdata.ApplyAvatarRuntimeMaster(&state, avatar); err != nil {
+			return state, err
+		}
+		if err := masterdata.ApplyAvatarShopAssetClosure(&state, resources.AvailableBundles); err != nil {
+			return state, err
+		}
+		if err := masterdata.ApplyExploreRuntimeMaster(&state, explore); err != nil {
+			return state, err
+		}
+		masterdata.ApplyStoryRuntimeMaster(&state, story)
+		if err := masterdata.ApplyNaviRuntimeMaster(&state, navi); err != nil {
+			return state, err
+		}
+		return state, nil
+	}
+	catalog, err := prepareAccount(testfixture.RuntimeState(t))
+	if err != nil {
+		return nil, err
+	}
+	app, err := assembleAccountServices(config, resources, storage, catalog, prepareAccount, progression, pvp)
+	if err != nil {
+		return nil, err
+	}
 	return app.router(), nil
 }
 

@@ -48,10 +48,10 @@ func TestMissionClaimUsesSharedDefinitionAndPreservesPrivateProgress(t *testing.
 			Rewards: []gamestate.Reward{{Type: 4, Num: 10}, {Type: 10, Num: 50}}},
 		2: {MissionID: 2, Published: true, PrerequisiteID: 1, Title: "后续强化任务", ProgressMax: 10},
 	}
-	first := &Account{missionCatalog: missionCatalogFixture(t, definitions), missions: map[int]gamestate.MissionProgress{
+	first := &Account{onboarding: completedTestOnboarding(), missionCatalog: missionCatalogFixture(t, definitions), missions: map[int]gamestate.MissionProgress{
 		1: {MissionID: 1, State: 1, ProgressNow: 2}, 2: {MissionID: 2, ProgressNow: 2}, 99: {MissionID: 99, State: 2, ProgressNow: 8},
 	}}
-	second := &Account{missionCatalog: missionCatalogFixture(t, definitions), missions: map[int]gamestate.MissionProgress{}}
+	second := &Account{onboarding: completedTestOnboarding(), missionCatalog: missionCatalogFixture(t, definitions), missions: map[int]gamestate.MissionProgress{}}
 	if err := first.validateMissionsLocked(); err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestMissionClaimUsesSharedDefinitionAndPreservesPrivateProgress(t *testing.
 }
 
 func TestMissionRewardValidationPrecedesEveryClaimInBatch(t *testing.T) {
-	s := &Account{missions: map[int]gamestate.MissionProgress{1: {MissionID: 1, State: 1}, 2: {MissionID: 2, State: 1}},
+	s := &Account{onboarding: completedTestOnboarding(), missions: map[int]gamestate.MissionProgress{1: {MissionID: 1, State: 1}, 2: {MissionID: 2, State: 1}},
 		missionCatalog: missionCatalogFixture(t, map[int]gamestate.MissionDefinition{
 			1: {MissionID: 1, Published: true, Title: "有效奖励", Rewards: []gamestate.Reward{{Type: 4, Num: 10}}},
 			2: {MissionID: 2, Published: true, Title: "缺少定义的奖励", Rewards: []gamestate.Reward{{Type: 8, RewardTypeID: 999, Num: 1}}},

@@ -14,9 +14,6 @@ import (
 const maxItemMasterBytes = 2 * 1024 * 1024
 
 type ItemRuntimeMaster struct {
-	SchemaVersion int    `json:"schema_version"`
-	ClientProfile string `json:"client_profile"`
-
 	BossCoinItemID        int                             `json:"boss_coin_item_id"`
 	TeamBattleMedalItemID int                             `json:"team_battle_medal_item_id,omitempty"`
 	UserBuffProfiles      []gamestate.UserBuffProfile     `json:"user_buff_profiles"`
@@ -30,13 +27,6 @@ type ItemRuntimeMaster struct {
 
 	TradeShopProfiles      []gamestate.TradeShopProfile `json:"trade_shop_profiles"`
 	LocalTradeShopProfiles []gamestate.TradeShopProfile `json:"local_trade_shop_profiles,omitempty"`
-}
-
-type eventShopSourceAudit struct {
-	TextAssetCount              int      `json:"textasset_count"`
-	CandidatePaths              []string `json:"candidate_paths"`
-	PackagedWebFiles            []string `json:"packaged_web_files"`
-	PackagedEventShopCandidates []string `json:"packaged_event_shop_candidates"`
 }
 
 func LoadItemRuntimeMaster(masterPath string) (ItemRuntimeMaster, error) {
@@ -74,9 +64,6 @@ func LoadItemRuntimeMaster(masterPath string) (ItemRuntimeMaster, error) {
 }
 
 func validateItemRuntimeMaster(master ItemRuntimeMaster) error {
-	if master.SchemaVersion != 9 || master.ClientProfile != "cn602-bootstrap" {
-		return errors.New("CN item runtime master identity is invalid")
-	}
 	if len(master.Items) == 0 {
 		return errors.New("CN item runtime master source is incomplete")
 	}
@@ -203,7 +190,7 @@ func validateItemRuntimeMaster(master ItemRuntimeMaster) error {
 	lineupIDs := make(map[int]struct{})
 	rewardCardIDs := make(map[int]struct{})
 	for _, shop := range master.TradeShopProfiles {
-		if shop.TradeShopID != 60290001 || shop.Name != "BOSS币交换所" ||
+		if shop.TradeShopID != 60290001 || shop.Name == "" ||
 			shop.Text == "" || shop.ShopType != 1 || shop.TabType != 0 ||
 			shop.EndTime != 2147483647 || shop.IsNew != 0 || shop.PictID != 0 ||
 			len(shop.Lineups) == 0 {

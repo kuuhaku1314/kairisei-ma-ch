@@ -20,7 +20,7 @@ func TestAchievementChainReadsExistingStateWithoutGivingRelativeTasksHistory(t *
 	defs[10] = gamestate.MissionDefinition{MissionID: 10, Title: "强化一次", Published: true, Rule: &gamestate.MissionRule{Event: gamestate.MissionCardFusion, Target: 1}}
 	defs[11] = gamestate.MissionDefinition{MissionID: 11, Title: "累计登录", Published: true, Rule: &gamestate.MissionRule{Kind: gamestate.MissionStateValue, Metric: gamestate.MissionLoginDays, Target: 30}}
 	defs[12] = gamestate.MissionDefinition{MissionID: 12, Title: "连续登录", Published: true, Rule: &gamestate.MissionRule{Kind: gamestate.MissionStateValue, Metric: gamestate.MissionLoginStreak, Target: 3}}
-	s := &Account{currentLevel: 45, currentName: "player", loginBonusState: gamestate.LoginBonusState{TotalClaims: 37, LastClaimDay: "2026-10-20"}, missions: map[int]gamestate.MissionProgress{}, missionCatalog: missionCatalogFixture(t, defs)}
+	s := &Account{onboarding: completedTestOnboarding(), currentLevel: 45, currentName: "player", loginBonusState: gamestate.LoginBonusState{TotalClaims: 37, LastClaimDay: "2026-10-20"}, missions: map[int]gamestate.MissionProgress{}, missionCatalog: missionCatalogFixture(t, defs)}
 	s.markAllMissionMetricsLocked()
 	s.RefreshStateMissions(time.Now())
 	if s.missions[1].ProgressNow != 45 || s.missions[1].State != 1 || s.missions[2].State != 0 || s.missions[10].ProgressNow != 0 || s.missions[11].ProgressNow != 37 || s.missions[12].ProgressNow != 0 {
@@ -48,7 +48,7 @@ func TestMissionUTC8BoundaryAndScheduledStateActivation(t *testing.T) {
 		1: {MissionID: 1, Title: "每日强化", Published: true, Daily: true, Rule: &gamestate.MissionRule{Event: gamestate.MissionCardFusion, Target: 1}},
 		2: {MissionID: 2, Title: "排期等级", Published: true, StartsAt: after.Unix(), Rule: &gamestate.MissionRule{Kind: gamestate.MissionStateValue, Metric: gamestate.MissionPlayerLevel, Target: 10}},
 	}
-	s := &Account{currentLevel: 15, missions: map[int]gamestate.MissionProgress{}, missionCatalog: missionCatalogFixture(t, defs)}
+	s := &Account{onboarding: completedTestOnboarding(), currentLevel: 15, missions: map[int]gamestate.MissionProgress{}, missionCatalog: missionCatalogFixture(t, defs)}
 	s.markAllMissionMetricsLocked()
 	s.RefreshStateMissions(before)
 	s.recordMissionEventLocked(missionEvent{kind: gamestate.MissionCardFusion}, before)
@@ -67,7 +67,7 @@ func TestMissionPVPRankShowsOnlyCompletion(t *testing.T) {
 		1: {MissionID: 1, Title: "竞技场段位成就", Published: true, ProgressShow: 1, ProgressMax: 3,
 			Rule: &gamestate.MissionRule{Kind: gamestate.MissionStateValue, Metric: gamestate.MissionPVPRank, Target: 3}},
 	}
-	s := &Account{missions: map[int]gamestate.MissionProgress{}, missionCatalog: missionCatalogFixture(t, defs)}
+	s := &Account{onboarding: completedTestOnboarding(), missions: map[int]gamestate.MissionProgress{}, missionCatalog: missionCatalogFixture(t, defs)}
 	s.SetMissionPVPRanks([]PVPRankConfig{
 		{RankID: 2, PointMin: 100, PointMax: 199},
 		{RankID: 3, PointMin: 200, PointMax: 299},
@@ -100,7 +100,7 @@ func TestMissionOwnedSetRefreshesAfterSphereMaterialConsumption(t *testing.T) {
 		MissionID: 1, Published: true, Title: "持有指定素材", ProgressMax: 2,
 		Rule: &gamestate.MissionRule{Kind: gamestate.MissionTargetSet, Metric: gamestate.MissionCardOwned, Targets: []int{50, 51}, Target: 2},
 	}
-	s := &Account{
+	s := &Account{onboarding: completedTestOnboarding(),
 		gold: 100, spheres: []gamestate.Sphere{{UniqueID: 1, SphereID: 10, Level: 1}},
 		sphereDefinitions: map[int]gamestate.SphereDefinition{
 			10: {SphereID: 10, SameSphereID: 10, EvolutionID: 11, MaxLevel: 1},
@@ -133,7 +133,7 @@ func TestStoryAchievementsReadSavedReadingAndLearningCompletion(t *testing.T) {
 		2: {MissionID: 2, Title: "圣剑学习第一节", Published: true, Rule: &gamestate.MissionRule{Kind: gamestate.MissionStateValue, Metric: gamestate.MissionStoryCleared, SubjectID: 45001000, Target: 1}},
 		3: {MissionID: 3, Title: "圣剑学习第二节", Published: true, Rule: &gamestate.MissionRule{Kind: gamestate.MissionStateValue, Metric: gamestate.MissionStoryCleared, SubjectID: 45001010, Target: 1}},
 	}
-	s := &Account{questStoryCleared: map[int]bool{readingID: true}, missions: map[int]gamestate.MissionProgress{}, missionCatalog: missionCatalogFixture(t, defs)}
+	s := &Account{onboarding: completedTestOnboarding(), questStoryCleared: map[int]bool{readingID: true}, missions: map[int]gamestate.MissionProgress{}, missionCatalog: missionCatalogFixture(t, defs)}
 	s.markAllMissionMetricsLocked()
 	s.RefreshStateMissions(time.Now())
 	if s.missions[1].State != 1 || s.missions[2].State != 0 || s.missions[3].State != 0 {

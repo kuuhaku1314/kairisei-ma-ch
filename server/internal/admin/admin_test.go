@@ -145,7 +145,7 @@ func TestApplyAdminCatalogAssetCoverage(t *testing.T) {
 		}
 	}
 	manifest := adminAssetManifest{
-		SchemaVersion: 2, ClientProfile: "cn602-bootstrap",
+
 		CatalogImageCoverage: map[string]adminCatalogImageCoverage{
 			"card":     {SourceGapIDs: []int{2}},
 			"item":     {},

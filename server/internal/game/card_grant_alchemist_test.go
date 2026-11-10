@@ -10,7 +10,7 @@ import (
 
 func TestAlchemistAcquisitionUsesSummonDefinitionAndKeepsOrdinaryLevels(t *testing.T) {
 	const skillID, summonID, ordinaryID = 101, 102, 103
-	store := &Account{
+	store := &Account{onboarding: completedTestOnboarding(),
 		cardDefinitions: map[int]gamestate.Card{},
 		cardTemplates:   map[int]CardInfo{},
 		cardExperience:  map[int][]int{1: {5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5}},

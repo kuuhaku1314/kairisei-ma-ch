@@ -23,9 +23,6 @@ type honorDefinition struct {
 }
 
 type honorRuntimeMaster struct {
-	SchemaVersion int    `json:"schema_version"`
-	ClientProfile string `json:"client_profile"`
-
 	Honors []honorDefinition `json:"honors"`
 }
 
@@ -64,9 +61,6 @@ func LoadHonorRuntimeMaster(masterPath string) (honorRuntimeMaster, error) {
 }
 
 func validateHonorRuntimeMaster(master honorRuntimeMaster) error {
-	if master.SchemaVersion != 1 || master.ClientProfile != "cn602-bootstrap" {
-		return errors.New("CN honor runtime master identity is invalid")
-	}
 	if len(master.Honors) == 0 {
 		return errors.New("CN honor runtime master source is incomplete")
 	}
@@ -93,7 +87,7 @@ func validateHonorRuntimeMaster(master honorRuntimeMaster) error {
 	return nil
 }
 
-func ApplyHonorRuntimeMaster(state *gamestate.State, master honorRuntimeMaster) (bool, error) {
+func ApplyHonorRuntimeMaster(state *gamestate.State, master honorRuntimeMaster) error {
 	definitions := make([]gamestate.CollectionRewardDefinition, 0, len(master.Honors))
 	for _, honor := range master.Honors {
 		definitions = append(definitions, gamestate.CollectionRewardDefinition{Type: 18, ID: honor.HonorID, Name: honor.Name, Detail: "称号 · 领取后在称号设置中使用"})
@@ -107,15 +101,13 @@ func ApplyHonorRuntimeMaster(state *gamestate.State, master honorRuntimeMaster) 
 			defaults = append(defaults, honor.HonorID)
 		}
 	}
-	changed := false
 	if len(state.Honors.HonorIDs) == 0 {
 		state.Honors.HonorIDs = append([]int(nil), defaults...)
-		changed = true
 	}
 	owned := make(map[int]struct{}, len(state.Honors.HonorIDs))
 	for _, honorID := range state.Honors.HonorIDs {
 		if _, exists := available[honorID]; !exists {
-			return false, fmt.Errorf("configured owned honor %d is absent from official master", honorID)
+			return fmt.Errorf("configured owned honor %d is absent from official master", honorID)
 		}
 		owned[honorID] = struct{}{}
 	}
@@ -124,8 +116,8 @@ func ApplyHonorRuntimeMaster(state *gamestate.State, master honorRuntimeMaster) 
 			continue
 		}
 		if _, exists := owned[honorID]; !exists {
-			return false, fmt.Errorf("configured honor deck references unowned honor %d", honorID)
+			return fmt.Errorf("configured honor deck references unowned honor %d", honorID)
 		}
 	}
-	return changed, nil
+	return nil
 }

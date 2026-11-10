@@ -1,7 +1,4 @@
 {
-  "schema_version": 1,
-  "client_profile": "cn602-bootstrap",
-  "config_version": 2,
   "day_boundary_offset_minutes": 480,
   "cycle": [
     {

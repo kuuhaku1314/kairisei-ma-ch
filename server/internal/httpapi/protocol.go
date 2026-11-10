@@ -7,6 +7,7 @@ import (
 	"kairisei.local/server/internal/clientbridge"
 	"kairisei.local/server/internal/game"
 	"kairisei.local/server/internal/gamestate"
+	"kairisei.local/server/internal/protocol"
 )
 
 type questProgress struct {
@@ -73,6 +74,7 @@ func newCommonResponse(featureIDs []uint) commonResponse {
 	}
 	return commonResponse{
 		ResultString: "",
+		Revision:     protocol.CatalogRevision,
 		Notifications: []notification{{
 			Events:            []int{},
 			UnlockFeatureFlag: flags,

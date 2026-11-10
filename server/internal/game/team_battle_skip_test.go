@@ -14,7 +14,7 @@ func skipTestAccount(itemPrice bool) (*Account, []gamestate.TeamBattleRewardProf
 	if itemPrice {
 		floor.ItemID, floor.ItemUse = 11, 3
 	}
-	s := &Account{bp: 1000, bpMax: 1000, bpRecoveryInterval: 3 * time.Minute,
+	s := &Account{onboarding: completedTestOnboarding(), bp: 1000, bpMax: 1000, bpRecoveryInterval: 3 * time.Minute,
 		towerAdmission:     TowerAdmission{TowerIDs: map[int]struct{}{7: {}}},
 		items:              map[int]gamestate.Item{10: {ItemID: 10, Num: 10}, 11: {ItemID: 11, Num: 10}},
 		itemDefinitions:    map[int]gamestate.ItemDefinition{20: {ItemID: 20, MaxOwned: 3}},

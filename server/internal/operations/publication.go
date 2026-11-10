@@ -19,8 +19,7 @@ const (
 )
 
 type gachaPublication struct {
-	CatalogVersion int   `json:"catalog_version,omitempty"`
-	GroupIDs       []int `json:"group_ids"`
+	GroupIDs []int `json:"group_ids"`
 }
 
 type TeamBattlePublication struct {
@@ -75,13 +74,6 @@ func (operations *Runtime) DecodeGachaPublication(doc accountstore.Document) (ma
 		return nil, fmt.Errorf("decode CN gacha publication: %w", err)
 	}
 	active := make(map[int]struct{}, len(publication.GroupIDs))
-	// Older operator documents only covered event presets. Do not silently
-	// close previously permanent pools when loading such a document.
-	if publication.CatalogVersion < 2 {
-		for groupID := range published.PermanentGachaGroups {
-			active[groupID] = struct{}{}
-		}
-	}
 	for _, groupID := range publication.GroupIDs {
 		if _, exists := published.ManagedGachaGroups[groupID]; !exists {
 			return nil, fmt.Errorf("CN gacha publication contains unknown group %d", groupID)

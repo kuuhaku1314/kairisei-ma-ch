@@ -11,7 +11,7 @@ import (
 )
 
 func TestDeckCompositionRejectsSaveAndAdmissionWithoutChangingDecks(t *testing.T) {
-	store := &Account{
+	store := &Account{onboarding: completedTestOnboarding(),
 		deckSlots: 10, supportSlotCapacity: 10, buddySlots: 5,
 		supportUnlockedSlots: []int8{10, 10, 10, 10},
 		cardDefinitions:      make(map[int]gamestate.Card),
@@ -94,7 +94,7 @@ func TestAlchemistSummonDeckLimitUsesCanonicalDefinitions(t *testing.T) {
 }
 
 func TestAlchemistProfessionChecksDraftActivationEvolutionAndAdmission(t *testing.T) {
-	store := &Account{
+	store := &Account{onboarding: completedTestOnboarding(),
 		deckSlots: 10, supportSlotCapacity: 10, buddySlots: 5,
 		supportUnlockedSlots: []int8{10, 10, 10, 10},
 		cardDefinitions:      make(map[int]gamestate.Card),
@@ -148,7 +148,7 @@ func TestAlchemistProfessionChecksDraftActivationEvolutionAndAdmission(t *testin
 }
 
 func TestAlchemistAutomaticMainFillUsesEligibleCardsForInactiveDeck(t *testing.T) {
-	store := &Account{
+	store := &Account{onboarding: completedTestOnboarding(),
 		cardDefinitions: make(map[int]gamestate.Card),
 		combatDefinitions: &battlemodel.Definitions{
 			Cards:  make(map[int]battlemodel.CombatCardDefinition),

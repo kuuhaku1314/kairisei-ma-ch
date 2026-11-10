@@ -43,23 +43,17 @@ func decodeVersions(content []byte) (versionPolicy, error) {
 		return nil, errors.New("version metadata must be non-empty and at most one MiB")
 	}
 	var manifest struct {
-		SchemaVersion int `json:"schema_version"`
-		Versions      []struct {
+		Versions []struct {
 			Name    string `json:"name"`
 			Version uint64 `json:"version"`
-			Reason  string `json:"reason,omitempty"`
 		} `json:"versions"`
 	}
 	decoder := json.NewDecoder(bytes.NewReader(content))
-	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&manifest); err != nil {
 		return nil, err
 	}
 	if err := decoder.Decode(new(any)); err != io.EOF {
 		return nil, errors.New("trailing data in version metadata")
-	}
-	if manifest.SchemaVersion != 1 {
-		return nil, errors.New("unsupported version metadata schema")
 	}
 	result := make(versionPolicy, len(manifest.Versions))
 	for _, entry := range manifest.Versions {
