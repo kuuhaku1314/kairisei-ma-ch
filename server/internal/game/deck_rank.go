@@ -6,7 +6,7 @@ import (
 
 func (s *Account) deckRankLocked(deck DeckInfo, inventory map[int64]int) int8 {
 	policy := s.deckRankPolicy
-	if policy.ConfigVersion == 0 {
+	if len(policy.ParameterThresholds) == 0 {
 		return deck.DeckRank
 	}
 	var job gamestate.JobParameter
@@ -66,7 +66,7 @@ func (s *Account) rankInventoryLocked() map[int64]int {
 }
 
 func (s *Account) refreshDeckRanksLocked() {
-	if s.deckRankPolicy.ConfigVersion == 0 {
+	if len(s.deckRankPolicy.ParameterThresholds) == 0 {
 		return
 	}
 	inventory := s.rankInventoryLocked()
@@ -93,7 +93,7 @@ func (s *Account) HomeDeckRank() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.refreshDeckRanksLocked()
-	if s.deckRankPolicy.ConfigVersion == 0 {
+	if len(s.deckRankPolicy.ParameterThresholds) == 0 {
 		return s.highestDeckRank
 	}
 	value := s.highestDeckRank | (s.lastHomeDeckRank << 16)

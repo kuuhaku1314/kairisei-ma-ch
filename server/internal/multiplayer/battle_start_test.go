@@ -513,7 +513,7 @@ func TestCompletedRoomFreezesReleasedDropsForAllClaimants(t *testing.T) {
 		battles:      []gamestate.TeamBattleReplayBattle{{EnemyPartyID: 1, EnemyType: 1}},
 		engine:       engine,
 		connections:  map[int]*clientConn{1: {userID: 1001}, 2: {userID: 1002}},
-		hostCostPaid: true, dropLedgerVersion: 1, engineBattleEnd: 1,
+		hostCostPaid: true, engineBattleEnd: 1,
 		destroyedEnemyBits: 7, waveOutcomes: map[int]battlecore.WaveOutcome{0: {DestroyedEnemyBits: 7}},
 	}
 	for index := 0; index < 3; index++ {
@@ -535,7 +535,7 @@ func TestCompletedRoomFreezesReleasedDropsForAllClaimants(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !result.HostCostPaid || result.DropLedgerVersion != 1 || result.DestroyedEnemyBits != 7 || len(result.ReleasedDrops) != 2 || result.ReleasedDrops[0].Reward.Num != 1 || result.StageType != gamestate.BattleStageScore || len(result.EnemyDeadBits) != 1 || result.EnemyDeadBits[0] != 7 {
+		if !result.HostCostPaid || result.DestroyedEnemyBits != 7 || len(result.ReleasedDrops) != 2 || result.ReleasedDrops[0].Reward.Num != 1 || result.StageType != gamestate.BattleStageScore || len(result.EnemyDeadBits) != 1 || result.EnemyDeadBits[0] != 7 {
 			t.Fatalf("claimant %d received an unfrozen/incorrect drop ledger: %+v", user, result)
 		}
 		result.ReleasedDrops[0].Reward.Num = 888

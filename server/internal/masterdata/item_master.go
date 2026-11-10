@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"kairisei.local/server/internal/gamestate"
 )
@@ -18,48 +17,19 @@ type ItemRuntimeMaster struct {
 	SchemaVersion int    `json:"schema_version"`
 	ClientProfile string `json:"client_profile"`
 
-	LocalAccountConfigVersion int                             `json:"local_account_config_version,omitempty"`
-	LocalAccountInitialItems  []gamestate.Item                `json:"local_account_initial_items,omitempty"`
-	TeamBattleMedalItemID     int                             `json:"team_battle_medal_item_id,omitempty"`
-	UserBuffProfiles          []gamestate.UserBuffProfile     `json:"user_buff_profiles"`
-	Items                     []gamestate.ItemDefinition      `json:"items"`
-	ItemGachaProfiles         []gamestate.ItemGachaProfile    `json:"item_gacha_profiles"`
-	ItemGachaSourceGapIDs     []int                           `json:"item_gacha_source_gap_ids"`
-	ItemExchangeProfiles      []gamestate.ItemExchangeProfile `json:"item_exchange_profiles"`
+	BossCoinItemID        int                             `json:"boss_coin_item_id"`
+	TeamBattleMedalItemID int                             `json:"team_battle_medal_item_id,omitempty"`
+	UserBuffProfiles      []gamestate.UserBuffProfile     `json:"user_buff_profiles"`
+	Items                 []gamestate.ItemDefinition      `json:"items"`
+	ItemGachaProfiles     []gamestate.ItemGachaProfile    `json:"item_gacha_profiles"`
+	ItemExchangeProfiles  []gamestate.ItemExchangeProfile `json:"item_exchange_profiles"`
 
-	ItemExchangePolicy  itemExchangePolicy             `json:"item_exchange_policy"`
 	ItemLackTipProfiles []gamestate.ItemLackTipProfile `json:"item_lack_tip_profiles"`
 
-	ItemLackTipPolicy itemLackTipPolicy            `json:"item_lack_tip_policy"`
 	EventShopProfiles []gamestate.EventShopProfile `json:"event_shop_profiles"`
 
 	TradeShopProfiles      []gamestate.TradeShopProfile `json:"trade_shop_profiles"`
 	LocalTradeShopProfiles []gamestate.TradeShopProfile `json:"local_trade_shop_profiles,omitempty"`
-	TradeShopPolicy        tradeShopPolicy              `json:"trade_shop_policy"`
-
-	SkippedInactiveItemIDs []int `json:"skipped_inactive_item_ids"`
-}
-
-type tradeShopPolicy struct {
-	ConfigVersion       int    `json:"config_version"`
-	CurrencyItemID      int    `json:"currency_item_id"`
-	PricePerCard        int    `json:"price_per_card"`
-	StockPerCard        int    `json:"stock_per_card"`
-	CardAcquisitionText string `json:"card_acquisition_text"`
-	Selection           string `json:"selection"`
-}
-
-type itemExchangePolicy struct {
-	ConfigVersion int    `json:"config_version"`
-	NeedNum       int    `json:"need_num"`
-	EventIDOffset int    `json:"event_id_offset"`
-	Selection     string `json:"selection"`
-}
-
-type itemLackTipPolicy struct {
-	ConfigVersion         int    `json:"config_version"`
-	ReachableIndices      []int  `json:"reachable_indices"`
-	NavigationPublication string `json:"navigation_publication"`
 }
 
 type eventShopSourceAudit struct {
@@ -184,32 +154,13 @@ func validateItemRuntimeMaster(master ItemRuntimeMaster) error {
 		coveredGachaItems[profile.ItemID] = struct{}{}
 		functionValues[profile.FunctionValue] = struct{}{}
 	}
-	for _, itemID := range master.ItemGachaSourceGapIDs {
-		if _, exists := gachaItems[itemID]; !exists {
-			return fmt.Errorf("CN item gacha source gap %d is not a GACHA item", itemID)
-		}
-		if _, duplicate := coveredGachaItems[itemID]; duplicate {
-			return fmt.Errorf("duplicate or overlapping CN item gacha source gap %d", itemID)
-		}
-		coveredGachaItems[itemID] = struct{}{}
-	}
-	if len(coveredGachaItems) != len(gachaItems) {
-		return errors.New("CN item gacha profiles and source gaps do not cover the official GACHA item set")
-	}
-
-	exchangePolicy := master.ItemExchangePolicy
-	if exchangePolicy.ConfigVersion != 1 || exchangePolicy.NeedNum != 1 ||
-		exchangePolicy.EventIDOffset != 60280000 ||
-		exchangePolicy.Selection != "exact_card_name_else_unique_same_card_family_substring" {
-		return errors.New("CN item exchange local policy is invalid")
-	}
 	exchangeItems := make(map[int]struct{}, len(master.ItemExchangeProfiles))
 	exchangeEvents := make(map[int]struct{}, len(master.ItemExchangeProfiles))
 	for _, profile := range master.ItemExchangeProfiles {
 		if _, exists := definitions[profile.ItemID]; !exists ||
 			(profile.IsAppearEvent != 0 && profile.IsAppearEvent != 1) ||
 			profile.IsAppearEvent != 0 ||
-			profile.EventID != exchangePolicy.EventIDOffset+profile.ItemID ||
+			profile.EventID <= 0 ||
 			profile.NeedNum <= 0 || profile.NeedNum > 1000000000 ||
 			!validItemExchangeReward(profile.Reward, definitions) {
 			return fmt.Errorf("invalid CN item exchange profile %d", profile.ItemID)
@@ -224,19 +175,6 @@ func validateItemRuntimeMaster(master ItemRuntimeMaster) error {
 		exchangeEvents[profile.EventID] = struct{}{}
 	}
 
-	lackPolicy := master.ItemLackTipPolicy
-	if lackPolicy.ConfigVersion != 2 ||
-		len(lackPolicy.ReachableIndices) != 2 ||
-		lackPolicy.ReachableIndices[0] != 2 || lackPolicy.ReachableIndices[1] != 8 ||
-		lackPolicy.NavigationPublication != "NON_NAVIGATING_LOCAL_CLIENT_CONTRACT_ROW" {
-		return errors.New("CN item lack-tip local policy is invalid")
-	}
-	crystalTicket, exists := definitions[9010]
-	if !exists || crystalTicket.Name != "水晶扭蛋币" ||
-		crystalTicket.ItemType != "GACHA_TICKET" ||
-		!strings.Contains(crystalTicket.Description, "水晶扭蛋币商店") {
-		return errors.New("CN item lack-tip crystal-ticket identity is invalid")
-	}
 	seenLackTips := make(map[int]struct{}, len(master.ItemLackTipProfiles))
 	for _, profile := range master.ItemLackTipProfiles {
 		if profile.Index < 1 || profile.Index > 8 ||
@@ -259,16 +197,8 @@ func validateItemRuntimeMaster(master ItemRuntimeMaster) error {
 	if len(master.TradeShopProfiles) != 1 {
 		return errors.New("CN trade shop source audit is invalid")
 	}
-	policy := master.TradeShopPolicy
-	if policy.ConfigVersion != 1 || policy.CurrencyItemID != 4000 ||
-		policy.PricePerCard != 1000 || policy.StockPerCard != 1 ||
-		policy.CardAcquisitionText != "BOSS币交换所" ||
-		policy.Selection != "lowest_rarity_then_card_id_per_official_same_card_family" {
-		return errors.New("CN trade shop policy is invalid")
-	}
-	currency, exists := definitions[policy.CurrencyItemID]
-	if !exists || currency.Name != "大硬币" || currency.ItemType != "EVENT_POINT" {
-		return errors.New("CN trade shop currency identity is invalid")
+	if currency, ok := definitions[master.BossCoinItemID]; !ok || currency.ItemType != "EVENT_POINT" {
+		return errors.New("CN trade shop currency is invalid")
 	}
 	lineupIDs := make(map[int]struct{})
 	rewardCardIDs := make(map[int]struct{})
@@ -276,11 +206,11 @@ func validateItemRuntimeMaster(master ItemRuntimeMaster) error {
 		if shop.TradeShopID != 60290001 || shop.Name != "BOSS币交换所" ||
 			shop.Text == "" || shop.ShopType != 1 || shop.TabType != 0 ||
 			shop.EndTime != 2147483647 || shop.IsNew != 0 || shop.PictID != 0 ||
-			len(shop.Lineups) != 49 {
+			len(shop.Lineups) == 0 {
 			return fmt.Errorf("invalid CN trade shop %d", shop.TradeShopID)
 		}
 		for _, lineup := range shop.Lineups {
-			if lineup.LineupID <= 0 || lineup.LineupName == "" || lineup.StockNum != 1 ||
+			if lineup.LineupID <= 0 || lineup.LineupName == "" || lineup.StockNum <= 0 ||
 				lineup.IsLineupNew != 0 || lineup.IsLineupOld != 0 || lineup.PictID != 0 ||
 				len(lineup.Prices) != 1 || len(lineup.Rewards) != 1 {
 				return fmt.Errorf("invalid CN trade shop lineup %d", lineup.LineupID)
@@ -290,8 +220,8 @@ func validateItemRuntimeMaster(master ItemRuntimeMaster) error {
 			}
 			lineupIDs[lineup.LineupID] = struct{}{}
 			price := lineup.Prices[0]
-			if price.Type != 4 || price.ID != policy.CurrencyItemID ||
-				price.Num != policy.PricePerCard || price.PointCardCondition == nil ||
+			if price.Type != 4 || price.ID != master.BossCoinItemID ||
+				price.Num <= 0 || price.PointCardCondition == nil ||
 				len(price.PointCardCondition) != 0 {
 				return fmt.Errorf("invalid CN trade shop lineup price %d", lineup.LineupID)
 			}
@@ -338,23 +268,6 @@ func validateItemRuntimeMaster(master ItemRuntimeMaster) error {
 			}
 		}
 	}
-	if master.LocalAccountConfigVersion < 0 ||
-		(master.LocalAccountConfigVersion > 0 && len(master.LocalAccountInitialItems) == 0) {
-		return errors.New("CN item runtime master local account configuration is invalid")
-	}
-	initialSeen := make(map[int]struct{}, len(master.LocalAccountInitialItems))
-	for _, item := range master.LocalAccountInitialItems {
-		if item.ItemID <= 0 || item.Num <= 0 || item.LimitTime < 0 {
-			return errors.New("CN item runtime master initial item is invalid")
-		}
-		if _, exists := seen[item.ItemID]; !exists {
-			return fmt.Errorf("CN item runtime master initial item %d is absent from official items", item.ItemID)
-		}
-		if _, exists := initialSeen[item.ItemID]; exists {
-			return fmt.Errorf("CN item runtime master initial item %d is duplicated", item.ItemID)
-		}
-		initialSeen[item.ItemID] = struct{}{}
-	}
 	if master.TeamBattleMedalItemID < 0 {
 		return errors.New("CN item runtime master team battle medal item is invalid")
 	}
@@ -366,7 +279,7 @@ func validateItemRuntimeMaster(master ItemRuntimeMaster) error {
 	return nil
 }
 
-func ApplyItemRuntimeMaster(state *gamestate.State, master ItemRuntimeMaster) (bool, error) {
+func ApplyItemRuntimeMaster(state *gamestate.State, master ItemRuntimeMaster) error {
 	state.ItemDefinitions = append([]gamestate.ItemDefinition(nil), master.Items...)
 	state.UserBuffProfiles = append([]gamestate.UserBuffProfile(nil), master.UserBuffProfiles...)
 	state.ItemGachaProfiles = append([]gamestate.ItemGachaProfile(nil), master.ItemGachaProfiles...)
@@ -376,19 +289,14 @@ func ApplyItemRuntimeMaster(state *gamestate.State, master ItemRuntimeMaster) (b
 	state.TradeShopProfiles = append([]gamestate.TradeShopProfile(nil), master.TradeShopProfiles...)
 	state.TradeShopProfiles = append(state.TradeShopProfiles, master.LocalTradeShopProfiles...)
 	state.TeamBattleMedalItemID = master.TeamBattleMedalItemID
-	state.BossCoinItemID = master.TradeShopPolicy.CurrencyItemID
+	state.BossCoinItemID = master.BossCoinItemID
 	available := make(map[int]struct{}, len(master.Items))
 	for _, item := range master.Items {
 		available[item.ItemID] = struct{}{}
 	}
-	changed := false
-	if state.LocalAccountConfigVersion < master.LocalAccountConfigVersion {
-		state.LocalAccountConfigVersion = master.LocalAccountConfigVersion
-		changed = true
-	}
 	for _, item := range state.Items {
 		if _, exists := available[item.ItemID]; !exists {
-			return false, fmt.Errorf("persisted item %d is absent from official CN item master", item.ItemID)
+			return fmt.Errorf("persisted item %d is absent from official CN item master", item.ItemID)
 		}
 	}
 	for _, tab := range state.ItemShopTabs {
@@ -398,12 +306,12 @@ func ApplyItemRuntimeMaster(state *gamestate.State, master ItemRuntimeMaster) (b
 					continue
 				}
 				if _, exists := available[interior.BuyTypeID]; !exists {
-					return false, fmt.Errorf("item shop lineup %d references unknown official CN item %d", lineup.LineupID, interior.BuyTypeID)
+					return fmt.Errorf("item shop lineup %d references unknown official CN item %d", lineup.LineupID, interior.BuyTypeID)
 				}
 			}
 		}
 	}
-	return changed, nil
+	return nil
 }
 
 func cloneItemLackTipProfiles(source []gamestate.ItemLackTipProfile) []gamestate.ItemLackTipProfile {

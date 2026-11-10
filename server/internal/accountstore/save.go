@@ -19,12 +19,8 @@ import (
 
 const (
 	maxSaveBytes                    = 4 * 1024 * 1024
-	teamBattleDeckConfigVersion     = 3
-	teamBattleRewardConfigVersion   = 6
 	maxTeamBattleResultReceiptBytes = 1 << 20
 	maxActiveBattleSegments         = 64
-	ItemShopConfigVersion           = 2
-	gachaConfigVersion              = 16
 )
 
 // cnSaveState is the editable, local character save. Transport routes and
@@ -37,18 +33,11 @@ type saveState struct {
 	SchemaVersion                  int                                       `json:"schema_version"`
 	User                           gamestate.User                            `json:"user"`
 	PlayerProgressionConfigVersion int                                       `json:"player_progression_config_version"`
-	CardProgressionConfigVersion   int                                       `json:"card_progression_config_version"`
-	FeatureUnlockConfigVersion     int                                       `json:"feature_unlock_config_version"`
 	Onboarding                     gamestate.OnboardingState                 `json:"onboarding"`
-	ProfileConfigVersion           int                                       `json:"profile_config_version"`
-	CurrencyConfigVersion          int                                       `json:"currency_config_version"`
-	BattleLoadoutConfigVersion     int                                       `json:"battle_loadout_config_version"`
 	BattleLoadoutCardUniqueIDs     []int64                                   `json:"battle_loadout_card_unique_ids,omitempty"`
-	BattlePointConfigVersion       int                                       `json:"battle_point_config_version"`
 	BattlePoint                    gamestate.BattlePointState                `json:"battle_point"`
 	PVPConfigVersion               int                                       `json:"pvp_config_version"`
 	PVP                            gamestate.PVPPlayerState                  `json:"pvp"`
-	SphereConfigVersion            int                                       `json:"sphere_config_version"`
 	Spheres                        []gamestate.Sphere                        `json:"spheres"`
 	Cards                          []gamestate.Card                          `json:"cards"`
 	ContainerCards                 []gamestate.Card                          `json:"container_cards,omitempty"`
@@ -58,38 +47,30 @@ type saveState struct {
 	AvatarConfigVersion            int                                       `json:"avatar_config_version,omitempty"`
 	AvatarParts                    []int                                     `json:"avatar_parts,omitempty"`
 	Buddy                          gamestate.Buddy                           `json:"buddy"`
-	BuddyConfigVersion             int                                       `json:"buddy_config_version,omitempty"`
 	Buddies                        []gamestate.Buddy                         `json:"buddies,omitempty"`
 	Profiles                       []string                                  `json:"profiles"`
 	Friends                        gamestate.FriendCollectionState           `json:"friends"`
 	Stamps                         gamestate.StampCollectionState            `json:"stamps"`
 	Honors                         gamestate.HonorCollectionState            `json:"honors"`
 	Story                          gamestate.StoryCatalogState               `json:"story"`
-	ExploreConfigVersion           int                                       `json:"explore_config_version"`
 	Explore                        gamestate.ExploreProgressState            `json:"explore"`
 	Engagement                     gamestate.EngagementState                 `json:"engagement"`
 	MissionDefinitions             map[int]gamestate.MissionDefinition       `json:"mission_definitions,omitempty"`
 	Options                        gamestate.OptionState                     `json:"options"`
 	LoginBonus                     gamestate.LoginBonusState                 `json:"login_bonus"`
-	LocalAccountConfigVersion      int                                       `json:"local_account_config_version"`
-	ItemShopConfigVersion          int                                       `json:"item_shop_config_version"`
 	Items                          []gamestate.Item                          `json:"items"`
 	ItemShopTabs                   []gamestate.ItemShopTab                   `json:"item_shop_tabs"`
 	EventShopPurchases             []gamestate.EventShopPurchase             `json:"event_shop_purchases,omitempty"`
 	TradeShopPurchases             []gamestate.TradeShopPurchase             `json:"trade_shop_purchases,omitempty"`
-	GachaConfigVersion             int                                       `json:"gacha_config_version"`
 	Gachas                         []gamestate.GachaProfile                  `json:"gachas"`
 	GachaSelections                []gamestate.GachaSelection                `json:"gacha_selections,omitempty"`
 	GachaDailyClaims               []gamestate.GachaDailyClaim               `json:"gacha_daily_claims,omitempty"`
 	FriendPointInboxCursor         int64                                     `json:"friend_point_inbox_cursor,omitempty"`
 	CardActions                    gamestate.CardActionState                 `json:"card_actions"`
 	CardDevelopment                gamestate.CardDevelopmentState            `json:"card_development"`
-	SupportDeckConfigVersion       int                                       `json:"support_deck_config_version,omitempty"`
 	SupportDeck                    gamestate.SupportDeckState                `json:"support_deck"`
-	StageQuestConfigVersion        int                                       `json:"stage_quest_config_version"`
 	MainQuest                      json.RawMessage                           `json:"main_quest"`
 	StageQuestAreas                []json.RawMessage                         `json:"stage_quest_areas,omitempty"`
-	TeamBattleConfigVersion        int                                       `json:"team_battle_config_version"`
 	TeamBattleSolo                 json.RawMessage                           `json:"team_battle_solo_show"`
 	TeamBattleReplays              []gamestate.TeamBattleReplay              `json:"team_battle_replays"`
 	TeamBattleRewards              []gamestate.TeamBattleRewardProfile       `json:"team_battle_rewards"`
@@ -101,7 +82,6 @@ type saveState struct {
 	ExploreResultReceipt           *gamestate.ExploreResultReceipt           `json:"explore_result_receipt,omitempty"`
 	PVPResultReceipts              []gamestate.PVPResultReceipt              `json:"pvp_result_receipts,omitempty"`
 	ActiveTeamBattle               *gamestate.TeamBattleActiveState          `json:"active_team_battle,omitempty"`
-	TowerQuestConfigVersion        int                                       `json:"tower_quest_config_version,omitempty"`
 	TowerQuestProgress             []gamestate.TowerQuestProgress            `json:"tower_quest_progress,omitempty"`
 	Costume                        json.RawMessage                           `json:"costume"`
 }
@@ -145,195 +125,10 @@ func DecodeSaveState(content []byte) (gamestate.State, error) {
 	if err := masterdata.RequireJSONEOF(decoder); err != nil {
 		return gamestate.State{}, err
 	}
-	if err := normalizeBossUserBuffSentinels(&save); err != nil {
-		return gamestate.State{}, err
-	}
-	// BuddyConfigVersion establishes that the inventory was initialized. Older
-	// local snapshots (including accounts interrupted during creation) encoded an
-	// empty inventory as null or omitted because of a nil-slice clone and the
-	// compact save tag. Normalize that one known representation before validation.
-	if save.BuddyConfigVersion > 0 && save.Buddies == nil {
-		save.Buddies = []gamestate.Buddy{}
-	}
 	if err := ValidateSave(save); err != nil {
 		return gamestate.State{}, err
 	}
 	return releaseStateFromSave(save), nil
-}
-
-// Older local snapshots encoded an absent boss user-buff/key condition as an
-// empty array. The CN managed client distinguishes that from null: any
-// non-null array means that a key condition exists, even when it contains no
-// usable ID. Normalize only the two known boss DTO paths while loading so old
-// accounts retain their progress without turning every battle into an expired
-// key dungeon. Current generators and content gates reject new empty arrays.
-func normalizeBossUserBuffSentinels(save *saveState) error {
-	var err error
-	save.TeamBattleSolo, err = normalizeTeamBattleUserBuffSentinels(save.TeamBattleSolo)
-	if err != nil {
-		return fmt.Errorf("normalize CN TeamBattle user-buff sentinels: %w", err)
-	}
-	save.MainQuest, err = normalizeStageQuestUserBuffSentinels(save.MainQuest)
-	if err != nil {
-		return fmt.Errorf("normalize CN StageQuest user-buff sentinels: %w", err)
-	}
-	for index, area := range save.StageQuestAreas {
-		save.StageQuestAreas[index], err = normalizeStageQuestUserBuffSentinels(area)
-		if err != nil {
-			return fmt.Errorf("normalize CN StageQuest area %d user-buff sentinels: %w", index, err)
-		}
-	}
-	return nil
-}
-
-func normalizeTeamBattleUserBuffSentinels(content json.RawMessage) (json.RawMessage, error) {
-	var top map[string]json.RawMessage
-	if err := json.Unmarshal(content, &top); err != nil {
-		return nil, err
-	}
-	changed := false
-	for _, category := range []string{"9", "10", "11", "12"} {
-		var groups []map[string]json.RawMessage
-		if err := json.Unmarshal(top[category], &groups); err != nil {
-			return nil, fmt.Errorf("decode category %s: %w", category, err)
-		}
-		categoryChanged := false
-		for groupIndex := range groups {
-			var bosses []map[string]json.RawMessage
-			if err := json.Unmarshal(groups[groupIndex]["10"], &bosses); err != nil {
-				return nil, fmt.Errorf("decode category %s group %d bosses: %w", category, groupIndex, err)
-			}
-			bossesChanged := false
-			for bossIndex := range bosses {
-				normalized, fieldChanged, err := normalizeEmptyIntArraySentinel(bosses[bossIndex], "15")
-				if err != nil {
-					return nil, fmt.Errorf("category %s group %d boss %d: %w", category, groupIndex, bossIndex, err)
-				}
-				bosses[bossIndex] = normalized
-				bossesChanged = bossesChanged || fieldChanged
-			}
-			if !bossesChanged {
-				continue
-			}
-			encodedBosses, err := json.Marshal(bosses)
-			if err != nil {
-				return nil, err
-			}
-			groups[groupIndex]["10"] = encodedBosses
-			categoryChanged = true
-		}
-		if !categoryChanged {
-			continue
-		}
-		encodedGroups, err := json.Marshal(groups)
-		if err != nil {
-			return nil, err
-		}
-		top[category] = encodedGroups
-		changed = true
-	}
-	if !changed {
-		return content, nil
-	}
-	return json.Marshal(top)
-}
-
-func normalizeStageQuestUserBuffSentinels(content json.RawMessage) (json.RawMessage, error) {
-	var top map[string]json.RawMessage
-	if err := json.Unmarshal(content, &top); err != nil {
-		return nil, err
-	}
-	var stageQuest map[string]json.RawMessage
-	if err := json.Unmarshal(top["stage_quest"], &stageQuest); err != nil {
-		return nil, err
-	}
-	var stages []map[string]json.RawMessage
-	if err := json.Unmarshal(stageQuest["stage_object"], &stages); err != nil {
-		return nil, err
-	}
-	changed := false
-	for stageIndex := range stages {
-		var raids []map[string]json.RawMessage
-		if err := json.Unmarshal(stages[stageIndex]["raid_boss"], &raids); err != nil {
-			return nil, fmt.Errorf("decode stage %d raid bosses: %w", stageIndex, err)
-		}
-		raidsChanged := false
-		for raidIndex := range raids {
-			var group map[string]json.RawMessage
-			if err := json.Unmarshal(raids[raidIndex]["boss_group"], &group); err != nil {
-				return nil, fmt.Errorf("decode stage %d raid %d group: %w", stageIndex, raidIndex, err)
-			}
-			var bosses []map[string]json.RawMessage
-			if err := json.Unmarshal(group["bosses"], &bosses); err != nil {
-				return nil, fmt.Errorf("decode stage %d raid %d bosses: %w", stageIndex, raidIndex, err)
-			}
-			bossesChanged := false
-			for bossIndex := range bosses {
-				normalized, fieldChanged, err := normalizeEmptyIntArraySentinel(bosses[bossIndex], "user_buff_id")
-				if err != nil {
-					return nil, fmt.Errorf("stage %d raid %d boss %d: %w", stageIndex, raidIndex, bossIndex, err)
-				}
-				bosses[bossIndex] = normalized
-				bossesChanged = bossesChanged || fieldChanged
-			}
-			if !bossesChanged {
-				continue
-			}
-			encodedBosses, err := json.Marshal(bosses)
-			if err != nil {
-				return nil, err
-			}
-			group["bosses"] = encodedBosses
-			encodedGroup, err := json.Marshal(group)
-			if err != nil {
-				return nil, err
-			}
-			raids[raidIndex]["boss_group"] = encodedGroup
-			raidsChanged = true
-		}
-		if !raidsChanged {
-			continue
-		}
-		encodedRaids, err := json.Marshal(raids)
-		if err != nil {
-			return nil, err
-		}
-		stages[stageIndex]["raid_boss"] = encodedRaids
-		changed = true
-	}
-	if !changed {
-		return content, nil
-	}
-	encodedStages, err := json.Marshal(stages)
-	if err != nil {
-		return nil, err
-	}
-	stageQuest["stage_object"] = encodedStages
-	encodedStageQuest, err := json.Marshal(stageQuest)
-	if err != nil {
-		return nil, err
-	}
-	top["stage_quest"] = encodedStageQuest
-	return json.Marshal(top)
-}
-
-func normalizeEmptyIntArraySentinel(
-	owner map[string]json.RawMessage,
-	field string,
-) (map[string]json.RawMessage, bool, error) {
-	raw, exists := owner[field]
-	if !exists || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
-		return owner, false, nil
-	}
-	var values []int
-	if err := json.Unmarshal(raw, &values); err != nil {
-		return nil, false, fmt.Errorf("decode %s: %w", field, err)
-	}
-	if len(values) != 0 {
-		return owner, false, nil
-	}
-	owner[field] = json.RawMessage("null")
-	return owner, true, nil
 }
 
 func releaseStateFromSave(save saveState) gamestate.State {
@@ -341,18 +136,11 @@ func releaseStateFromSave(save saveState) gamestate.State {
 		SchemaVersion:                  save.SchemaVersion,
 		User:                           save.User,
 		PlayerProgressionConfigVersion: save.PlayerProgressionConfigVersion,
-		CardProgressionConfigVersion:   save.CardProgressionConfigVersion,
-		FeatureUnlockConfigVersion:     save.FeatureUnlockConfigVersion,
 		Onboarding:                     save.Onboarding,
-		ProfileConfigVersion:           save.ProfileConfigVersion,
-		CurrencyConfigVersion:          save.CurrencyConfigVersion,
-		BattleLoadoutConfigVersion:     save.BattleLoadoutConfigVersion,
 		BattleLoadoutCardUniqueIDs:     append([]int64(nil), save.BattleLoadoutCardUniqueIDs...),
-		BattlePointConfigVersion:       save.BattlePointConfigVersion,
 		BattlePoint:                    save.BattlePoint,
 		PVPConfigVersion:               save.PVPConfigVersion,
 		PVP:                            cloneReleasePVPState(save.PVP),
-		SphereConfigVersion:            save.SphereConfigVersion,
 		// Preserve an explicitly empty inventory as [] rather than nil. The CN
 		// client and save validator distinguish initialized-empty from absent.
 		Spheres:             append([]gamestate.Sphere{}, save.Spheres...),
@@ -364,7 +152,6 @@ func releaseStateFromSave(save saveState) gamestate.State {
 		AvatarConfigVersion: save.AvatarConfigVersion,
 		AvatarParts:         append([]int(nil), save.AvatarParts...),
 		Buddy:               save.Buddy,
-		BuddyConfigVersion:  save.BuddyConfigVersion,
 		// Preserve initialized-empty Buddy inventories across decode/clone for the
 		// same reason as spheres above.
 		Buddies:                      append([]gamestate.Buddy{}, save.Buddies...),
@@ -373,14 +160,11 @@ func releaseStateFromSave(save saveState) gamestate.State {
 		Stamps:                       save.Stamps,
 		Honors:                       save.Honors,
 		Story:                        save.Story,
-		ExploreConfigVersion:         save.ExploreConfigVersion,
 		Explore:                      save.Explore,
 		Engagement:                   save.Engagement,
 		MissionDefinitions:           save.MissionDefinitions,
 		Options:                      save.Options,
 		LoginBonus:                   save.LoginBonus,
-		LocalAccountConfigVersion:    save.LocalAccountConfigVersion,
-		ItemShopConfigVersion:        save.ItemShopConfigVersion,
 		Items:                        save.Items,
 		ItemShopTabs:                 save.ItemShopTabs,
 		EventShopPurchases:           append([]gamestate.EventShopPurchase(nil), save.EventShopPurchases...),
@@ -388,19 +172,15 @@ func releaseStateFromSave(save saveState) gamestate.State {
 		TeamBattleScores:             save.TeamBattleScores,
 		TeamBattleSoloScores:         save.TeamBattleSoloScores,
 		LocalShop:                    save.LocalShop,
-		GachaConfigVersion:           save.GachaConfigVersion,
 		Gachas:                       save.Gachas,
 		GachaSelections:              cloneGachaSelections(save.GachaSelections),
 		GachaDailyClaims:             append([]gamestate.GachaDailyClaim(nil), save.GachaDailyClaims...),
 		FriendPointInboxCursor:       save.FriendPointInboxCursor,
 		CardActions:                  save.CardActions,
 		CardDevelopment:              cloneCardDevelopmentState(save.CardDevelopment),
-		SupportDeckConfigVersion:     save.SupportDeckConfigVersion,
 		SupportDeck:                  cloneSupportDeckState(save.SupportDeck),
-		StageQuestConfigVersion:      save.StageQuestConfigVersion,
 		MainQuest:                    save.MainQuest,
 		StageQuestAreas:              cloneRawMessages(save.StageQuestAreas),
-		TeamBattleConfigVersion:      save.TeamBattleConfigVersion,
 		TeamBattleSolo:               save.TeamBattleSolo,
 		TeamBattleReplays:            save.TeamBattleReplays,
 		TeamBattleRewards:            save.TeamBattleRewards,
@@ -412,7 +192,6 @@ func releaseStateFromSave(save saveState) gamestate.State {
 		ExploreResultReceipt:         cloneExploreResultReceipt(save.ExploreResultReceipt),
 		PVPResultReceipts:            clonePVPResultReceipts(save.PVPResultReceipts),
 		ActiveTeamBattle:             cloneActiveTeamBattleState(save.ActiveTeamBattle),
-		TowerQuestConfigVersion:      save.TowerQuestConfigVersion,
 		TowerQuestProgress:           cloneTowerQuestProgressState(save.TowerQuestProgress),
 		Costume:                      save.Costume,
 	}
@@ -438,9 +217,6 @@ func ValidateSave(save saveState) error {
 	}
 	if save.PlayerProgressionConfigVersion < 0 {
 		return errors.New("CN save player progression state is invalid")
-	}
-	if save.CardProgressionConfigVersion < 0 {
-		return errors.New("CN save card progression configuration is invalid")
 	}
 	if save.LoginBonus.ConfigVersion < 0 || save.LoginBonus.CycleDay < 0 || save.LoginBonus.BeginnerDay < 0 ||
 		save.LoginBonus.TotalClaims < 0 {
@@ -473,8 +249,7 @@ func ValidateSave(save saveState) error {
 			return errors.New("CN save card fame training card is missing or unlocked")
 		}
 	}
-	if save.SupportDeckConfigVersion < 0 ||
-		(save.SupportDeckConfigVersion > 0 && len(save.SupportDeck.UnlockSlotNums) != 4) {
+	if len(save.SupportDeck.UnlockSlotNums) != 4 {
 		return errors.New("CN save support-deck progression is invalid")
 	}
 	for _, count := range save.SupportDeck.UnlockSlotNums {
@@ -535,12 +310,10 @@ func ValidateSave(save saveState) error {
 	if save.Explore.APRecoverySeconds <= 0 {
 		return errors.New("CN save requires a positive AP recovery interval")
 	}
-	if save.BattlePointConfigVersion < 0 ||
-		(save.BattlePointConfigVersion > 0 &&
-			(save.BattlePoint.RecoverySeconds <= 0 ||
-				save.BattlePoint.NextRecoveryUnix < 0 ||
-				(save.User.BP < save.User.BPMax && save.BattlePoint.NextRecoveryUnix == 0) ||
-				(save.User.BP >= save.User.BPMax && save.BattlePoint.NextRecoveryUnix != 0))) {
+	if save.BattlePoint.RecoverySeconds <= 0 ||
+		save.BattlePoint.NextRecoveryUnix < 0 ||
+		(save.User.BP < save.User.BPMax && save.BattlePoint.NextRecoveryUnix == 0) ||
+		(save.User.BP >= save.User.BPMax && save.BattlePoint.NextRecoveryUnix != 0) {
 		return errors.New("CN save battle point recovery configuration is invalid")
 	}
 	if save.PVPConfigVersion < 0 || save.PVP.Challenge < 0 || save.PVP.ChallengeDay < 0 || save.PVP.NextBattleID < 0 ||
@@ -550,10 +323,6 @@ func ValidateSave(save saveState) error {
 			save.PVPConfigVersion, save.PVP.Challenge, save.PVP.NextBattleID,
 			save.PVP.DefenseDecks == nil, save.PVP.History == nil,
 		)
-	}
-	// Existing over-capacity inventory must remain loadable so players can sell it.
-	if save.SphereConfigVersion < 0 || (save.SphereConfigVersion > 0 && save.Spheres == nil) {
-		return errors.New("CN save sphere inventory is invalid")
 	}
 	sphereUniqueIDs := make(map[int64]struct{}, len(save.Spheres))
 	for _, sphere := range save.Spheres {
@@ -567,14 +336,6 @@ func ValidateSave(save saveState) error {
 		}
 		sphereUniqueIDs[sphere.UniqueID] = struct{}{}
 	}
-	if save.BuddyConfigVersion < 0 ||
-		(save.BuddyConfigVersion > 0 && save.Buddies == nil) {
-		return fmt.Errorf(
-			"CN save buddy inventory is invalid (version=%d nil=%t count=%d max=%d onboarding=%d)",
-			save.BuddyConfigVersion, save.Buddies == nil, len(save.Buddies),
-			save.User.BuddyMax, save.Onboarding.ConfigVersion,
-		)
-	}
 	buddyUniqueIDs := make(map[int64]struct{}, len(save.Buddies))
 	for _, buddy := range save.Buddies {
 		if buddy.UniqueID <= 0 || buddy.BuddyID <= 0 || buddy.Level <= 0 || buddy.Experience < 0 ||
@@ -587,150 +348,135 @@ func ValidateSave(save saveState) error {
 		}
 		buddyUniqueIDs[buddy.UniqueID] = struct{}{}
 	}
-	if save.ExploreConfigVersion < 0 || save.Explore.StageCursor < 0 || save.Explore.ActiveStageID < 0 {
-		return errors.New("CN save Explore config version must not be negative")
+	if save.Explore.StageCursor < 0 || save.Explore.ActiveStageID < 0 {
+		return errors.New("CN save Explore cursor is invalid")
 	}
 	if save.Options.GameEnableFlag < 0 || save.Options.PushEnableFlag < 0 {
 		return errors.New("CN save option flags must not be negative")
 	}
-	if save.ItemShopConfigVersion < 0 {
-		return errors.New("CN save item shop config version must not be negative")
+	if len(save.ItemShopTabs) != 5 || save.Items == nil {
+		return errors.New("CN save item shop configuration is incomplete")
 	}
-	if save.LocalAccountConfigVersion < 0 {
-		return errors.New("CN save local account configuration is invalid")
+	seenItems := make(map[int]struct{}, len(save.Items))
+	for _, item := range save.Items {
+		if item.ItemID <= 0 || item.Num < 0 || item.LimitTime < 0 {
+			return errors.New("CN save item state is invalid")
+		}
+		if _, exists := seenItems[item.ItemID]; exists {
+			return fmt.Errorf("CN save item ID %d is duplicated", item.ItemID)
+		}
+		seenItems[item.ItemID] = struct{}{}
 	}
-	if save.ItemShopConfigVersion >= ItemShopConfigVersion {
-		if len(save.ItemShopTabs) != 5 || save.Items == nil {
-			return errors.New("CN save item shop configuration is incomplete")
+	seenLineups := make(map[int]struct{})
+	for tabIndex, tab := range save.ItemShopTabs {
+		if tab.TabType != tabIndex || tab.Lineup == nil {
+			return errors.New("CN save item shop tab shape is invalid")
 		}
-		seenItems := make(map[int]struct{}, len(save.Items))
-		for _, item := range save.Items {
-			if item.ItemID <= 0 || item.Num < 0 || item.LimitTime < 0 {
-				return errors.New("CN save item state is invalid")
+		for _, lineup := range tab.Lineup {
+			if lineup.LineupID <= 0 || lineup.PictID <= 0 || lineup.LineupName == "" ||
+				(lineup.PayType != 1 && lineup.PayType != 3) || lineup.PayTypeID != 0 || lineup.Price <= 0 ||
+				lineup.StockNum < 0 || lineup.StockRemain < 0 || lineup.StockType != 0 ||
+				lineup.AppearEnd != -1 || lineup.BuyNumMax <= 0 || len(lineup.Interiors) == 0 {
+				return errors.New("CN save item shop lineup is invalid")
 			}
-			if _, exists := seenItems[item.ItemID]; exists {
-				return fmt.Errorf("CN save item ID %d is duplicated", item.ItemID)
+			if lineup.Hidden && !validHiddenItemShopLineup(lineup) {
+				return errors.New("CN save hidden item shop lineup is invalid")
 			}
-			seenItems[item.ItemID] = struct{}{}
-		}
-		seenLineups := make(map[int]struct{})
-		for tabIndex, tab := range save.ItemShopTabs {
-			if tab.TabType != tabIndex || tab.Lineup == nil {
-				return errors.New("CN save item shop tab shape is invalid")
+			if _, exists := seenLineups[lineup.LineupID]; exists {
+				return fmt.Errorf("CN save item shop lineup ID %d is duplicated", lineup.LineupID)
 			}
-			for _, lineup := range tab.Lineup {
-				if lineup.LineupID <= 0 || lineup.PictID <= 0 || lineup.LineupName == "" ||
-					(lineup.PayType != 1 && lineup.PayType != 3) || lineup.PayTypeID != 0 || lineup.Price <= 0 ||
-					lineup.StockNum < 0 || lineup.StockRemain < 0 || lineup.StockType != 0 ||
-					lineup.AppearEnd != -1 || lineup.BuyNumMax <= 0 || len(lineup.Interiors) == 0 {
-					return errors.New("CN save item shop lineup is invalid")
-				}
-				if lineup.Hidden && !validHiddenItemShopLineup(lineup) {
-					return errors.New("CN save hidden item shop lineup is invalid")
-				}
-				if _, exists := seenLineups[lineup.LineupID]; exists {
-					return fmt.Errorf("CN save item shop lineup ID %d is duplicated", lineup.LineupID)
-				}
-				seenLineups[lineup.LineupID] = struct{}{}
-				for _, interior := range lineup.Interiors {
-					if interior.BuyType != 1 || interior.BuyTypeID <= 0 || interior.Num <= 0 {
-						return errors.New("CN save item shop interior is invalid")
-					}
+			seenLineups[lineup.LineupID] = struct{}{}
+			for _, interior := range lineup.Interiors {
+				if interior.BuyType != 1 || interior.BuyTypeID <= 0 || interior.Num <= 0 {
+					return errors.New("CN save item shop interior is invalid")
 				}
 			}
 		}
 	}
-	if save.GachaConfigVersion < 0 {
-		return errors.New("CN save gacha config version must not be negative")
+
+	if len(save.Gachas) == 0 {
+		return errors.New("CN save gacha configuration is incomplete")
 	}
-	if save.GachaConfigVersion >= gachaConfigVersion {
-		if len(save.Gachas) == 0 {
-			return errors.New("CN save gacha configuration is incomplete")
+	seenGachas := make(map[int]gamestate.GachaProfile, len(save.Gachas))
+	for _, gacha := range save.Gachas {
+		if gacha.GachaID <= 0 || gacha.Name == "" || gacha.BuyMessage == "" ||
+			gacha.CategoryNum <= 0 || gacha.CategoryPictID <= 0 || gacha.OrderNum < 0 ||
+			gacha.GroupID <= 0 ||
+			(gacha.PayType != 2 && gacha.PayType != 3 && gacha.PayType != 4 && gacha.PayType != 6) ||
+			(gacha.PayType == 4 && gacha.PayTypeID <= 0) ||
+			(gacha.PayType != 4 && gacha.PayTypeID != 0) ||
+			gacha.Price <= 0 || gacha.CardNum <= 0 ||
+			gacha.CardNumMax < gacha.CardNum || gacha.EndTime <= 0 ||
+			gacha.UserSelectMax < 0 || gacha.UserSelectMax > len(gacha.CardIDs) ||
+			gacha.PlayCount < 0 || (len(gacha.CardIDs) == 0 && len(gacha.RewardPool) == 0) ||
+			len(gacha.CardWeights) != len(gacha.CardIDs) ||
+			!validGachaResultPolicy(gacha) {
+			return fmt.Errorf("CN save gacha %d profile is invalid (arthur_type=%d)", gacha.GachaID, gacha.ArthurType)
 		}
-		seenGachas := make(map[int]gamestate.GachaProfile, len(save.Gachas))
-		for _, gacha := range save.Gachas {
-			if gacha.GachaID <= 0 || gacha.Name == "" || gacha.BuyMessage == "" ||
-				gacha.CategoryNum <= 0 || gacha.CategoryPictID <= 0 || gacha.OrderNum < 0 ||
-				gacha.GroupID <= 0 ||
-				(gacha.PayType != 2 && gacha.PayType != 3 && gacha.PayType != 4 && gacha.PayType != 6) ||
-				(gacha.PayType == 4 && gacha.PayTypeID <= 0) ||
-				(gacha.PayType != 4 && gacha.PayTypeID != 0) ||
-				gacha.Price <= 0 || gacha.CardNum <= 0 ||
-				gacha.CardNumMax < gacha.CardNum || gacha.EndTime <= 0 ||
-				gacha.UserSelectMax < 0 || gacha.UserSelectMax > len(gacha.CardIDs) ||
-				gacha.PlayCount < 0 || (len(gacha.CardIDs) == 0 && len(gacha.RewardPool) == 0) ||
-				len(gacha.CardWeights) != len(gacha.CardIDs) ||
-				!validGachaResultPolicy(gacha) {
-				return fmt.Errorf("CN save gacha %d profile is invalid (arthur_type=%d)", gacha.GachaID, gacha.ArthurType)
+		if err := gamestate.ValidateGachaRules(gacha); err != nil {
+			return err
+		}
+		if !validGachaBannerKey(gacha.BannerKey) ||
+			!validGachaPublicationKey(gacha.PublicationKey) ||
+			(gacha.PublicationKey != "" && gacha.PublicationKey != "operator" && gacha.BannerKey == "") {
+			return errors.New("CN save gacha banner policy is invalid")
+		}
+		if gacha.DailyFirstFree {
+			if gacha.PayType != 2 || gacha.GachaType != 1 {
+				return errors.New("CN save daily-first-free gacha policy is invalid")
 			}
-			if err := gamestate.ValidateGachaRules(gacha); err != nil {
+		}
+		if _, exists := seenGachas[gacha.GachaID]; exists {
+			return fmt.Errorf("CN save gacha ID %d is duplicated", gacha.GachaID)
+		}
+		seenGachas[gacha.GachaID] = gacha
+		seenCards := make(map[int]struct{}, len(gacha.CardIDs))
+		for index, cardID := range gacha.CardIDs {
+			if cardID <= 0 {
+				return errors.New("CN save gacha card ID is invalid")
+			}
+			if gacha.CardWeights[index] <= 0 {
+				return errors.New("CN save gacha card weight is invalid")
+			}
+			if _, exists := seenCards[cardID]; exists {
+				return fmt.Errorf("CN save gacha %d repeats card ID %d", gacha.GachaID, cardID)
+			}
+			seenCards[cardID] = struct{}{}
+		}
+	}
+	seenSelections := make(map[int]struct{}, len(save.GachaSelections))
+	for _, selection := range save.GachaSelections {
+		gacha, exists := seenGachas[selection.GachaID]
+		if !exists && selection.GachaID < gamestate.OperatorGachaFirstID {
+			return fmt.Errorf("CN save gacha selection %d has no profile", selection.GachaID)
+		}
+		if _, duplicate := seenSelections[selection.GachaID]; duplicate {
+			return fmt.Errorf("CN save gacha selection %d is duplicated", selection.GachaID)
+		}
+		if exists {
+			if err := validateGachaSelection(gacha, selection.Rewards); err != nil {
 				return err
 			}
-			if !validGachaBannerKey(gacha.BannerKey) ||
-				!validGachaPublicationKey(gacha.PublicationKey) ||
-				(gacha.PublicationKey != "" && gacha.PublicationKey != "operator" && gacha.BannerKey == "") {
-				return errors.New("CN save gacha banner policy is invalid")
-			}
-			if gacha.DailyFirstFree {
-				if gacha.PayType != 2 || gacha.GachaType != 1 {
-					return errors.New("CN save daily-first-free gacha policy is invalid")
-				}
-			}
-			if _, exists := seenGachas[gacha.GachaID]; exists {
-				return fmt.Errorf("CN save gacha ID %d is duplicated", gacha.GachaID)
-			}
-			seenGachas[gacha.GachaID] = gacha
-			seenCards := make(map[int]struct{}, len(gacha.CardIDs))
-			for index, cardID := range gacha.CardIDs {
-				if cardID <= 0 {
-					return errors.New("CN save gacha card ID is invalid")
-				}
-				if gacha.CardWeights[index] <= 0 {
-					return errors.New("CN save gacha card weight is invalid")
-				}
-				if _, exists := seenCards[cardID]; exists {
-					return fmt.Errorf("CN save gacha %d repeats card ID %d", gacha.GachaID, cardID)
-				}
-				seenCards[cardID] = struct{}{}
-			}
 		}
-		seenSelections := make(map[int]struct{}, len(save.GachaSelections))
-		for _, selection := range save.GachaSelections {
-			gacha, exists := seenGachas[selection.GachaID]
-			if !exists && selection.GachaID < gamestate.OperatorGachaFirstID {
-				return fmt.Errorf("CN save gacha selection %d has no profile", selection.GachaID)
-			}
-			if _, duplicate := seenSelections[selection.GachaID]; duplicate {
-				return fmt.Errorf("CN save gacha selection %d is duplicated", selection.GachaID)
-			}
-			if exists {
-				if err := validateGachaSelection(gacha, selection.Rewards); err != nil {
-					return err
-				}
-			}
-			seenSelections[selection.GachaID] = struct{}{}
-		}
-		seenDailyClaims := make(map[int]struct{}, len(save.GachaDailyClaims))
-		for _, claim := range save.GachaDailyClaims {
-			_, exists := seenGachas[claim.GachaID]
-			if (!exists && claim.GachaID < gamestate.OperatorGachaFirstID) || claim.PlayCount < 0 || claim.PlayCount > math.MaxInt32 ||
-				!masterdata.LoginBonusDayPattern.MatchString(claim.Day) {
-				return errors.New("CN save gacha daily claim is invalid")
-			}
-			if _, duplicate := seenDailyClaims[claim.GachaID]; duplicate {
-				return fmt.Errorf("CN save gacha daily claim %d is duplicated", claim.GachaID)
-			}
-			seenDailyClaims[claim.GachaID] = struct{}{}
-		}
+		seenSelections[selection.GachaID] = struct{}{}
 	}
-	if save.FeatureUnlockConfigVersion < 0 {
-		return errors.New("CN save feature unlock config version must not be negative")
+	seenDailyClaims := make(map[int]struct{}, len(save.GachaDailyClaims))
+	for _, claim := range save.GachaDailyClaims {
+		_, exists := seenGachas[claim.GachaID]
+		if (!exists && claim.GachaID < gamestate.OperatorGachaFirstID) || claim.PlayCount < 0 || claim.PlayCount > math.MaxInt32 ||
+			!masterdata.LoginBonusDayPattern.MatchString(claim.Day) {
+			return errors.New("CN save gacha daily claim is invalid")
+		}
+		if _, duplicate := seenDailyClaims[claim.GachaID]; duplicate {
+			return fmt.Errorf("CN save gacha daily claim %d is duplicated", claim.GachaID)
+		}
+		seenDailyClaims[claim.GachaID] = struct{}{}
 	}
+
 	if save.Onboarding.ConfigVersion < 0 || save.Onboarding.ConfigVersion > masterdata.OnboardingConfigVersion ||
 		save.Onboarding.Step < 0 ||
 		(save.Onboarding.ConfigVersion == 0 && (save.Onboarding.Step != 0 ||
 			save.Onboarding.CurrentAnnounced || save.Onboarding.PendingClearQuestID != 0)) ||
-		(save.Onboarding.ConfigVersion == masterdata.LegacyOnboardingConfigVersion && save.Onboarding.Step > 7) ||
 		(save.Onboarding.ConfigVersion == masterdata.OnboardingConfigVersion &&
 			save.Onboarding.Step > masterdata.OnboardingStepCount) ||
 		(save.Onboarding.ConfigVersion > 0 && save.Onboarding.PendingClearQuestID != 0 &&
@@ -767,16 +513,10 @@ func ValidateSave(save saveState) error {
 		}
 		seenPopupReadIDs[popupID] = struct{}{}
 	}
-	if save.ProfileConfigVersion < 0 {
-		return errors.New("CN save profile config version must not be negative")
-	}
-	if save.BattleLoadoutConfigVersion < 0 {
-		return errors.New("CN save battle loadout config version must not be negative")
-	}
 	seenBattleLoadoutCardUniqueIDs := make(map[int64]struct{}, len(save.BattleLoadoutCardUniqueIDs))
 	for _, uniqueID := range save.BattleLoadoutCardUniqueIDs {
-		if save.BattleLoadoutConfigVersion == 0 || uniqueID <= 0 {
-			return errors.New("CN save battle loadout migration metadata is invalid")
+		if uniqueID <= 0 {
+			return errors.New("CN save battle loadout card ID is invalid")
 		}
 		if _, exists := seenBattleLoadoutCardUniqueIDs[uniqueID]; exists {
 			return fmt.Errorf("CN save battle loadout card unique ID %d is duplicated", uniqueID)
@@ -793,69 +533,60 @@ func ValidateSave(save saveState) error {
 		}
 		seenFeatureIDs[featureID] = struct{}{}
 	}
-	if save.StageQuestConfigVersion < 0 {
-		return errors.New("CN save stage quest config version must not be negative")
+	if err := masterdata.ValidateStageQuestConfiguration(save.MainQuest); err != nil {
+		return err
 	}
-	if save.StageQuestConfigVersion > 0 {
-		if err := masterdata.ValidateStageQuestConfiguration(save.MainQuest); err != nil {
+	seenStageQuestAreas := make(map[int]struct{}, len(save.StageQuestAreas))
+	for _, area := range save.StageQuestAreas {
+		if err := masterdata.ValidateStageQuestConfiguration(area); err != nil {
 			return err
 		}
-		seenStageQuestAreas := make(map[int]struct{}, len(save.StageQuestAreas))
-		for _, area := range save.StageQuestAreas {
-			if err := masterdata.ValidateStageQuestConfiguration(area); err != nil {
-				return err
-			}
-			areaID, err := masterdata.StageQuestAreaID(area)
-			if err != nil {
-				return err
-			}
-			if _, duplicate := seenStageQuestAreas[areaID]; duplicate {
-				return fmt.Errorf("duplicate CN stage quest area ID %d", areaID)
-			}
-			seenStageQuestAreas[areaID] = struct{}{}
+		areaID, err := masterdata.StageQuestAreaID(area)
+		if err != nil {
+			return err
 		}
-		if len(seenStageQuestAreas) > 0 {
-			defaultAreaID, err := masterdata.StageQuestAreaID(save.MainQuest)
-			if err != nil {
-				return err
-			}
-			if _, exists := seenStageQuestAreas[defaultAreaID]; !exists {
-				return errors.New("CN save default stage quest is absent from stage_quest_areas")
-			}
+		if _, duplicate := seenStageQuestAreas[areaID]; duplicate {
+			return fmt.Errorf("duplicate CN stage quest area ID %d", areaID)
+		}
+		seenStageQuestAreas[areaID] = struct{}{}
+	}
+	if len(seenStageQuestAreas) > 0 {
+		defaultAreaID, err := masterdata.StageQuestAreaID(save.MainQuest)
+		if err != nil {
+			return err
+		}
+		if _, exists := seenStageQuestAreas[defaultAreaID]; !exists {
+			return errors.New("CN save default stage quest is absent from stage_quest_areas")
 		}
 	}
-	if save.TeamBattleConfigVersion < 0 {
-		return errors.New("CN save team battle config version must not be negative")
-	}
-	if save.TeamBattleConfigVersion > 0 &&
-		(len(save.TeamBattleSolo) == 0 || len(save.TeamBattleReplays) == 0) {
+
+	if len(save.TeamBattleSolo) == 0 || len(save.TeamBattleReplays) == 0 {
 		return errors.New("CN save team battle configuration is incomplete")
 	}
-	if save.TeamBattleConfigVersion >= teamBattleRewardConfigVersion {
-		if len(save.TeamBattleRewards) == 0 {
-			return errors.New("CN save team battle reward configuration is incomplete")
+	if len(save.TeamBattleRewards) == 0 {
+		return errors.New("CN save team battle reward configuration is incomplete")
+	}
+	seenProfiles := make(map[[3]int]struct{}, len(save.TeamBattleRewards))
+	for _, profile := range save.TeamBattleRewards {
+		key := [3]int{profile.BossID, profile.StageQuestAreaID, profile.StageQuestStageID}
+		if profile.BossID <= 0 || profile.StageQuestAreaID < 0 || profile.StageQuestStageID < 0 ||
+			(profile.StageQuestAreaID == 0) != (profile.StageQuestStageID == 0) ||
+			len(profile.ResultRewards) == 0 {
+			return errors.New("CN save team battle reward profile is invalid")
 		}
-		seenProfiles := make(map[[3]int]struct{}, len(save.TeamBattleRewards))
-		for _, profile := range save.TeamBattleRewards {
-			key := [3]int{profile.BossID, profile.StageQuestAreaID, profile.StageQuestStageID}
-			if profile.BossID <= 0 || profile.StageQuestAreaID < 0 || profile.StageQuestStageID < 0 ||
-				(profile.StageQuestAreaID == 0) != (profile.StageQuestStageID == 0) ||
-				len(profile.ResultRewards) == 0 {
-				return errors.New("CN save team battle reward profile is invalid")
-			}
-			if _, duplicate := seenProfiles[key]; duplicate {
-				return errors.New("CN save team battle reward profiles must be unique")
-			}
-			seenProfiles[key] = struct{}{}
-			for _, rewards := range [][]gamestate.Reward{profile.ResultRewards, profile.FirstClearRewards} {
-				for _, reward := range rewards {
-					if !masterdata.ValidPersistedRewardShape(reward) {
-						return errors.New("CN save team battle reward is invalid")
-					}
+		if _, duplicate := seenProfiles[key]; duplicate {
+			return errors.New("CN save team battle reward profiles must be unique")
+		}
+		seenProfiles[key] = struct{}{}
+		for _, rewards := range [][]gamestate.Reward{profile.ResultRewards, profile.FirstClearRewards} {
+			for _, reward := range rewards {
+				if !masterdata.ValidPersistedRewardShape(reward) {
+					return errors.New("CN save team battle reward is invalid")
 				}
 			}
 		}
 	}
+
 	for mode, groupIDs := range map[string][]int{
 		"solo":  save.TeamBattleSchedule.SoloPushGroupIDs,
 		"multi": save.TeamBattleSchedule.MultiPushGroupIDs,
@@ -954,10 +685,6 @@ func ValidateSave(save saveState) error {
 	}
 	if err := validateActiveTeamBattle(save.ActiveTeamBattle); err != nil {
 		return err
-	}
-	if save.TowerQuestConfigVersion < 0 ||
-		(save.TowerQuestConfigVersion > 0 && len(save.TowerQuestProgress) == 0) {
-		return errors.New("CN save tower quest configuration is invalid")
 	}
 	seenTowerIDs := make(map[int]struct{}, len(save.TowerQuestProgress))
 	for _, progress := range save.TowerQuestProgress {
@@ -1062,18 +789,11 @@ func SaveFromState(state gamestate.State) saveState {
 		SchemaVersion:                  state.SchemaVersion,
 		User:                           state.User,
 		PlayerProgressionConfigVersion: state.PlayerProgressionConfigVersion,
-		CardProgressionConfigVersion:   state.CardProgressionConfigVersion,
-		FeatureUnlockConfigVersion:     state.FeatureUnlockConfigVersion,
 		Onboarding:                     state.Onboarding,
-		ProfileConfigVersion:           state.ProfileConfigVersion,
-		CurrencyConfigVersion:          state.CurrencyConfigVersion,
-		BattleLoadoutConfigVersion:     state.BattleLoadoutConfigVersion,
 		BattleLoadoutCardUniqueIDs:     append([]int64(nil), state.BattleLoadoutCardUniqueIDs...),
-		BattlePointConfigVersion:       state.BattlePointConfigVersion,
 		BattlePoint:                    state.BattlePoint,
 		PVPConfigVersion:               state.PVPConfigVersion,
 		PVP:                            cloneReleasePVPState(state.PVP),
-		SphereConfigVersion:            state.SphereConfigVersion,
 		Spheres:                        append([]gamestate.Sphere{}, state.Spheres...),
 		Cards:                          state.Cards,
 		ContainerCards:                 state.ContainerCards,
@@ -1083,21 +803,17 @@ func SaveFromState(state gamestate.State) saveState {
 		AvatarConfigVersion:            state.AvatarConfigVersion,
 		AvatarParts:                    append([]int(nil), state.AvatarParts...),
 		Buddy:                          state.Buddy,
-		BuddyConfigVersion:             state.BuddyConfigVersion,
 		Buddies:                        append([]gamestate.Buddy{}, state.Buddies...),
 		Profiles:                       state.Profiles,
 		Friends:                        state.Friends,
 		Stamps:                         state.Stamps,
 		Honors:                         state.Honors,
 		Story:                          state.Story,
-		ExploreConfigVersion:           state.ExploreConfigVersion,
 		Explore:                        state.Explore,
 		Engagement:                     state.Engagement,
 		MissionDefinitions:             state.MissionDefinitions,
 		Options:                        state.Options,
 		LoginBonus:                     state.LoginBonus,
-		LocalAccountConfigVersion:      state.LocalAccountConfigVersion,
-		ItemShopConfigVersion:          state.ItemShopConfigVersion,
 		Items:                          state.Items,
 		ItemShopTabs:                   state.ItemShopTabs,
 		EventShopPurchases:             append([]gamestate.EventShopPurchase(nil), state.EventShopPurchases...),
@@ -1105,19 +821,15 @@ func SaveFromState(state gamestate.State) saveState {
 		TeamBattleScores:               state.TeamBattleScores,
 		TeamBattleSoloScores:           state.TeamBattleSoloScores,
 		LocalShop:                      state.LocalShop,
-		GachaConfigVersion:             state.GachaConfigVersion,
 		Gachas:                         state.Gachas,
 		GachaSelections:                cloneGachaSelections(state.GachaSelections),
 		GachaDailyClaims:               append([]gamestate.GachaDailyClaim(nil), state.GachaDailyClaims...),
 		FriendPointInboxCursor:         state.FriendPointInboxCursor,
 		CardActions:                    cardActions,
 		CardDevelopment:                cloneCardDevelopmentState(state.CardDevelopment),
-		SupportDeckConfigVersion:       state.SupportDeckConfigVersion,
 		SupportDeck:                    cloneSupportDeckState(state.SupportDeck),
-		StageQuestConfigVersion:        state.StageQuestConfigVersion,
 		MainQuest:                      state.MainQuest,
 		StageQuestAreas:                cloneRawMessages(state.StageQuestAreas),
-		TeamBattleConfigVersion:        state.TeamBattleConfigVersion,
 		TeamBattleSolo:                 state.TeamBattleSolo,
 		TeamBattleReplays:              state.TeamBattleReplays,
 		TeamBattleRewards:              state.TeamBattleRewards,
@@ -1129,7 +841,6 @@ func SaveFromState(state gamestate.State) saveState {
 		ExploreResultReceipt:           cloneExploreResultReceipt(state.ExploreResultReceipt),
 		PVPResultReceipts:              clonePVPResultReceipts(state.PVPResultReceipts),
 		ActiveTeamBattle:               cloneActiveTeamBattleState(state.ActiveTeamBattle),
-		TowerQuestConfigVersion:        state.TowerQuestConfigVersion,
 		TowerQuestProgress:             cloneTowerQuestProgressState(state.TowerQuestProgress),
 		Costume:                        state.Costume,
 	}

@@ -15,14 +15,6 @@ type CardPresentation struct {
 	Name       string
 	PictureID  int
 	LimitCount int
-	Modern     bool
-}
-
-func cardPresentationColumns(width int) (picture, limit int) {
-	if width >= 113 {
-		return 50, 34
-	}
-	return 36, 22
 }
 
 func ParseCardPresentation(row []string) (CardPresentation, error) {
@@ -30,7 +22,6 @@ func ParseCardPresentation(row []string) (CardPresentation, error) {
 	if err != nil {
 		return CardPresentation{}, err
 	}
-	pictureColumn, limitColumn := cardPresentationColumns(len(row))
 	integer := func(column int, name string) (int, error) {
 		text := strings.TrimSpace(Field(row, column))
 		if text == "" {
@@ -42,26 +33,25 @@ func ParseCardPresentation(row []string) (CardPresentation, error) {
 		}
 		return value, nil
 	}
-	picture, err := integer(pictureColumn, "PictID")
+	picture, err := integer(50, "PictID")
 	if err != nil {
 		return CardPresentation{}, err
 	}
-	limit, err := integer(limitColumn, "limit count")
+	limit, err := integer(34, "limit count")
 	if err != nil {
 		return CardPresentation{}, err
 	}
 	return CardPresentation{ID: card.ID, Prefix: Field(row, 4), Name: strings.TrimSpace(Field(row, 5)),
-		PictureID: picture, LimitCount: limit, Modern: len(row) >= 113}, nil
+		PictureID: picture, LimitCount: limit}, nil
 }
 
-// Headerless JP data starts with a real numeric row. A legacy named header,
-// when present, still has to declare the picture column in the expected slot.
+// A named header, when present, declares the picture column in the same slot
+// as headerless data rows.
 func ValidateCardPresentationHeader(row []string) error {
 	if len(row) == 0 || strings.TrimPrefix(row[0], "\ufeff") != "#ID" {
 		return nil
 	}
-	picture, _ := cardPresentationColumns(len(row))
-	if Field(row, picture) != "PictID" {
+	if Field(row, 50) != "PictID" {
 		return fmt.Errorf("card PictID header differs")
 	}
 	return nil

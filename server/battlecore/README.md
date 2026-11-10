@@ -12,3 +12,7 @@ The caller serializes operations for each battle and handles deadlines and rewar
 `battlemodel` defines shared values. `battlecontent` parses combat data, and
 `battlecodec` formats client messages. Core tests can run locally with
 `go test ./battlecore` from the `server` directory.
+
+Card, enemy, enemy-level and gauge readers consume the unified table layout.
+Room rewards use one per-wave drop plan; settlement consumes the drops actually
+released by the engine. Account state and reward persistence stay in the service.

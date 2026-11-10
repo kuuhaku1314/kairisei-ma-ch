@@ -29,18 +29,11 @@ type accountSnapshot struct {
 	LocalShop                      gamestate.LocalShopState                  `json:"local_shop,omitempty"`
 	User                           gamestate.User                            `json:"user"`
 	PlayerProgressionConfigVersion int                                       `json:"player_progression_config_version"`
-	CardProgressionConfigVersion   int                                       `json:"card_progression_config_version"`
-	FeatureUnlockConfigVersion     int                                       `json:"feature_unlock_config_version"`
 	Onboarding                     gamestate.OnboardingState                 `json:"onboarding"`
-	ProfileConfigVersion           int                                       `json:"profile_config_version"`
-	CurrencyConfigVersion          int                                       `json:"currency_config_version"`
-	BattleLoadoutConfigVersion     int                                       `json:"battle_loadout_config_version"`
 	BattleLoadoutCardUniqueIDs     []int64                                   `json:"battle_loadout_card_unique_ids,omitempty"`
-	BattlePointConfigVersion       int                                       `json:"battle_point_config_version"`
 	BattlePoint                    gamestate.BattlePointState                `json:"battle_point"`
 	PVPConfigVersion               int                                       `json:"pvp_config_version"`
 	PVP                            gamestate.PVPPlayerState                  `json:"pvp"`
-	SphereConfigVersion            int                                       `json:"sphere_config_version"`
 	Spheres                        []gamestate.Sphere                        `json:"spheres"`
 	Decks                          []gamestate.Deck                          `json:"decks"`
 	Avatars                        []gamestate.Avatar                        `json:"avatars"`
@@ -48,23 +41,19 @@ type accountSnapshot struct {
 	AvatarParts                    []int                                     `json:"avatar_parts,omitempty"`
 	Costume                        json.RawMessage                           `json:"costume,omitempty"`
 	Buddy                          gamestate.Buddy                           `json:"buddy"`
-	BuddyConfigVersion             int                                       `json:"buddy_config_version,omitempty"`
 	Buddies                        []gamestate.Buddy                         `json:"buddies,omitempty"`
 	Friends                        gamestate.FriendCollectionState           `json:"friends"`
 	Stamps                         gamestate.StampCollectionState            `json:"stamps"`
 	Honors                         gamestate.HonorCollectionState            `json:"honors"`
-	ExploreConfigVersion           int                                       `json:"explore_config_version"`
 	Engagement                     gamestate.EngagementState                 `json:"engagement"`
 	Options                        gamestate.OptionState                     `json:"options"`
 	LoginBonus                     gamestate.LoginBonusState                 `json:"login_bonus"`
-	LocalAccountConfigVersion      int                                       `json:"local_account_config_version"`
 	EventShopPurchases             []gamestate.EventShopPurchase             `json:"event_shop_purchases,omitempty"`
 	TradeShopPurchases             []gamestate.TradeShopPurchase             `json:"trade_shop_purchases,omitempty"`
 	GachaSelections                []gamestate.GachaSelection                `json:"gacha_selections,omitempty"`
 	GachaDailyClaims               []gamestate.GachaDailyClaim               `json:"gacha_daily_claims,omitempty"`
 	FriendPointInboxCursor         int64                                     `json:"friend_point_inbox_cursor,omitempty"`
 	CardDevelopment                gamestate.CardDevelopmentState            `json:"card_development"`
-	SupportDeckConfigVersion       int                                       `json:"support_deck_config_version,omitempty"`
 	SupportDeck                    gamestate.SupportDeckState                `json:"support_deck"`
 	TeamBattleSchedule             gamestate.TeamBattleScheduleState         `json:"team_battle_schedule,omitempty"`
 	TeamBattleResultReceipts       []gamestate.TeamBattleResultReceipt       `json:"team_battle_result_receipts,omitempty"`
@@ -104,18 +93,11 @@ func accountSnapshotFromState(state gamestate.State) (accountSnapshot, error) {
 		LocalShop:                      state.LocalShop,
 		User:                           state.User,
 		PlayerProgressionConfigVersion: state.PlayerProgressionConfigVersion,
-		CardProgressionConfigVersion:   state.CardProgressionConfigVersion,
-		FeatureUnlockConfigVersion:     state.FeatureUnlockConfigVersion,
 		Onboarding:                     state.Onboarding,
-		ProfileConfigVersion:           state.ProfileConfigVersion,
-		CurrencyConfigVersion:          state.CurrencyConfigVersion,
-		BattleLoadoutConfigVersion:     state.BattleLoadoutConfigVersion,
 		BattleLoadoutCardUniqueIDs:     state.BattleLoadoutCardUniqueIDs,
-		BattlePointConfigVersion:       state.BattlePointConfigVersion,
 		BattlePoint:                    state.BattlePoint,
 		PVPConfigVersion:               state.PVPConfigVersion,
 		PVP:                            state.PVP,
-		SphereConfigVersion:            state.SphereConfigVersion,
 		Spheres:                        state.Spheres,
 		Decks:                          state.Decks,
 		Avatars:                        state.Avatars,
@@ -123,23 +105,19 @@ func accountSnapshotFromState(state gamestate.State) (accountSnapshot, error) {
 		AvatarParts:                    state.AvatarParts,
 		Costume:                        state.Costume,
 		Buddy:                          state.Buddy,
-		BuddyConfigVersion:             state.BuddyConfigVersion,
 		Buddies:                        state.Buddies,
 		Friends:                        gamestate.FriendCollectionState{Users: []gamestate.Friend{}},
 		Stamps:                         state.Stamps,
 		Honors:                         state.Honors,
-		ExploreConfigVersion:           state.ExploreConfigVersion,
 		Engagement:                     state.Engagement,
 		Options:                        state.Options,
 		LoginBonus:                     state.LoginBonus,
-		LocalAccountConfigVersion:      state.LocalAccountConfigVersion,
 		EventShopPurchases:             state.EventShopPurchases,
 		TradeShopPurchases:             state.TradeShopPurchases,
 		GachaSelections:                state.GachaSelections,
 		GachaDailyClaims:               state.GachaDailyClaims,
 		FriendPointInboxCursor:         state.FriendPointInboxCursor,
 		CardDevelopment:                state.CardDevelopment,
-		SupportDeckConfigVersion:       state.SupportDeckConfigVersion,
 		SupportDeck:                    state.SupportDeck,
 		TeamBattleSchedule:             state.TeamBattleSchedule,
 		TeamBattleResultReceipts:       state.TeamBattleResultReceipts,
@@ -168,18 +146,11 @@ func (snapshot accountSnapshot) applyAccountData(state *gamestate.State) {
 	state.LocalShop = snapshot.LocalShop
 	state.User = snapshot.User
 	state.PlayerProgressionConfigVersion = snapshot.PlayerProgressionConfigVersion
-	state.CardProgressionConfigVersion = snapshot.CardProgressionConfigVersion
-	state.FeatureUnlockConfigVersion = snapshot.FeatureUnlockConfigVersion
 	state.Onboarding = snapshot.Onboarding
-	state.ProfileConfigVersion = snapshot.ProfileConfigVersion
-	state.CurrencyConfigVersion = snapshot.CurrencyConfigVersion
-	state.BattleLoadoutConfigVersion = snapshot.BattleLoadoutConfigVersion
 	state.BattleLoadoutCardUniqueIDs = snapshot.BattleLoadoutCardUniqueIDs
-	state.BattlePointConfigVersion = snapshot.BattlePointConfigVersion
 	state.BattlePoint = snapshot.BattlePoint
 	state.PVPConfigVersion = snapshot.PVPConfigVersion
 	state.PVP = snapshot.PVP
-	state.SphereConfigVersion = snapshot.SphereConfigVersion
 	state.Spheres = snapshot.Spheres
 	state.Decks = snapshot.Decks
 	state.Avatars = snapshot.Avatars
@@ -189,23 +160,19 @@ func (snapshot accountSnapshot) applyAccountData(state *gamestate.State) {
 		state.Costume = snapshot.Costume
 	}
 	state.Buddy = snapshot.Buddy
-	state.BuddyConfigVersion = snapshot.BuddyConfigVersion
 	state.Buddies = snapshot.Buddies
 	state.Friends = snapshot.Friends
 	state.Stamps = snapshot.Stamps
 	state.Honors = snapshot.Honors
-	state.ExploreConfigVersion = snapshot.ExploreConfigVersion
 	state.Engagement = snapshot.Engagement
 	state.Options = snapshot.Options
 	state.LoginBonus = snapshot.LoginBonus
-	state.LocalAccountConfigVersion = snapshot.LocalAccountConfigVersion
 	state.EventShopPurchases = snapshot.EventShopPurchases
 	state.TradeShopPurchases = snapshot.TradeShopPurchases
 	state.GachaSelections = snapshot.GachaSelections
 	state.GachaDailyClaims = snapshot.GachaDailyClaims
 	state.FriendPointInboxCursor = snapshot.FriendPointInboxCursor
 	state.CardDevelopment = snapshot.CardDevelopment
-	state.SupportDeckConfigVersion = snapshot.SupportDeckConfigVersion
 	state.SupportDeck = snapshot.SupportDeck
 	state.TeamBattleSchedule = snapshot.TeamBattleSchedule
 	state.TeamBattleResultReceipts = snapshot.TeamBattleResultReceipts

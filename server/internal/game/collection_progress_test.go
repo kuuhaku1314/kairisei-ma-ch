@@ -8,7 +8,7 @@ import (
 
 func TestCardRewardRemembersPreviouslyCollectedCard(t *testing.T) {
 	s := &Account{
-		cardProgression:   gamestate.CardProgressionPolicy{ConfigVersion: 1, FusionGoldPerMaterialPerBaseLevel: 1},
+		cardProgression:   gamestate.CardProgressionPolicy{FusionGoldPerMaterialPerBaseLevel: 1},
 		cardCollectionIDs: map[int]struct{}{10: {}},
 		cardTemplates:     map[int]CardInfo{10: {CardID: 10, LevelMax: 1}},
 		cardDefinitions:   map[int]gamestate.Card{10: {CardID: 10, LevelMax: 1, ExperienceTableID: 1, FameMax: 100}},

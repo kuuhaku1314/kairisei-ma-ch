@@ -20,7 +20,7 @@ import (
 func TestMultiplayerResultUsesEveryWaveAndReplaysReceipt(t *testing.T) {
 	const boss = 30010102
 	completed := multiplayer.CompletedBattle{RoomID: 123, BossID: boss, OwnerMemberType: 1,
-		BattleIndex: 5, Progress: 5, DropLedgerVersion: 1, OnlineUserIDs: []int{1001}, CompletedAtUnix: time.Now().Unix(), HostCostPaid: true}
+		BattleIndex: 5, Progress: 5, OnlineUserIDs: []int{1001}, CompletedAtUnix: time.Now().Unix(), HostCostPaid: true}
 	for i := 1; i <= 4; i++ {
 		completed.Members = append(completed.Members, multiplayer.Member{MemberType: i, ArthurType: i, UserID: 1000 + i,
 			LeaderFame: 1, DeckHonorIDs: make([]int, 4)})
@@ -288,7 +288,7 @@ func TestMultiplayerCompletionSeparatesFallbackIDsFromAccountRelationships(t *te
 	drop := gamestate.TeamBattleEnemyDrop{Reward: gamestate.Reward{Type: 4, Num: 21, CardSkillLevels: []int16{}}}
 	profile := gamestate.TeamBattleRewardProfile{BossID: boss, EnemyDrops: []gamestate.TeamBattleEnemyDrop{drop}}
 	completed := multiplayer.CompletedBattle{RoomID: roomID, BossID: boss, OwnerMemberType: 1,
-		EndType: 1, DropLedgerVersion: 1, ReleasedDrops: []gamestate.TeamBattleEnemyDrop{drop},
+		EndType: 1, ReleasedDrops: []gamestate.TeamBattleEnemyDrop{drop},
 		OnlineUserIDs: []int{host, peer}, CompletedAtUnix: time.Now().Unix(), HostCostPaid: true,
 		SettlementPlan: gamestate.TeamBattleSettlementPlan{Profile: profile, EnemyTypes: []int8{0}}}
 	for i, id := range []int{host, 2, peer, 4} {

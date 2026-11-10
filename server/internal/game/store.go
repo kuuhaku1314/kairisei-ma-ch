@@ -322,9 +322,7 @@ func New(state gamestate.State, options ...AccountOption) (*Account, error) {
 			}
 		}
 	}
-	if state.CardProgressionConfigVersion <= 0 ||
-		state.CardProgressionPolicy.ConfigVersion != state.CardProgressionConfigVersion ||
-		state.CardProgressionPolicy.FusionGoldPerMaterialPerBaseLevel <= 0 ||
+	if state.CardProgressionPolicy.FusionGoldPerMaterialPerBaseLevel <= 0 ||
 		len(state.CardExperienceTables) == 0 {
 		return nil, errors.New("card store card progression state is invalid")
 	}
@@ -589,11 +587,7 @@ func New(state gamestate.State, options ...AccountOption) (*Account, error) {
 	for _, inventory := range state.StackCards {
 		template, exists := result.stackCardTemplates[inventory.CardID]
 		if !exists {
-			// Legacy save snapshots predate the separate static template layer.
-			template = inventory
-			template.Num = 0
-			result.stackCardTemplates[inventory.CardID] = template
-			continue
+			return nil, fmt.Errorf("stack-card inventory %d has no template", inventory.CardID)
 		}
 		if inventory.AddExperience != template.AddExperience || inventory.BaseAddPrice != template.BaseAddPrice ||
 			inventory.MaterialType != template.MaterialType {
@@ -796,9 +790,6 @@ func New(state gamestate.State, options ...AccountOption) (*Account, error) {
 		if _, err := time.Parse("2006-01-02", claim.Day); err != nil {
 			return nil, fmt.Errorf("card store gacha daily claim %d has an invalid day", claim.GachaID)
 		}
-		if claim.PlayCount == 0 {
-			claim.PlayCount, claim.FreeClaimed = 1, true
-		}
 		result.gachaDailyClaims[claim.GachaID] = claim
 	}
 	for _, definition := range state.SphereDefinitions {
@@ -809,7 +800,6 @@ func New(state gamestate.State, options ...AccountOption) (*Account, error) {
 	}
 	// Capacity limits new grants, not loading or reducing existing inventory.
 	if result.sphereMax <= 0 ||
-		result.sphereProgression.ConfigVersion <= 0 ||
 		result.sphereProgression.MaterialLevelBonusPermillePerLevel <= 0 ||
 		len(result.sphereDefinitions) == 0 || len(result.sphereExperience) == 0 || len(result.sphereEvoPrices) == 0 {
 		return nil, errors.New("card store requires sphere master and valid inventory capacity")
@@ -836,7 +826,7 @@ func New(state gamestate.State, options ...AccountOption) (*Account, error) {
 		result.buddyDefinitions[definition.BuddyID] = definition
 	}
 	if len(result.buddyDefinitions) == 0 || len(result.buddyExperience) == 0 || len(result.buddyEvoPrices) == 0 ||
-		result.buddyProgression.ConfigVersion <= 0 || result.buddyProgression.MaximumMaterialCount <= 0 ||
+		result.buddyProgression.MaximumMaterialCount <= 0 ||
 		result.buddyMax <= 0 {
 		// An initialized but empty Buddy inventory is valid for a clean account.
 		// Master data and capacity are still mandatory, and every non-empty entry

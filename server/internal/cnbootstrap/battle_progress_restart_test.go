@@ -47,6 +47,8 @@ func TestMultiplayerCompletionCommitsInventoryBeforeResultQuery(t *testing.T) {
 	now := time.Now()
 	completed := multiplayer.CompletedBattle{RoomID: 123, BossID: boss, EndType: 1, OwnerMemberType: 1, HostCostPaid: true,
 		CompletedAtUnix: now.Unix(), OnlineUserIDs: users}
+	completed.EnemyDeadBits = []int{1}
+	completed.ReleasedDrops = []gamestate.TeamBattleEnemyDrop{{Reward: runtime.TeamBattleRewards[0].ResultRewards[0]}}
 	completed.SettlementPlan = gamestate.TeamBattleSettlementPlan{Profile: runtime.TeamBattleRewards[0], EnemyTypes: []int8{0}, FameBonus: runtime.TeamBattleFameBonusPolicy, HostBonus: runtime.TeamBattleHostBonusPolicy}
 	for i := 1; i <= 4; i++ {
 		id := 1900000000 + i

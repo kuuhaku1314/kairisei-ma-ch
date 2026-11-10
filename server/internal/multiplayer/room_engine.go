@@ -11,7 +11,7 @@ func newBattleEngine(catalog *CombatCatalog, spec RoomSpec, members []Member) (*
 		HoldMax: spec.HoldMax, BurstGaugeInitial: spec.BurstGaugeInitial,
 		Seed: uint32(spec.Seed), ContinueAllowed: spec.ContinueAllowed,
 		AwakeTakeover: spec.AwakeTakeover,
-		Drops:         spec.Drops,
+		Drops:         roomSpecWaveDrops(spec, 0),
 	}
 	if spec.ScorePolicy != nil {
 		config.EndTurn = spec.ScorePolicy.EndTurn

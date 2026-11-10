@@ -1,7 +1,6 @@
 package masterdata_test
 
 import (
-	"bytes"
 	"encoding/json"
 	"os"
 	"slices"
@@ -29,13 +28,10 @@ func TestUserDerivedMOCNavigatorsUseNativeCatalogWithoutGrantingOwnership(t *tes
 			"navi_id": id, "name": folder, "pict_id": 50000000 + id*1000,
 			"item_pict_id": 92000000 + id, "presentation_kind": 0,
 			"live2d_folder": folder, "live2d_bundle": "live2d/live2d_" + folder + ".dat",
-			"live2d_source_state": "PRESENT_IN_USER_DERIVED_OVERLAY", "voice_id": id, "client_published": true,
+			"voice_id": id, "client_published": true,
 		})
 	}
 	document["navigators"] = rows
-	document["publication_policy"].(map[string]any)["evidence"] = "INFERRED"
-	summary := document["summary"].(map[string]any)
-	summary["imported_navigator_rows"], summary["client_published"] = 3, len(rows)
 	write := func() {
 		t.Helper()
 		data, err := json.Marshal(document)
@@ -50,10 +46,6 @@ func TestUserDerivedMOCNavigatorsUseNativeCatalogWithoutGrantingOwnership(t *tes
 	master, err := masterdata.LoadNaviRuntimeMaster(path)
 	if err != nil {
 		t.Fatal(err)
-	}
-	published, err := json.Marshal(master)
-	if err != nil || bytes.Contains(published, []byte(`"evidence"`)) || bytes.Contains(published, []byte(`"live2d_source_state"`)) {
-		t.Fatalf("runtime navigator data retained build annotations: %s, %v", published, err)
 	}
 	state := gamestate.State{}
 	state.User.NaviUnlockFlag, state.User.SelectableNaviIDs = 1, []int8{0}
@@ -79,28 +71,13 @@ func TestUserDerivedMOCNavigatorsUseNativeCatalogWithoutGrantingOwnership(t *tes
 			t.Fatalf("accepted invalid navigator master: %s", reason)
 		}
 	}
-	for _, invalid := range []struct {
-		kind   int
-		source string
-	}{
-		{1, "PRESENT_IN_USER_DERIVED_OVERLAY"},
-		{2, "PRESENT_IN_USER_DERIVED_OVERLAY"},
-	} {
-		row["presentation_kind"], row["live2d_source_state"] = invalid.kind, invalid.source
-		reject("presentation/source mismatch")
+	for _, kind := range []int{1, 2} {
+		row["presentation_kind"] = kind
+		reject("unsupported presentation kind")
 	}
-	row["presentation_kind"], row["live2d_source_state"] = 0, "PRESENT_IN_USER_DERIVED_OVERLAY"
-	policy := document["publication_policy"].(map[string]any)
-	policy["evidence"] = "CONFIRMED_CN_OFFICIAL_ASSET_MAP"
-	write()
-	if _, err := masterdata.LoadNaviRuntimeMaster(path); err != nil {
-		t.Fatalf("source annotations must not control navigator publication: %v", err)
-	}
-	policy["evidence"] = "INFERRED"
+	row["presentation_kind"] = 0
 	bundle := row["live2d_bundle"]
 	row["live2d_bundle"] = "live2d/live2d_wrong_owner.dat"
 	reject("bundle owner differs from the navigator folder")
 	row["live2d_bundle"] = bundle
-	summary["client_published"] = len(rows) - 1
-	reject("navigator summary differs from the published rows")
 }

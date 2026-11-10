@@ -3,7 +3,6 @@ package battlecontent
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -125,45 +124,32 @@ func ParseEnemyGaugeReactions(text string) (map[int][]battlemodel.EnemyGaugeReac
 	return groups, err
 }
 
-func readEnemyGaugeFile(root string) (string, bool, error) {
-	_, err := os.Stat(filepath.Join(root, EnemyGaugeTable))
-	if os.IsNotExist(err) {
-		return "", false, nil
-	}
-	if err != nil {
-		return "", false, err
-	}
+func readEnemyGaugeFile(root string) (string, error) {
 	path, err := resolveCombatFileWithin(root, EnemyGaugeTable)
 	if err != nil {
-		return "", false, err
+		return "", err
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return "", false, err
+		return "", err
 	}
 	if len(raw) == 0 || len(raw) > maxCombatMasterBytes {
-		return "", false, fmt.Errorf("invalid size for %s", EnemyGaugeTable)
+		return "", fmt.Errorf("invalid size for %s", EnemyGaugeTable)
 	}
-	return string(raw), true, nil
+	return string(raw), nil
 }
 
-func applyEnemyGaugeTables(catalog *battlemodel.Definitions, text string, canonical bool) error {
-	groups := map[int][]battlemodel.EnemyGaugeReaction{}
-	if canonical {
-		var err error
-		groups, err = ParseEnemyGaugeReactions(text)
-		if err != nil {
-			return err
-		}
+func applyEnemyGaugeTables(catalog *battlemodel.Definitions, text string) error {
+	groups, err := ParseEnemyGaugeReactions(text)
+	if err != nil {
+		return err
 	}
 	for id, enemy := range catalog.Enemies {
 		if enemy.GaugeReactionID == 0 {
-			if canonical {
-				// The original JP state exists even without reactions. A NONE
-				// gauge still publishes its unchanged value at skill start.
-				enemy.ReactiveGauge = &battlemodel.EnemyGaugeDefinition{InitialState: enemy.InitialGaugeState, InitialRate: enemy.InitialGaugeRate}
-				catalog.Enemies[id] = enemy
-			}
+			// The original JP state exists even without reactions. A NONE
+			// gauge still publishes its unchanged value at skill start.
+			enemy.ReactiveGauge = &battlemodel.EnemyGaugeDefinition{InitialState: enemy.InitialGaugeState, InitialRate: enemy.InitialGaugeRate}
+			catalog.Enemies[id] = enemy
 			continue
 		}
 		reactions, found := groups[enemy.GaugeReactionID]

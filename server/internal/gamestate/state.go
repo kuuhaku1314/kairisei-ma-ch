@@ -164,10 +164,6 @@ type CardGroupProfile struct {
 	MemberCardIDs   []int  `json:"member_cardids"`
 }
 
-type CardGroupPolicy struct {
-	ConfigVersion int `json:"config_version"`
-}
-
 type CardParameter struct {
 	HP     int `json:"hp"`
 	Attack int `json:"attack"`
@@ -176,7 +172,6 @@ type CardParameter struct {
 }
 
 type CardProgressionPolicy struct {
-	ConfigVersion                     int                       `json:"config_version"`
 	FusionGoldPerMaterialPerBaseLevel int                       `json:"fusion_gold_per_material_per_base_level"`
 	MaximumCardMaterialCount          int                       `json:"maximum_card_material_count"`
 	FusionSuccessTypes                []CardFusionSuccessPolicy `json:"fusion_success_types"`
@@ -234,7 +229,6 @@ type SphereDefinition struct {
 // not present in the official sphr.csv itself. Mutable Sphere instances stay
 // in the account snapshot; the policy is versioned with the runtime master.
 type SphereProgressionPolicy struct {
-	ConfigVersion                      int `json:"config_version"`
 	MaterialLevelBonusPermillePerLevel int `json:"material_level_bonus_permille_per_level"`
 }
 
@@ -515,7 +509,6 @@ type BuddyDefinition struct {
 // client directly consumes add_exp/base_add_price from DTOs; mutable ownership
 // and progression remain in the account snapshot.
 type BuddyProgressionPolicy struct {
-	ConfigVersion        int `json:"config_version"`
 	MaximumMaterialCount int `json:"maximum_material_count"`
 }
 
@@ -624,8 +617,6 @@ type StoryEvent struct {
 // topology but do not contain the retired service reward schedule, so these
 // values remain explicit operation policy rather than account state.
 type StoryRewardPolicy struct {
-	ConfigVersion   int    `json:"config_version"`
-	State           string `json:"state"`
 	MainFirstClear  Reward `json:"main_first_clear"`
 	SubFirstClear   Reward `json:"sub_first_clear"`
 	EventFirstClear Reward `json:"event_first_clear"`
@@ -998,8 +989,7 @@ type GachaSelection struct {
 	Rewards []Reward `json:"rewards"`
 }
 
-// GachaDailyClaim keeps one business day's history per draw method. A legacy
-// record without PlayCount represents one successful free draw.
+// GachaDailyClaim keeps one business day's successful draws and free-draw state per method.
 type GachaDailyClaim struct {
 	GachaID     int    `json:"gachaid"`
 	Day         string `json:"day"`
@@ -1184,36 +1174,20 @@ type TeamBattleEnemyDrop struct {
 	ChancePerMillion *int   `json:"chance_per_million,omitempty"`
 }
 
-// TeamBattleFameBonusPolicy is the versioned local publication policy for the
-// original result scene's fame-bonus boxes. The managed client owns the DTO and
-// presentation contract, while the retired per-quest fame-drop table is not in
-// the CN package; RewardSource therefore remains explicit instead of being
-// hidden in an HTTP handler.
+// TeamBattleFameBonusPolicy configures fame chances and eligible rewards.
 type TeamBattleFameBonusPolicy struct {
-	ConfigVersion           int    `json:"config_version"`
-	ChanceMaximum           int    `json:"chance_maximum"`
-	FullFameThreshold       int    `json:"full_fame_threshold"`
-	FullFameRewardCount     int    `json:"full_fame_reward_count"`
-	BonusFameAdd            int    `json:"bonus_fame_add"`
-	RewardSource            string `json:"reward_source"`
-	EligibleRewardTypes     []int  `json:"eligible_reward_types"`
-	SoloMemberPolicy        string `json:"solo_member_policy"`
-	MultiplayerMemberPolicy string `json:"multiplayer_member_policy"`
-	RollPolicy              string `json:"roll_policy"`
+	ChanceMaximum       int   `json:"chance_maximum"`
+	FullFameThreshold   int   `json:"full_fame_threshold"`
+	FullFameRewardCount int   `json:"full_fame_reward_count"`
+	BonusFameAdd        int   `json:"bonus_fame_add"`
+	EligibleRewardTypes []int `json:"eligible_reward_types"`
 }
 
-// TeamBattleHostBonusPolicy is the local publication policy for the original
-// multiplayer result scene's single host_rewards slot. The CN client proves
-// the DTO and presentation contract, but the retired per-quest host pool is
-// absent from the package, so the selected reward source remains explicit.
+// TeamBattleHostBonusPolicy configures the multiplayer room owner reward.
 type TeamBattleHostBonusPolicy struct {
-	ConfigVersion          int    `json:"config_version"`
-	RewardCount            int    `json:"reward_count"`
-	RewardKind             int    `json:"reward_kind"`
-	RewardSource           string `json:"reward_source"`
-	EligibleRewardTypes    []int  `json:"eligible_reward_types"`
-	RecipientPolicy        string `json:"recipient_policy"`
-	BattlePointPayerPolicy string `json:"battle_point_payer_policy"`
+	RewardCount         int   `json:"reward_count"`
+	RewardKind          int   `json:"reward_kind"`
+	EligibleRewardTypes []int `json:"eligible_reward_types"`
 }
 
 // TowerQuestProfile is an immutable tower definition, separate from account
@@ -1487,22 +1461,15 @@ type State struct {
 	User                           User                     `json:"user"`
 	PlayerProgressionConfigVersion int                      `json:"player_progression_config_version"`
 	PlayerProgressionPolicy        PlayerProgressionPolicy  `json:"-"`
-	CardProgressionConfigVersion   int                      `json:"card_progression_config_version"`
 	CardProgressionPolicy          CardProgressionPolicy    `json:"-"`
 	DeckRankPolicy                 DeckRankPolicy           `json:"-"`
 	AlchemistStarterDeck           *AlchemistStarterDeck    `json:"-"`
 	CardExperienceTables           map[int][]int            `json:"-"`
-	FeatureUnlockConfigVersion     int                      `json:"feature_unlock_config_version"`
 	Onboarding                     OnboardingState          `json:"onboarding"`
-	ProfileConfigVersion           int                      `json:"profile_config_version"`
-	CurrencyConfigVersion          int                      `json:"currency_config_version"`
-	BattleLoadoutConfigVersion     int                      `json:"battle_loadout_config_version"`
 	BattleLoadoutCardUniqueIDs     []int64                  `json:"battle_loadout_card_unique_ids,omitempty"`
-	BattlePointConfigVersion       int                      `json:"battle_point_config_version"`
 	BattlePoint                    BattlePointState         `json:"battle_point"`
 	PVPConfigVersion               int                      `json:"pvp_config_version"`
 	PVP                            PVPPlayerState           `json:"pvp"`
-	SphereConfigVersion            int                      `json:"sphere_config_version"`
 	SphereProgressionPolicy        SphereProgressionPolicy  `json:"-"`
 	Spheres                        []Sphere                 `json:"spheres"`
 	SphereDefinitions              []SphereDefinition       `json:"-"`
@@ -1528,7 +1495,6 @@ type State struct {
 	AvatarSeriesCompletions        []AvatarSeriesCompletion `json:"-"`
 	AvatarShopPolicy               AvatarShopPolicy         `json:"-"`
 	Buddy                          Buddy                    `json:"buddy"`
-	BuddyConfigVersion             int                      `json:"buddy_config_version"`
 	BuddyProgressionPolicy         BuddyProgressionPolicy   `json:"-"`
 	Buddies                        []Buddy                  `json:"buddies"`
 	BuddyDefinitions               []BuddyDefinition        `json:"-"`
@@ -1542,16 +1508,13 @@ type State struct {
 	StoryRewardPolicy              StoryRewardPolicy        `json:"-"`
 	EventPageProfile               EventPageProfile         `json:"-"`
 	PopupProfile                   PopupProfile             `json:"-"`
-	ExploreConfigVersion           int                      `json:"explore_config_version"`
 	Explore                        ExploreProgressState     `json:"explore"`
 	Engagement                     EngagementState          `json:"engagement"`
 	Options                        OptionState              `json:"options"`
 	LoginBonus                     LoginBonusState          `json:"login_bonus"`
 	LoginBonusPolicy               LoginBonusPolicy         `json:"-"`
-	LocalAccountConfigVersion      int                      `json:"local_account_config_version"`
 	TeamBattleMedalItemID          int                      `json:"-"`
 	BossCoinItemID                 int                      `json:"-"`
-	ItemShopConfigVersion          int                      `json:"item_shop_config_version"`
 	Items                          []Item                   `json:"items"`
 	ItemShopTabs                   []ItemShopTab            `json:"item_shop_tabs"`
 	ItemDefinitions                []ItemDefinition         `json:"-"`
@@ -1563,7 +1526,6 @@ type State struct {
 	EventShopPurchases             []EventShopPurchase      `json:"event_shop_purchases,omitempty"`
 	TradeShopProfiles              []TradeShopProfile       `json:"-"`
 	TradeShopPurchases             []TradeShopPurchase      `json:"trade_shop_purchases,omitempty"`
-	GachaConfigVersion             int                      `json:"gacha_config_version"`
 	Gachas                         []GachaProfile           `json:"gachas"`
 	// OperatorGachaPlays keeps play counts of operator-created pools that are not in the catalog list;
 	// the account appends those pools when their configuration is applied. Persisted through progress only.
@@ -1576,16 +1538,13 @@ type State struct {
 	CardActions                  CardActionState                     `json:"card_actions"`
 	CardDevelopment              CardDevelopmentState                `json:"card_development"`
 	CardDevelopmentPolicy        CardDevelopmentPolicy               `json:"-"`
-	SupportDeckConfigVersion     int                                 `json:"support_deck_config_version"`
 	SupportDeck                  SupportDeckState                    `json:"support_deck"`
 	SupportDeckSetCardNum        int                                 `json:"-"`
 	SupportDeckSlotUnlockRules   []SupportDeckSlotUnlockRule         `json:"-"`
-	StageQuestConfigVersion      int                                 `json:"stage_quest_config_version"`
 	NormalQuestSection           *MainQuestSectionDefinition         `json:"-"`
 	MainQuestReadingSections     []MainQuestReadingSectionDefinition `json:"-"`
 	MainQuest                    json.RawMessage                     `json:"main_quest"`
 	StageQuestAreas              []json.RawMessage                   `json:"stage_quest_areas,omitempty"`
-	TeamBattleConfigVersion      int                                 `json:"team_battle_config_version"`
 	MissionDefinitions           map[int]MissionDefinition           `json:"-"`
 	TeamBattleSolo               json.RawMessage                     `json:"team_battle_solo_show"`
 	TeamBattleReplays            []TeamBattleReplay                  `json:"team_battle_replays"`
@@ -1595,7 +1554,6 @@ type State struct {
 	TeamBattleRecommendations    []TeamBattleRecommendation          `json:"-"`
 	TeamBattlePastBossGroups     []json.RawMessage                   `json:"-"`
 	TeamBattleScheduleGroupIDs   []int                               `json:"-"`
-	TowerQuestConfigVersion      int                                 `json:"tower_quest_config_version"`
 	TowerQuestProfiles           []TowerQuestProfile                 `json:"-"`
 	TowerQuestProgress           []TowerQuestProgress                `json:"tower_quest_progress,omitempty"`
 	TeamBattleSchedule           TeamBattleScheduleState             `json:"team_battle_schedule,omitempty"`

@@ -31,61 +31,6 @@ func TestOperatorGachaCardEligibility(t *testing.T) {
 	}
 }
 
-func TestLegacyGachaDocumentDefaultsRemainCompatible(t *testing.T) {
-	accounts := testfixture.NewFriendCapacityTestAccounts(t)
-	catalog, err := accounts.Database().CatalogState()
-	if err != nil {
-		t.Fatal(err)
-	}
-	base := findProfile(catalog.Gachas, 60200211)
-	if base == nil {
-		t.Fatal("legacy fixture pool missing")
-	}
-	old := AdminGachaConfigFromProfile(*base)
-	old.Price = 23
-	encoded, _ := json.Marshal(old)
-	var legacy map[string]any
-	if err := json.Unmarshal(encoded, &legacy); err != nil {
-		t.Fatal(err)
-	}
-	for _, key := range []string{"pay_type", "pay_typeid", "cover_path", "card_fames", "closed", "odds_msg", "category_num"} {
-		delete(legacy, key)
-	}
-	legacy["disabled"] = true // Retired field must not unexpectedly close an old pool.
-	if _, err := accounts.Database().WriteDocument("gacha-live:60200211", 0, legacy, "gacha-live"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := accounts.Database().WriteDocument(runtimeSettingsKey, 0, map[string]any{"crystal_purchase_enabled": false, "team_battle_speed": 150}, "runtime-settings"); err != nil {
-		t.Fatal(err)
-	}
-	restarted, err := NewOperations(accounts.Database(), catalog.Gachas)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(restarted.gachaConfigurations) != 1 {
-		t.Fatal("legacy publication lost")
-	}
-	c := restarted.gachaConfigurations[0]
-	if c.Disabled || c.Profile.Price != 23 || c.Profile.PayType != base.PayType || c.Profile.PayTypeID != base.PayTypeID || c.Profile.CardFame(c.Profile.CardIDs[0]) != 1 || c.Profile.CoverPath != "" || c.Profile.OddsMessage != "" {
-		t.Fatalf("legacy defaults changed: %+v", c)
-	}
-	if restarted.runtimeSettings.GachaCoverSource != "" || restarted.runtimeSettings.GachaCoverBaseURL != "" {
-		t.Fatal("old settings gained a remote cover source")
-	}
-	// A document without a category reads as the pool's own entry.
-	if base.CategoryNum == 0 || c.Profile.CategoryNum != base.CategoryNum || c.Profile.CategoryPictID != base.CategoryPictID {
-		t.Fatalf("pool category changed: %d/%d", c.Profile.CategoryNum, c.Profile.CategoryPictID)
-	}
-	db, err := accounts.Database().OpenRead()
-	if err != nil {
-		t.Fatal(err)
-	}
-	var version int
-	if err := db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != accountstore.SaveDatabaseSchemaVersion {
-		t.Fatal("legacy schema changed", version, err)
-	}
-}
-
 func TestAdminGachaDraftPublicationAndRestart(t *testing.T) {
 	accounts := testfixture.NewFriendCapacityTestAccounts(t)
 	base := gamestate.GachaProfile{GachaID: 60200301, Name: "local", Price: 10, CardNum: 2, CardNumMax: 2, GroupID: 60200301, PublicationKey: "water_coin", CardIDs: []int{1, 2}, CardWeights: []int{1, 1}, GuaranteedCount: 1, GuaranteedRarityRank: 6, RemainderRarityRank: 5}
@@ -308,7 +253,7 @@ func TestCardSourceTabsKeepMultiSourceCardsAndExcludeEvolvedGachaCandidates(t *t
 	}
 }
 
-func TestImportedCardCatalogFiltersIntersectBeforePagination(t *testing.T) {
+func TestUnifiedCardCatalogFiltersIntersectBeforePagination(t *testing.T) {
 	master := masterdata.CardRuntimeMaster{
 		CardTemplates: []gamestate.Card{
 			{CardID: 10214045, Name: "絢爛型オルトリート", RarityRank: 6},
@@ -316,7 +261,6 @@ func TestImportedCardCatalogFiltersIntersectBeforePagination(t *testing.T) {
 			{CardID: 10214048, Name: "奏楽型ダカーポ", RarityRank: 6},
 			{CardID: 10214050, Name: "聖夜型ルー", RarityRank: 6},
 			{CardID: 10214053, Name: "新春型モードレッド", RarityRank: 6},
-			// A Japanese name without an import receipt is not a JP import.
 			{CardID: 10214099, Name: "既存カード", RarityRank: 6},
 			{CardID: 10214098, Name: "通用卡", RarityRank: 5},
 		},
@@ -324,9 +268,6 @@ func TestImportedCardCatalogFiltersIntersectBeforePagination(t *testing.T) {
 			10214045: {ArthurType: 3}, 10214046: {ArthurType: 4}, 10214048: {ArthurType: 2},
 			10214050: {ArthurType: 1}, 10214053: {ArthurType: 2}, 10214099: {ArthurType: 2},
 		}},
-	}
-	if err := json.Unmarshal([]byte(`{"imported_inventory":[{"region":"JP","ids":{"card":[10214045,10214046,10214048,10214050,10214053]}}]}`), &master.Source); err != nil {
-		t.Fatal(err)
 	}
 	catalog, _, err := BuildAdminCatalog(master, masterdata.ItemRuntimeMaster{})
 	if err != nil {
@@ -344,24 +285,24 @@ func TestImportedCardCatalogFiltersIntersectBeforePagination(t *testing.T) {
 		total int
 		first int
 	}{
-		{"source=jp_import&arthur_type=0", 5, 10214045},
-		{"source=jp_import&arthur_type=1", 1, 10214050},
-		{"source=jp_import&arthur_type=2", 2, 10214048},
-		{"source=jp_import&arthur_type=3", 1, 10214045},
-		{"source=jp_import&arthur_type=4", 1, 10214046},
-		{"source=jp_import&arthur_type=2&offset=1", 2, 10214053},
-		{"source=jp_import&arthur_type=2&q=10214053", 1, 10214053},
-		{"source=jp_import&arthur_type=1&q=10214053", 0, 0},
+		{"arthur_type=0", 7, 10214045},
+		{"arthur_type=1", 1, 10214050},
+		{"arthur_type=2", 3, 10214048},
+		{"arthur_type=3", 1, 10214045},
+		{"arthur_type=4", 1, 10214046},
+		{"arthur_type=2&offset=1", 3, 10214053},
+		{"arthur_type=2&q=10214053", 1, 10214053},
+		{"arthur_type=1&q=10214053", 0, 0},
 		{"source=other&arthur_type=2", 3, 10214048},
 		{"source=gacha&arthur_type=2", 0, 0},
 		{"arthur_type=-1&rarity=5", 1, 10214098},
 		{"arthur_type=-1&rarity=6", 0, 0},
-		{"source=jp_import&rarity=6&offset=4", 5, 10214053},
-		{"source=jp_import&rarity=5", 0, 0},
-		{"source=jp_import&rarity=6&limit_count=0", 1, 10214045},
-		{"source=jp_import&rarity=6&limit_count=1&offset=1", 2, 10214050},
-		{"source=jp_import&arthur_type=2&limit_count=2&offset=1", 2, 10214053},
-		{"source=jp_import&rarity=5&limit_count=2", 0, 0},
+		{"rarity=6&offset=4", 6, 10214053},
+		{"rarity=5", 1, 10214098},
+		{"rarity=6&limit_count=0", 1, 10214045},
+		{"rarity=6&limit_count=1&offset=1", 2, 10214050},
+		{"arthur_type=2&limit_count=2&offset=1", 2, 10214053},
+		{"rarity=5&limit_count=2", 0, 0},
 		{"limit_count=0", 2, 10214045},
 		{"q=10214099&limit_count=0", 0, 0}, // Missing details are unknown, not unstarred.
 	} {
@@ -378,7 +319,7 @@ func TestImportedCardCatalogFiltersIntersectBeforePagination(t *testing.T) {
 			if response.Code != http.StatusOK || page.Total != tc.total ||
 				(tc.first == 0 && len(page.Entries) != 0) ||
 				(tc.first != 0 && (len(page.Entries) != 1 || page.Entries[0].RewardTypeID != tc.first || page.Entries[0].GachaEligible)) {
-				t.Fatalf("incorrect imported card page: %s", response.Body.String())
+				t.Fatalf("incorrect unified card page: %s", response.Body.String())
 			}
 		})
 	}

@@ -15,14 +15,8 @@ type cnAssetMapManifest struct {
 	SchemaVersion int    `json:"schema_version"`
 	ClientProfile string `json:"client_profile"`
 	Source        struct {
-		CatalogVersion                  int    `json:"catalog_version"`
-		VersionDATSHA256                string `json:"version_dat_sha256"`
-		ParsedUnityBundleCount          int    `json:"parsed_unity_bundle_count"`
-		NonUnityBundleCount             int    `json:"non_unity_bundle_count"`
-		BundleDependencyEdgeCount       int    `json:"bundle_dependency_edge_count"`
-		UnresolvedBundleDependencyCount int    `json:"unresolved_bundle_dependency_count"`
-		ScrambledBundleCount            int    `json:"scrambled_bundle_count"`
-		PlainBundleCount                int    `json:"plain_bundle_count"`
+		CatalogVersion   int    `json:"catalog_version"`
+		VersionDATSHA256 string `json:"version_dat_sha256"`
 	} `json:"source"`
 	Bundles       []cnAssetMapBundle `json:"bundles"`
 	CatalogAssets []cnAssetMapEntry  `json:"catalog_assets"`
@@ -89,11 +83,6 @@ func loadCNAssetMap(
 	if !strings.EqualFold(manifest.Source.VersionDATSHA256, versionDATSHA256) {
 		return nil, nil, errors.New("official CN asset map was generated from a different version.dat")
 	}
-	if manifest.Source.ParsedUnityBundleCount != len(availableBundles) ||
-		manifest.Source.NonUnityBundleCount != 0 ||
-		manifest.Source.UnresolvedBundleDependencyCount != 0 {
-		return nil, nil, errors.New("official CN asset map does not close all available Unity bundle metadata")
-	}
 	if len(manifest.Bundles) != len(availableBundles) {
 		return nil, nil, errors.New("official CN asset map bundle metadata count differs from available bundles")
 	}
@@ -102,9 +91,6 @@ func loadCNAssetMap(
 	}
 
 	bundleMetadata := make(map[string]cnCatalogBundleMetadata, len(manifest.Bundles))
-	dependencyEdges := 0
-	scrambledBundles := 0
-	plainBundles := 0
 	for index, bundle := range manifest.Bundles {
 		if bundle.Bundle == "" || strings.ContainsAny(bundle.Bundle+bundle.CABName, ",\r\n") ||
 			!strings.HasPrefix(strings.ToLower(bundle.CABName), "cab-") || bundle.Scrambled == nil {
@@ -143,20 +129,7 @@ func loadCNAssetMap(
 			deliveryCRC32: deliveryCRC32,
 			dependencies:  append([]string(nil), bundle.Dependencies...),
 		}
-		if *bundle.Scrambled {
-			scrambledBundles++
-		} else {
-			plainBundles++
-		}
-		dependencyEdges += len(bundle.Dependencies)
-	}
-	if dependencyEdges != manifest.Source.BundleDependencyEdgeCount {
-		return nil, nil, errors.New("official CN asset map bundle dependency edge count changed")
-	}
-	if scrambledBundles != manifest.Source.ScrambledBundleCount ||
-		plainBundles != manifest.Source.PlainBundleCount ||
-		scrambledBundles+plainBundles != len(availableBundles) {
-		return nil, nil, errors.New("official CN asset map bundle storage representation count changed")
+
 	}
 
 	assets := make([]cnCatalogBundleAsset, 0, len(manifest.CatalogAssets))

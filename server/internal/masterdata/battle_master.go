@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
-	"strings"
 
 	"kairisei.local/server/internal/gamestate"
 )
@@ -56,33 +55,7 @@ type BattleRuntimeMaster struct {
 	Recommendations        []gamestate.TeamBattleRecommendation `json:"recommendations"`
 	PastBossGroups         []json.RawMessage                    `json:"past_boss_groups"`
 	ScheduleGroupIDs       []int                                `json:"schedule_group_ids"`
-	TowerConfigVersion     int                                  `json:"tower_config_version"`
 	TowerProfiles          []gamestate.TowerQuestProfile        `json:"tower_profiles"`
-	Summary                struct {
-		LocalGroups                  int            `json:"local_groups"`
-		DeduplicatedFamilyCount      int            `json:"deduplicated_family_count"`
-		DeduplicatedBossCount        int            `json:"deduplicated_boss_count"`
-		PublishedCandidateBosses     int            `json:"published_candidate_bosses"`
-		ExistingBossesPreserved      int            `json:"existing_bosses_preserved"`
-		CombinedUniqueBosses         int            `json:"combined_unique_bosses"`
-		RecommendationEntries        int            `json:"recommendation_entries"`
-		SpecificRecommendations      int            `json:"specific_recommendation_entries"`
-		PastBossGroups               int            `json:"past_boss_groups"`
-		PastBossBosses               int            `json:"past_boss_bosses"`
-		PastBossEvolutionEntries     int            `json:"past_boss_evolution_entries"`
-		ScheduleGroups               int            `json:"schedule_groups"`
-		TowerProfiles                int            `json:"tower_profiles"`
-		TowerFloors                  int            `json:"tower_floors"`
-		TowerRanks                   int            `json:"tower_ranks"`
-		OfficialActivityDropCards    int            `json:"official_activity_drop_cards"`
-		HistoricalActivityDropBosses int            `json:"historical_activity_drop_bosses"`
-		ExactActivityDropBosses      int            `json:"exact_activity_drop_bosses"`
-		FallbackActivityDropBosses   int            `json:"fallback_activity_drop_bosses"`
-		MaterialDungeonBosses        int            `json:"material_dungeon_bosses"`
-		MaterialDungeonSegments      int            `json:"material_dungeon_segments"`
-		RepeatableRewardTierCounts   map[string]int `json:"repeatable_reward_tier_counts"`
-		DifficultyOverrideCounts     map[string]int `json:"difficulty_override_counts"`
-	} `json:"summary"`
 }
 
 type battleDeduplicatedFamily struct {
@@ -165,54 +138,6 @@ type battleBossIdentity struct {
 	} `json:"13"`
 }
 
-type battleDifficultyOverride struct {
-	DifficultyKey    string `json:"difficulty_key"`
-	DisplayName      string `json:"display_name"`
-	BPUse            int    `json:"bp_use"`
-	BPUseHalf        int    `json:"bp_use_half"`
-	PlayerExperience int    `json:"player_experience"`
-}
-
-type battleDifficultyOverridePolicy struct {
-	ConfigVersion int                        `json:"config_version"`
-	MatchSource   string                     `json:"match_source"`
-	RenderMode    string                     `json:"render_mode"`
-	Entries       []battleDifficultyOverride `json:"entries"`
-}
-
-type battleDropCatalogPolicy struct {
-	ConfigVersion            int    `json:"config_version"`
-	CardAcquisitionText      string `json:"card_acquisition_text"`
-	ExactMatchPolicy         string `json:"exact_match_policy"`
-	FallbackSelection        string `json:"fallback_selection"`
-	DisplayPolicy            string `json:"display_policy"`
-	SettlementPolicy         string `json:"settlement_policy"`
-	BossCoinItemID           int    `json:"boss_coin_item_id"`
-	BossCoinNumPerRewardTier int    `json:"boss_coin_num_per_reward_tier"`
-	BattleDropRewardTypes    []int  `json:"battle_drop_reward_types"`
-
-	HistoricalDropOverrides []battleHistoricalDropOverride `json:"historical_drop_overrides"`
-}
-
-type battleHistoricalDropOverride struct {
-	BossIDFamily int    `json:"boss_id_family"`
-	PrimaryName  string `json:"primary_name"`
-	CardID       int    `json:"card_id"`
-	CardName     string `json:"card_name"`
-}
-
-type battleMaterialDungeonPolicy struct {
-	ConfigVersion int `json:"config_version"`
-
-	OrdinaryActivityCardInjected bool `json:"ordinary_activity_card_injected"`
-	BossCoinInjected             bool `json:"boss_coin_injected"`
-	Bosses                       []struct {
-		BossID         int   `json:"boss_id"`
-		BattlePartyIDs []int `json:"battle_party_ids"`
-		RewardCardIDs  []int `json:"reward_card_ids"`
-	} `json:"bosses"`
-}
-
 func LoadBattleRuntimeMaster(masterPath string) (BattleRuntimeMaster, error) {
 	if masterPath == "" {
 		return BattleRuntimeMaster{}, errors.New("CN battle runtime master path is required")
@@ -256,191 +181,34 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 		len(master.Rewards) == 0 || len(master.Replays) != len(master.Rewards) ||
 		len(master.Recommendations) == 0 || len(master.PastBossGroups) == 0 ||
 		len(master.ScheduleGroupIDs) == 0 || len(master.ScheduleGroupIDs) > 50 ||
-		master.TowerConfigVersion != 2 || len(master.TowerProfiles) == 0 {
+		len(master.TowerProfiles) == 0 {
 		return errors.New("CN battle runtime master is incomplete")
 	}
-	importedEntries, err := battleImportedEntries(master)
-	if err != nil {
-		return err
-	}
-	seenImported := make(map[int]struct{}, len(importedEntries))
 	var localProfile struct {
-		Grouping             string `json:"grouping"`
-		SourceCandidateCount int    `json:"source_candidate_count"`
-		ScheduleGroupLimit   int    `json:"schedule_group_limit"`
-		ScheduleGroupRule    string `json:"schedule_group_rule"`
-
-		ScheduleAnchorRule      string `json:"schedule_anchor_rule"`
-		PushDeliveryImplemented *bool  `json:"push_delivery_implemented"`
-		DailyClearRank          struct {
-			PublishedForActiveActivityBosses *bool `json:"published_for_active_activity_bosses"`
-			StartRule                        int   `json:"start_rule"`
-		} `json:"daily_clear_rank"`
 		RepeatableRewardPolicy struct {
-			SchemaVersion int    `json:"schema_version"`
-			ConfigVersion int    `json:"config_version"`
-			ClientProfile string `json:"client_profile"`
-			TierSource    string `json:"tier_source"`
-			TierCap       int    `json:"tier_cap"`
-			Tiers         []struct {
-				Tier      int `json:"tier"`
-				BPUse     int `json:"bp_use"`
-				BPUseHalf int `json:"bp_use_half"`
-			} `json:"tiers"`
-			DifficultyOverrides battleDifficultyOverridePolicy      `json:"difficulty_overrides"`
-			FameBonus           gamestate.TeamBattleFameBonusPolicy `json:"fame_bonus"`
-			HostBonus           gamestate.TeamBattleHostBonusPolicy `json:"host_bonus"`
-			DropCatalog         battleDropCatalogPolicy             `json:"drop_catalog"`
+			FameBonus gamestate.TeamBattleFameBonusPolicy `json:"fame_bonus"`
+			HostBonus gamestate.TeamBattleHostBonusPolicy `json:"host_bonus"`
 		} `json:"repeatable_reward_policy"`
-		MaterialDungeons battleMaterialDungeonPolicy `json:"material_dungeons"`
-		TowerQuest       struct {
-			ConfigVersion int `json:"config_version"`
-			TowerCount    int `json:"tower_count"`
-			FloorCount    int `json:"floor_count"`
-			RankCount     int `json:"rank_count"`
-		} `json:"tower_quest"`
 	}
-	if json.Unmarshal(master.LocalProfile, &localProfile) != nil ||
-		localProfile.Grouping != "one deterministic group per official boss_id family, collapsing exact duplicate difficulty rows and whole-family normalized official-master content equality" ||
-		localProfile.ScheduleGroupLimit != 50 ||
-		localProfile.ScheduleGroupRule != "explicit_official_cn_material_dungeon_families" ||
-		localProfile.ScheduleAnchorRule != "current_server_local_day_start" ||
-		localProfile.PushDeliveryImplemented == nil || *localProfile.PushDeliveryImplemented ||
-		localProfile.DailyClearRank.PublishedForActiveActivityBosses == nil ||
-		!*localProfile.DailyClearRank.PublishedForActiveActivityBosses ||
-		localProfile.DailyClearRank.StartRule != 0 ||
-		localProfile.TowerQuest.ConfigVersion != master.TowerConfigVersion ||
-		localProfile.TowerQuest.TowerCount != len(master.TowerProfiles) ||
-		localProfile.TowerQuest.FloorCount != master.Summary.TowerFloors ||
-		localProfile.TowerQuest.RankCount != master.Summary.TowerRanks ||
-		localProfile.RepeatableRewardPolicy.SchemaVersion != 7 ||
-		localProfile.RepeatableRewardPolicy.ConfigVersion != 7 ||
-		localProfile.RepeatableRewardPolicy.ClientProfile != "cn602-bootstrap" ||
-		localProfile.RepeatableRewardPolicy.TierSource != "boss_id_modulo_100_clamped_1_to_tier_cap" ||
-		localProfile.RepeatableRewardPolicy.TierCap != 8 ||
-		len(localProfile.RepeatableRewardPolicy.Tiers) != 8 {
+	if json.Unmarshal(master.LocalProfile, &localProfile) != nil {
 		return errors.New("CN battle schedule local profile is invalid")
 	}
-	dropCatalog := localProfile.RepeatableRewardPolicy.DropCatalog
-	if dropCatalog.ConfigVersion != 5 || dropCatalog.CardAcquisitionText != "活动副本" ||
-		dropCatalog.ExactMatchPolicy != "historical_boss_family_override_then_official_primary_enemy_name_normalized_name_or_image_to_official_card_identity" ||
-		dropCatalog.FallbackSelection != "sha256_utf8_primary_name_nul_pict_id_modulo_sorted_same_element_official_activity_dungeon_card_ids" ||
-		dropCatalog.DisplayPolicy != "one_base_card_in_reward_cardids_per_published_boss" ||
-		dropCatalog.SettlementPolicy != "guaranteed_one_level1_fame1_card_and_large_medal_item_per_clear" ||
-		dropCatalog.BossCoinItemID != 4000 || dropCatalog.BossCoinNumPerRewardTier != 100 ||
-		!slices.Equal(dropCatalog.BattleDropRewardTypes, []int{4, 6, 8, 10, 12, 13, 15, 19}) ||
-		len(dropCatalog.HistoricalDropOverrides) < 20 {
-		return errors.New("CN battle drop-catalog local profile is invalid")
-	}
-	materialPolicy := localProfile.MaterialDungeons
-	if materialPolicy.ConfigVersion != 1 ||
-		materialPolicy.OrdinaryActivityCardInjected || materialPolicy.BossCoinInjected ||
-		len(materialPolicy.Bosses) == 0 {
-		return errors.New("CN battle material-dungeon local profile is invalid")
-	}
-	materialPolicyByBoss := make(map[int]struct {
-		BattlePartyIDs []int
-		RewardCardIDs  []int
-	}, len(materialPolicy.Bosses))
-	materialSegmentCount := 0
-	for _, boss := range materialPolicy.Bosses {
-		if boss.BossID <= 0 || len(boss.BattlePartyIDs) == 0 || len(boss.RewardCardIDs) == 0 {
-			return errors.New("CN battle material-dungeon Boss profile is invalid")
-		}
-		if _, duplicate := materialPolicyByBoss[boss.BossID]; duplicate {
-			return fmt.Errorf("duplicate CN battle material-dungeon Boss %d", boss.BossID)
-		}
-		for _, partyID := range boss.BattlePartyIDs {
-			if partyID <= 0 {
-				return fmt.Errorf("CN battle material-dungeon Boss %d has an invalid party", boss.BossID)
-			}
-		}
-		seenRewards := make(map[int]struct{}, len(boss.RewardCardIDs))
-		for _, cardID := range boss.RewardCardIDs {
-			if cardID <= 0 {
-				return fmt.Errorf("CN battle material-dungeon Boss %d has an invalid reward", boss.BossID)
-			}
-			if _, duplicate := seenRewards[cardID]; duplicate {
-				return fmt.Errorf("CN battle material-dungeon Boss %d repeats reward %d", boss.BossID, cardID)
-			}
-			seenRewards[cardID] = struct{}{}
-		}
-		materialPolicyByBoss[boss.BossID] = struct {
-			BattlePartyIDs []int
-			RewardCardIDs  []int
-		}{append([]int(nil), boss.BattlePartyIDs...), append([]int(nil), boss.RewardCardIDs...)}
-		materialSegmentCount += len(boss.BattlePartyIDs)
-	}
-	historicalDropByFamily := make(map[int]battleHistoricalDropOverride, len(dropCatalog.HistoricalDropOverrides))
-	for _, override := range dropCatalog.HistoricalDropOverrides {
-		if override.BossIDFamily <= 0 || override.PrimaryName == "" || override.CardID <= 0 ||
-			override.CardName == "" {
-			return errors.New("CN battle historical drop override is invalid")
-		}
-		if _, duplicate := historicalDropByFamily[override.BossIDFamily]; duplicate {
-			return errors.New("CN battle historical drop family is duplicated")
-		}
-		historicalDropByFamily[override.BossIDFamily] = override
-	}
-	difficultyOverrides := localProfile.RepeatableRewardPolicy.DifficultyOverrides
-	expectedDifficultyKeys := []string{"MIDDLE", "UPPER", "SUPER", "SUPER_BOW"}
-	expectedDifficultyNames := []string{"中级", "上级", "超级", "超弩级"}
-	if difficultyOverrides.ConfigVersion != 2 ||
-		difficultyOverrides.MatchSource != "official_enemy_target_comment_or_versioned_family_sequence" ||
-		difficultyOverrides.RenderMode != "3d" ||
-		len(difficultyOverrides.Entries) != len(expectedDifficultyKeys) {
-		return errors.New("CN battle difficulty-override local profile is invalid")
-	}
-	difficultyOverrideByName := make(map[string]battleDifficultyOverride, len(difficultyOverrides.Entries))
-	validDifficultyNames := map[string]struct{}{
-		"初级": {}, "中级": {}, "上级": {}, "特级": {},
-		"超级": {}, "超弩级": {}, "地狱级": {}, "断绝级": {},
-	}
-	previousOverrideBP := 0
-	previousOverrideExperience := 0
-	for index, entry := range difficultyOverrides.Entries {
-		if entry.DifficultyKey != expectedDifficultyKeys[index] ||
-			entry.DisplayName != expectedDifficultyNames[index] ||
-			entry.BPUse <= previousOverrideBP || entry.BPUseHalf != (entry.BPUse+1)/2 ||
-			entry.PlayerExperience <= previousOverrideExperience {
-			return errors.New("CN battle difficulty-override entries are invalid")
-		}
-		difficultyOverrideByName[entry.DisplayName] = entry
-		previousOverrideBP = entry.BPUse
-		previousOverrideExperience = entry.PlayerExperience
-	}
 	fameBonus := localProfile.RepeatableRewardPolicy.FameBonus
-	if fameBonus.ConfigVersion != 1 || fameBonus.ChanceMaximum != 100 ||
+	if fameBonus.ChanceMaximum != 100 ||
 		fameBonus.FullFameThreshold != 100 || fameBonus.FullFameRewardCount != 2 ||
 		fameBonus.BonusFameAdd != 0 ||
-		fameBonus.RewardSource != "first_inventory_result_reward" ||
-		!slices.Equal(fameBonus.EligibleRewardTypes, []int{6, 8, 13, 15, 19}) ||
-		fameBonus.SoloMemberPolicy != "owner_only" ||
-		fameBonus.MultiplayerMemberPolicy != "eligible_online_members" ||
-		fameBonus.RollPolicy != "sha256_seed_modulo_chance_maximum_plus_one" {
+		!slices.Equal(fameBonus.EligibleRewardTypes, []int{6, 8, 13, 15, 19}) {
 		return errors.New("CN battle fame-bonus local profile is invalid")
 	}
 	hostBonus := localProfile.RepeatableRewardPolicy.HostBonus
-	if hostBonus.ConfigVersion != 1 || hostBonus.RewardCount != 1 || hostBonus.RewardKind != 5 ||
-		hostBonus.RewardSource != "first_inventory_result_reward" ||
-		!slices.Equal(hostBonus.EligibleRewardTypes, []int{6, 8, 13, 15, 19}) ||
-		hostBonus.RecipientPolicy != "multiplayer_room_owner_only" ||
-		hostBonus.BattlePointPayerPolicy != "multiplayer_room_owner_only" {
+	if hostBonus.RewardCount != 1 || hostBonus.RewardKind != 5 ||
+		!slices.Equal(hostBonus.EligibleRewardTypes, []int{6, 8, 13, 15, 19}) {
 		return errors.New("CN battle host-bonus local profile is invalid")
-	}
-	previousBPUse := 0
-	for index, tier := range localProfile.RepeatableRewardPolicy.Tiers {
-		if tier.Tier != index+1 || tier.BPUse <= 0 || tier.BPUse < previousBPUse ||
-			tier.BPUseHalf != (tier.BPUse+1)/2 {
-			return errors.New("CN battle repeatable-entry tier profile is invalid")
-		}
-		previousBPUse = tier.BPUse
 	}
 	groupIDs := make(map[int]struct{}, len(master.Groups))
 	bossIDs := make(map[int]struct{}, len(master.Replays))
 	bossEntryRules := make(map[int]battleEntryRules, len(master.Replays))
 	bossDropCardIDs := make(map[int][]int, len(master.Replays))
-	seenHistoricalDropFamilies := make(map[int]struct{}, len(historicalDropByFamily))
 	scorePolicies := make(map[int]bool)
 	for _, profile := range master.Rewards {
 		if err := gamestate.ValidateTeamBattleScorePolicy(profile.ScorePolicy); err != nil {
@@ -450,15 +218,11 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 			scorePolicies[profile.BossID] = true
 		}
 	}
-	difficultyOverrideCounts := make(map[string]int, len(difficultyOverrides.Entries))
-	for _, entry := range difficultyOverrides.Entries {
-		difficultyOverrideCounts[entry.DifficultyKey] = 0
-	}
 	for _, raw := range master.Groups {
 		var group BattleGroupIdentity
 		if json.Unmarshal(raw, &group) != nil || group.PictureID <= 0 ||
 			group.PictureID >= battleGeneratedGroupIDMax-battleGeneratedGroupIDMin ||
-			group.Name == "" || strings.Contains(group.Name, "本地") || len(group.Bosses) == 0 {
+			group.Name == "" || len(group.Bosses) == 0 {
 			return errors.New("CN battle runtime master contains an invalid group")
 		}
 		familyID := group.Bosses[0].BossID / 100
@@ -481,14 +245,6 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 		if familyID <= 0 || group.GroupID <= battleGeneratedGroupIDMin || group.GroupID >= battleGeneratedGroupIDMax {
 			return fmt.Errorf("CN battle runtime group %d differs from Boss family %d", group.GroupID, familyID)
 		}
-		if group.GroupID != battleGeneratedGroupIDMin+familyID {
-			for _, boss := range group.Bosses {
-				entry, imported := importedEntries[boss.BossID]
-				if !imported || entry.GroupID != group.GroupID {
-					return fmt.Errorf("Boss %d has no source metadata for group %d", boss.BossID, group.GroupID)
-				}
-			}
-		}
 		if _, duplicate := groupIDs[group.GroupID]; duplicate {
 			return fmt.Errorf("duplicate CN battle runtime group %d", group.GroupID)
 		}
@@ -497,21 +253,7 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 			if boss.BossID/100 != familyID {
 				return fmt.Errorf("CN battle runtime group %d mixes Boss families", group.GroupID)
 			}
-			if boss.IsModel == 1 {
-				if override, exists := difficultyOverrideByName[boss.Difficulty]; exists {
-					difficultyOverrideCounts[override.DifficultyKey]++
-				}
-			}
-			_, validDifficulty := validDifficultyNames[boss.Difficulty]
-			if imported, ok := importedEntries[boss.BossID]; ok {
-				if imported.GroupID != group.GroupID || imported.Name != boss.Description || imported.Difficulty != boss.Difficulty ||
-					(imported.RenderMode == "3d") != (boss.IsModel == 1) {
-					return fmt.Errorf("imported BOSS %d differs from its source identity", boss.BossID)
-				}
-				seenImported[boss.BossID] = struct{}{}
-				validDifficulty = validDifficulty || imported.DifficultyKind == "LEVEL" ||
-					imported.DifficultyKind == "LOCAL_VARIANT" || imported.DifficultyKind == "SCORE"
-			}
+			validDifficulty := boss.Difficulty != ""
 			rewardCardIDs := make([]int, len(boss.RewardCards))
 			seenRewardCardIDs := make(map[int]struct{}, len(boss.RewardCards))
 			validRewardCards := len(boss.RewardCards) > 0
@@ -527,14 +269,8 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 				seenRewardCardIDs[rewardCard.CardID] = struct{}{}
 				rewardCardIDs[index] = rewardCard.CardID
 			}
-			materialBossPolicy, isMaterialBoss := materialPolicyByBoss[boss.BossID]
-			if isMaterialBoss {
-				validRewardCards = validRewardCards && isMaterialGroup &&
-					slices.Equal(rewardCardIDs, materialBossPolicy.RewardCardIDs)
-			} else {
-				validRewardCards = validRewardCards && !isMaterialGroup && len(rewardCardIDs) == 1
-			}
-			if boss.BossID <= 0 || !validDifficulty || (strings.Contains(boss.Description, "本地") && !scorePolicies[boss.BossID]) ||
+			validRewardCards = validRewardCards && (isMaterialGroup || len(rewardCardIDs) == 1)
+			if boss.BossID <= 0 || !validDifficulty ||
 				(group.StageType == 13) != scorePolicies[boss.BossID] ||
 				boss.IsModel < 0 || boss.IsModel > 1 ||
 				boss.IsDailyRank != 1 || !boss.battleEntryRules.valid() ||
@@ -549,31 +285,10 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 			bossIDs[boss.BossID] = struct{}{}
 			bossEntryRules[boss.BossID] = boss.battleEntryRules
 			bossDropCardIDs[boss.BossID] = rewardCardIDs
-			if override, exists := historicalDropByFamily[familyID]; exists {
-				if isMaterialBoss || rewardCardIDs[0] != override.CardID {
-					return fmt.Errorf("CN battle runtime boss %d differs from historical drop override", boss.BossID)
-				}
-				seenHistoricalDropFamilies[familyID] = struct{}{}
-			}
-		}
-	}
-	if len(seenHistoricalDropFamilies) != len(historicalDropByFamily) {
-		return errors.New("CN battle historical drop override coverage is incomplete")
-	}
-	if len(seenImported) != len(importedEntries) {
-		return errors.New("imported BOSS entry coverage is incomplete")
-	}
-	if len(master.Summary.DifficultyOverrideCounts) != len(difficultyOverrideCounts) {
-		return errors.New("CN battle difficulty-override summary is invalid")
-	}
-	for key, expected := range difficultyOverrideCounts {
-		if master.Summary.DifficultyOverrideCounts[key] != expected {
-			return fmt.Errorf("CN battle difficulty-override summary %s is inconsistent", key)
+
 		}
 	}
 	towerBossFloors := make(map[int][2]int)
-	towerFloorCount := 0
-	towerRankCount := 0
 	seenTowerIDs := make(map[int]struct{}, len(master.TowerProfiles))
 	for _, profile := range master.TowerProfiles {
 		if profile.TowerID <= 0 || profile.Name == "" ||
@@ -629,8 +344,6 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 			}
 			towerBossFloors[boss.BossID] = [2]int{profile.TowerID, floor.Floor}
 		}
-		towerFloorCount += len(profile.Floors)
-		towerRankCount += len(profile.Ranks)
 	}
 	duplicateFamilyIDs := make(map[int]struct{}, len(master.DeduplicatedFamilies))
 	duplicateBossIDs := make(map[int]struct{})
@@ -670,33 +383,8 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 			duplicateBossIDs[alias.DuplicateBossID] = struct{}{}
 		}
 	}
-	if len(bossIDs) != len(master.Replays) || len(bossIDs) != len(master.Rewards) ||
-		master.Summary.LocalGroups != len(groupIDs) ||
-		master.Summary.DeduplicatedFamilyCount != len(duplicateFamilyIDs) ||
-		master.Summary.DeduplicatedBossCount != len(duplicateBossIDs) ||
-		master.Summary.PublishedCandidateBosses != len(bossIDs) ||
-		master.Summary.ExistingBossesPreserved != len(master.ExcludedBossIDs) ||
-		master.Summary.CombinedUniqueBosses != len(bossIDs)+len(master.ExcludedBossIDs) ||
-		master.Summary.RecommendationEntries != len(master.Recommendations) ||
-		master.Summary.ScheduleGroups != len(master.ScheduleGroupIDs) ||
-		master.Summary.TowerProfiles != len(seenTowerIDs) ||
-		master.Summary.TowerFloors != towerFloorCount ||
-		master.Summary.TowerRanks != towerRankCount ||
-		master.Summary.MaterialDungeonBosses != len(materialPolicyByBoss) ||
-		master.Summary.MaterialDungeonSegments != materialSegmentCount ||
-		len(master.Summary.RepeatableRewardTierCounts) != 8 {
-		return errors.New("CN battle runtime master summary is inconsistent")
-	}
-	rewardTierTotal := 0
-	for tier := 1; tier <= 8; tier++ {
-		count, exists := master.Summary.RepeatableRewardTierCounts[fmt.Sprint(tier)]
-		if !exists || count < 0 {
-			return errors.New("CN battle repeatable-reward tier summary is invalid")
-		}
-		rewardTierTotal += count
-	}
-	if rewardTierTotal != localProfile.SourceCandidateCount {
-		return errors.New("CN battle repeatable-reward tier summary is inconsistent")
+	if len(bossIDs) != len(master.Replays) || len(bossIDs) != len(master.Rewards) {
+		return errors.New("CN battle replay and reward coverage is inconsistent")
 	}
 	expectedScheduleGroupIDs := make([]int, 0, len(groupIDs))
 	for _, raw := range master.Groups {
@@ -732,7 +420,6 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 		}
 	}
 	seenRecommendationNames := make(map[string]struct{}, len(master.Recommendations))
-	specificRecommendations := 0
 	for _, recommendation := range master.Recommendations {
 		if recommendation.BossID <= 0 || recommendation.Name == "" ||
 			recommendation.Attr < 1 || recommendation.Attr > 9 ||
@@ -746,31 +433,20 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 			return fmt.Errorf("duplicate CN battle recommendation name %q", recommendation.Name)
 		}
 		seenRecommendationNames[recommendation.Name] = struct{}{}
-		specific := false
 		for _, recommendationID := range recommendation.RecommendIDs {
 			if recommendationID < 0 {
 				return fmt.Errorf("CN battle recommendation %d has a negative strategy", recommendation.BossID)
 			}
-			specific = specific || recommendationID > 0
-		}
-		if specific {
-			specificRecommendations++
 		}
 	}
-	if master.Summary.SpecificRecommendations != specificRecommendations {
-		return errors.New("CN battle recommendation summary is inconsistent")
-	}
+
 	seenPastBossGroups := make(map[int]struct{}, len(master.PastBossGroups))
 	pastBossPeriodNames := make(map[int]string)
 	currentPastBossPeriod := 0
-	pastBossCount := 0
-	pastBossEvolutionCount := 0
 	for _, raw := range master.PastBossGroups {
 		var group BattlePastBossGroupIdentity
 		if json.Unmarshal(raw, &group) != nil || group.GroupID <= 0 ||
 			group.PastNumber <= 0 || group.PastName == "" ||
-			group.PastName == "国服官方卡牌档案" ||
-			strings.Contains(group.PastName, "本地") ||
 			len(group.Cards) != 1 || group.Cards[0] <= 0 ||
 			len(group.EvolvedCards) != 1 || group.EvolvedCards[0] < 0 ||
 			len(group.Bosses) == 0 {
@@ -803,17 +479,9 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 			if boss.battleEntryRules != bossEntryRules[boss.BossID] {
 				return fmt.Errorf("CN battle past-boss %d differs from its entry rules", boss.BossID)
 			}
-			pastBossCount++
-		}
-		if group.EvolvedCards[0] > 0 {
-			pastBossEvolutionCount++
 		}
 	}
-	if master.Summary.PastBossGroups != len(seenPastBossGroups) ||
-		master.Summary.PastBossBosses != pastBossCount ||
-		master.Summary.PastBossEvolutionEntries != pastBossEvolutionCount {
-		return errors.New("CN battle past-boss summary is inconsistent")
-	}
+
 	replayIDs := make(map[int]struct{}, len(master.Replays))
 	replayByID := make(map[int]gamestate.TeamBattleReplay, len(master.Replays))
 	for _, replay := range master.Replays {
@@ -822,17 +490,6 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 		}
 		if err := ValidateTeamBattleReplaySegments(replay); err != nil {
 			return fmt.Errorf("invalid CN battle runtime replay %d: %w", replay.BossID, err)
-		}
-		if materialBoss, exists := materialPolicyByBoss[replay.BossID]; exists {
-			if replay.EnemyPartyID != materialBoss.BattlePartyIDs[0] ||
-				len(replay.Battles) != len(materialBoss.BattlePartyIDs) {
-				return fmt.Errorf("CN material battle replay %d differs from its official wave sequence", replay.BossID)
-			}
-			for index, battle := range replay.Battles {
-				if battle.EnemyPartyID != materialBoss.BattlePartyIDs[index] || battle.EnemyType != 1 {
-					return fmt.Errorf("CN material battle replay %d segment %d is invalid", replay.BossID, index)
-				}
-			}
 		}
 		if _, duplicate := replayIDs[replay.BossID]; duplicate {
 			return fmt.Errorf("duplicate CN battle runtime replay %d", replay.BossID)
@@ -888,13 +545,11 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 			return fmt.Errorf("non-tower reward %d has tower context", profile.BossID)
 		}
 		expectedDropCardIDs := bossDropCardIDs[profile.BossID]
-		_, isMaterialBoss := materialPolicyByBoss[profile.BossID]
+		_, isMaterialBoss := BattleMaterialGroupIcons[profile.BossID/100]
 		dropCardRewards := 0
-		bossCoinRewards := 0
 		materialRewardCardIDs := make([]int, 0, len(expectedDropCardIDs))
 		materialExperienceRewards := 0
 		materialGoldRewards := 0
-		expectedBossCoinNum := dropCatalog.BossCoinNumPerRewardTier * min(8, max(1, profile.BossID%100))
 		for _, reward := range profile.ResultRewards {
 			if isMaterialBoss {
 				switch reward.Type {
@@ -912,13 +567,6 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 					return fmt.Errorf("CN material battle runtime Boss %d has unrelated reward type %d", profile.BossID, reward.Type)
 				}
 				continue
-			}
-			if reward.Type == 8 && reward.RewardTypeID == dropCatalog.BossCoinItemID {
-				bossCoinRewards++
-				if reward.Num != expectedBossCoinNum || reward.CardLevel != 0 ||
-					reward.CardFame != 0 || reward.CardLove != 0 || len(reward.CardSkillLevels) != 0 {
-					return fmt.Errorf("CN battle runtime Boss coin differs from Boss %d", profile.BossID)
-				}
 			}
 			if reward.Type == 6 {
 				dropCardRewards++
@@ -938,9 +586,7 @@ func validateBattleRuntimeMaster(master BattleRuntimeMaster) error {
 			if dropCardRewards != 1 {
 				return fmt.Errorf("CN battle runtime Boss %d has %d drop-card rewards", profile.BossID, dropCardRewards)
 			}
-			if bossCoinRewards != 1 {
-				return fmt.Errorf("CN battle runtime Boss %d has %d Boss-coin rewards", profile.BossID, bossCoinRewards)
-			}
+
 		}
 		for _, rewards := range [][]gamestate.Reward{profile.ResultRewards, profile.FirstClearRewards} {
 			for _, reward := range rewards {
@@ -1162,7 +808,6 @@ func ApplyBattleRuntimeMaster(state *gamestate.State, master BattleRuntimeMaster
 		}
 		state.TowerQuestProfiles[index] = cloned
 	}
-	state.TowerQuestConfigVersion = master.TowerConfigVersion
 	NormalizeBattleAccountProgress(state)
 	return nil
 }

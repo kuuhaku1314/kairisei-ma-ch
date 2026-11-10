@@ -13,7 +13,7 @@ func TestFameTrainingFinishesAtDeadlineWithoutRead(t *testing.T) {
 		cardDefinitions:       map[int]gamestate.Card{1: {CardID: 1, LevelMax: 1, FameMax: 100}},
 		cardDevelopmentRules:  map[int]cardDevelopmentRule{1: {DevelopmentType: 2, DevelopRadix: 1, FameMax: 100}},
 		cardDevelopmentPolicy: gamestate.CardDevelopmentPolicy{TimeEveryFameSeconds: 60, CoinEveryHour: 1},
-		cardProgression:       gamestate.CardProgressionPolicy{ConfigVersion: 5, FusionGoldPerMaterialPerBaseLevel: 1},
+		cardProgression:       gamestate.CardProgressionPolicy{FusionGoldPerMaterialPerBaseLevel: 1},
 	}
 	start := time.Date(2026, 10, 23, 0, 0, 0, 0, time.UTC)
 	if _, err := s.StartCardFameTraining(1, 1, start); err != nil {

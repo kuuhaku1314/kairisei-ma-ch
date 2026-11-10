@@ -551,7 +551,6 @@ func (c *clientConn) handleCreateRequest(payload string, responseMethod string, 
 		battlePointUse:       pending.Spec.BattlePointUse,
 		continueAllowed:      pending.Spec.ContinueAllowed,
 		battles:              append([]gamestate.TeamBattleReplayBattle(nil), roomSpecBattles(pending.Spec)...),
-		dropLedgerVersion:    pending.Spec.DropLedgerVersion,
 		dropPlan:             cloneDropPlan(pending.Spec.DropPlan),
 		settlementPlan:       pending.Spec.SettlementPlan,
 		fameRewardsSet:       pending.Spec.FameRewardsSet,
@@ -569,7 +568,6 @@ func (c *clientConn) handleCreateRequest(payload string, responseMethod string, 
 		holdMax:              pending.Spec.HoldMax,
 		burstGaugeInitial:    pending.Spec.BurstGaugeInitial,
 		seed:                 pending.Spec.Seed,
-		drops:                append([]BattleDrop(nil), pending.Spec.Drops...),
 		battleLoading:        make(map[int]bool),
 		gameStartFinished:    make(map[int]bool),
 		turnPhaseFinished:    make(map[int]bool),
@@ -1473,7 +1471,6 @@ func freezeRoomCompletion(current *room, now time.Time) (*completedBattle, error
 		}
 		recordRoomWaveDrops(current)
 		projection.Turns = current.engine.TotalTurns()
-		projection.DropLedgerVersion = current.dropLedgerVersion
 		projection.DestroyedEnemyBits = current.destroyedEnemyBits
 		projection.EnemyDeadBits = make([]int, max(len(current.battles), current.battleIndex+1))
 		for wave, outcome := range current.waveOutcomes {

@@ -27,7 +27,7 @@ func TestSelectedTowerRuntimeIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(master.TowerProfiles) != 9 || master.Summary.TowerFloors != 367 {
+	if len(master.TowerProfiles) != 9 {
 		t.Fatal("selected catalog is incomplete")
 	}
 	state := testfixture.RuntimeState(t)
@@ -42,7 +42,7 @@ func TestSelectedTowerRuntimeIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = masterdata.ApplyItemRuntimeMaster(&state, items); err != nil {
+	if err = masterdata.ApplyItemRuntimeMaster(&state, items); err != nil {
 		t.Fatal(err)
 	}
 	progression, err := masterdata.LoadPlayerProgressionRuntimeMaster("../../config/cn602-player-progression-runtime.json")

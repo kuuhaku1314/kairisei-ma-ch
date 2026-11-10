@@ -103,8 +103,8 @@ func nativeActionAPIParty(t *testing.T, engine *BattleEngine, row []string, enem
 			t.Fatal("invalid or duplicate original enemy member", input.Member)
 		}
 		seen[i] = true
-		definition, definitionErr := battlecontent.ParseEnemy(input.EnemyRow)
-		level, levelErr := battlecontent.ParseEnemyLevel(input.LevelRow)
+		definition, definitionErr := parseNativeSourceEnemy(input.EnemyRow)
+		level, levelErr := parseNativeSourceEnemyLevel(input.LevelRow)
 		if definitionErr != nil || levelErr != nil || party.Slots[i].EnemyID != definition.ID ||
 			level.ID != definition.ID || party.Slots[i].ParentIndex != input.Parent ||
 			battlecontent.OptionalInt(row, 3+3*i) != input.HPRate {
@@ -617,7 +617,7 @@ func compareNativeActionAPIReceipt(t *testing.T, path, scope string) {
 					definition := CombatCardDefinition{ID: card.CardID, NormalSkillID: card.Skill.ID, ArthurSkillID: card.Bonus.ID, CallSkillID: card.Call.ID, PassiveSkillID: card.Passive.ID}
 					if len(card.CSVRow) != 0 {
 						var err error
-						definition, err = battlecontent.ParseCard(card.CSVRow)
+						definition, err = parseNativeSourceCard(card.CSVRow)
 						if err != nil || definition.ID != card.CardID || definition.NormalSkillID != card.Skill.ID || definition.ArthurSkillID != card.Bonus.ID || definition.CallSkillID != card.Call.ID || definition.PassiveSkillID != card.Passive.ID {
 							t.Fatal("original deck card identity/skills mismatch", card.CardID, err)
 						}

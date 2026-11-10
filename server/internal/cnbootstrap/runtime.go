@@ -76,9 +76,6 @@ func loadCNRuntimeStatePreparer(masters MastersConfig, pvpConfig game.PVPConfig,
 	}
 	return func(runtimeState gamestate.State, buildBattleDefinitions bool) (gamestate.State, error) {
 		var err error
-		if runtimeState.User.Comment == "LOCAL OFFLINE PROFILE" {
-			runtimeState.User.Comment = "请多关照！"
-		}
 		runtimeState.User.InviteID = accountstore.InviteID(runtimeState.User.UserID)
 		runtimeState.User.CardMax = gamestate.CardCapacityLimit
 		runtimeState.User.CardContainerMax = max(runtimeState.User.CardContainerMax, gamestate.CardContainerCapacityDefault)
@@ -121,7 +118,7 @@ func loadCNRuntimeStatePreparer(masters MastersConfig, pvpConfig game.PVPConfig,
 		if err := masterdata.ApplyNaviRuntimeMaster(&runtimeState, naviMaster); err != nil {
 			return gamestate.State{}, err
 		}
-		_, err = masterdata.ApplyItemRuntimeMaster(&runtimeState, itemMaster)
+		err = masterdata.ApplyItemRuntimeMaster(&runtimeState, itemMaster)
 		if err != nil {
 			return gamestate.State{}, err
 		}

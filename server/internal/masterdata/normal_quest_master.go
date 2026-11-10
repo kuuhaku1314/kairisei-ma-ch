@@ -21,7 +21,6 @@ const (
 
 type NormalQuestRuntimeMaster struct {
 	SchemaVersion int    `json:"schema_version"`
-	ConfigVersion int    `json:"config_version"`
 	ClientProfile string `json:"client_profile"`
 
 	MainQuestSection         *gamestate.MainQuestSectionDefinition         `json:"main_quest_section,omitempty"`
@@ -96,7 +95,7 @@ func LoadNormalQuestRuntimeMaster(masterPath string) (NormalQuestRuntimeMaster, 
 }
 
 func validateNormalQuestRuntimeMaster(master NormalQuestRuntimeMaster) error {
-	if master.SchemaVersion != 1 || master.ConfigVersion != 7 ||
+	if master.SchemaVersion != 1 ||
 		master.ClientProfile != "cn602-bootstrap" ||
 		len(master.EntryGroups) != 18 || len(master.Areas) != 18 ||
 		len(master.Replays) != 50 || len(master.Rewards) != 100 {
@@ -267,9 +266,6 @@ func validateNormalQuestRuntimeMaster(master NormalQuestRuntimeMaster) error {
 }
 
 func ApplyNormalQuestRuntimeMaster(state *gamestate.State, master NormalQuestRuntimeMaster) error {
-	if state.StageQuestConfigVersion > master.ConfigVersion {
-		return fmt.Errorf("CN account StageQuest config version %d exceeds runtime %d", state.StageQuestConfigVersion, master.ConfigVersion)
-	}
 	if err := mergeNormalQuestAreas(state, master.Areas); err != nil {
 		return err
 	}
@@ -296,7 +292,6 @@ func ApplyNormalQuestRuntimeMaster(state *gamestate.State, master NormalQuestRun
 	}
 	rewards = append(rewards, master.Rewards...)
 	state.TeamBattleRewards = rewards
-	state.StageQuestConfigVersion = master.ConfigVersion
 	state.NormalQuestSection = master.MainQuestSection
 	state.MainQuestReadingSections = master.MainQuestReadingSections
 	return nil
@@ -432,12 +427,12 @@ func collectNormalQuestClearedBossStates(
 }
 
 func mergeNormalQuestAreas(state *gamestate.State, masterAreas []json.RawMessage) error {
-	legacyDefaultAreaID, err := StageQuestAreaID(state.MainQuest)
+	defaultAreaID, err := StageQuestAreaID(state.MainQuest)
 	if err != nil {
 		return err
 	}
 	persistedByID := make(map[int]json.RawMessage, len(state.StageQuestAreas)+1)
-	persistedByID[legacyDefaultAreaID] = append(json.RawMessage(nil), state.MainQuest...)
+	persistedByID[defaultAreaID] = append(json.RawMessage(nil), state.MainQuest...)
 	for _, raw := range state.StageQuestAreas {
 		areaID, areaErr := StageQuestAreaID(raw)
 		if areaErr != nil {

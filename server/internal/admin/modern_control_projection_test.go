@@ -118,12 +118,15 @@ func TestModernControlProjectionCandidate(t *testing.T) {
 		state.Cards = append(state.Cards, card)
 		card.UniqueID = int64(i + len(old.CardTemplates) + 1)
 		card.Level = card.LevelMax
+		card.Experience, err = gamestate.CardExperienceAtLevelStart(card.Level, card.LevelMax, old.CardExperienceTables[card.ExperienceTableID])
+		if err != nil {
+			t.Fatal(err)
+		}
 		card.Love = card.LoveMax
 		card.Fame = card.FameMax
 		card.IsLock = 1
 		state.ContainerCards = append(state.ContainerCards, card)
 	}
-	state.CardProgressionConfigVersion = 0
 	if _, err := masterdata.ApplyCardRuntimeMaster(&state, old); err != nil {
 		t.Fatal("prepare isolated old progress: ", err)
 	}

@@ -1,8 +1,6 @@
 package admin
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -27,19 +25,11 @@ func TestModernCardPresentationUsesNativeColumnsAndKeepsFirstRow(t *testing.T) {
 	if err := os.WriteFile(cardPath, content, 0600); err != nil {
 		t.Fatal(err)
 	}
-	sum := sha256.Sum256(content)
-	source, err := json.Marshal(map[string]any{"files": []map[string]any{{"path": "cn602-card-master/card.csv", "bytes": len(content), "sha256": hex.EncodeToString(sum[:])}}})
-	if err != nil {
-		t.Fatal(err)
-	}
 	assetMap := filepath.Join(root, "asset-map.json")
 	if err := os.WriteFile(assetMap, []byte(`{"catalog_assets":[{"name":"chr10_10001234"},{"name":"chr20_10001234"}]}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	master := masterdata.CardRuntimeMaster{CardTemplates: []gamestate.Card{{CardID: 10001}}}
-	if err := json.Unmarshal(source, &master.Source); err != nil {
-		t.Fatal(err)
-	}
 	resources, err := loadAdminCardResources(master, filepath.Join(root, "runtime.json"), assetMap)
 	if err != nil || len(resources) != 1 || resources[10001].PictID != 10001234 || !resources[10001].Ready {
 		t.Fatalf("modern first row or PictID: %v %v", resources, err)
@@ -61,8 +51,8 @@ func TestAdminPictureIdentitySharesOneImageAcrossCardsAndMaterials(t *testing.T)
 	if err := os.WriteFile(filepath.Join(root, "card-picture", "10001234.webp"), []byte("webp"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	manifest := adminAssetManifest{SchemaVersion: 2, ClientProfile: "cn602-bootstrap", State: "PASS", Purpose: "loopback_admin_web_thumbnail_only", CardImageIdentity: "picture_id", CatalogImageCoverage: map[string]adminCatalogImageCoverage{
-		"card": {EntryCount: 2, ResolvedSourceCount: 2}, "material": {EntryCount: 1, ResolvedSourceCount: 1}, "item": {}, "sphere": {}, "buddy": {},
+	manifest := adminAssetManifest{SchemaVersion: 2, ClientProfile: "cn602-bootstrap", CardImageIdentity: "picture_id", CatalogImageCoverage: map[string]adminCatalogImageCoverage{
+		"card": {}, "material": {}, "item": {}, "sphere": {}, "buddy": {},
 	}}
 	write := func() {
 		raw, err := json.Marshal(manifest)

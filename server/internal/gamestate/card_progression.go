@@ -63,7 +63,7 @@ func CardExperienceAtLevelStart(level int, levelMaximum int, table []int) (int, 
 }
 
 func (policy CardProgressionPolicy) ParametersAt(card Card, level int, love int, fame int) (CardParameter, error) {
-	if policy.ConfigVersion <= 0 || level < 1 || level > card.LevelMax || card.LevelMax < 1 ||
+	if level < 1 || level > card.LevelMax || card.LevelMax < 1 ||
 		love < 0 || love > card.LoveMax || fame < 0 || fame > card.FameMax {
 		return CardParameter{}, errors.New("card parameter inputs are invalid")
 	}

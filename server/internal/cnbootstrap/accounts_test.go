@@ -494,30 +494,28 @@ func TestPlayerAccountLoadsSharedItemShopWithoutResettingOwnedItems(t *testing.T
 		t.Fatal(err)
 	}
 	state.Items = append(state.Items, gamestate.Item{ItemID: 9010, Num: 7})
-	state.ItemShopConfigVersion = accountstore.ItemShopConfigVersion - 1
-	state.ItemShopTabs = state.ItemShopTabs[:1]
-	state.ItemShopTabs[0].Lineup = nil
 	if err := accounts.PersistState(identity.UserID, state); err != nil {
 		t.Fatal(err)
 	}
 
-	migrated, err := accounts.LoadState(identity.UserID)
+	reloaded, err := accounts.LoadState(identity.UserID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	hasQuickBuy := false
-	if len(migrated.ItemShopTabs) == 5 {
-		for _, lineup := range migrated.ItemShopTabs[0].Lineup {
+	if len(reloaded.ItemShopTabs) == 5 {
+		for _, lineup := range reloaded.ItemShopTabs[0].Lineup {
 			if lineup.LineupID == 992001 && lineup.Hidden {
 				hasQuickBuy = true
 				break
 			}
 		}
 	}
-	if migrated.ItemShopConfigVersion != accountstore.ItemShopConfigVersion || !hasQuickBuy {
-		t.Fatalf("player item shop config was not migrated: %+v", migrated.ItemShopTabs)
+
+	if !hasQuickBuy {
+		t.Fatal("shared item shop lost its quick-buy entry")
 	}
-	for _, item := range migrated.Items {
+	for _, item := range reloaded.Items {
 		if item.ItemID == 9010 {
 			if item.Num != 7 {
 				t.Fatalf("water-crystal gacha coin balance = %d, want 7", item.Num)
@@ -525,7 +523,7 @@ func TestPlayerAccountLoadsSharedItemShopWithoutResettingOwnedItems(t *testing.T
 			return
 		}
 	}
-	t.Fatal("water-crystal gacha coin is absent after migration")
+	t.Fatal("water-crystal gacha coin is absent after reload")
 }
 
 func TestAccountSnapshotExcludesDerivedFriendProfiles(t *testing.T) {

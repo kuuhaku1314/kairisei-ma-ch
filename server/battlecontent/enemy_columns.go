@@ -7,26 +7,38 @@ import (
 	"kairisei.local/server/battlemodel"
 )
 
-// JP EnemyDataContainer.ParseEnemyCsvData reads three tribe slots followed by
-// the common fields, reaction ID, initial state/rate, and the existing limits.
-// Old published packages retain their explicit legacy reader. Modern content
-// no longer stores memberships as a TRIBES_V1 suffix.
-func parseModernEnemy(row []string) (battlemodel.CombatEnemyDefinition, error) {
-	legacy := make([]string, 31)
-	legacy[0], legacy[1] = row[0], row[1]
-	copy(legacy[2:20], row[4:22])
-	copy(legacy[20:27], row[25:32])
-	legacy[28], legacy[29], legacy[30] = "TRIBES_V1", Field(row, 2), Field(row, 3)
-	// Empty native CSV slots are zero; the former explicit suffix required a
-	// decimal value. Normalize only these two slots at that adapter boundary.
-	for _, index := range []int{29, 30} {
-		if legacy[index] == "" {
-			legacy[index] = "0"
-		}
+// ParseEnemy reads the unified enemy table, including all three tribe slots
+// and the gauge state. It does not project through an older column layout.
+func ParseEnemy(row []string) (battlemodel.CombatEnemyDefinition, error) {
+	if len(row) < 32 {
+		return battlemodel.CombatEnemyDefinition{}, fmt.Errorf("enemy row is too short")
 	}
-	value, err := parseLegacyEnemy(legacy)
+	id, err := RequiredInt(row, 0, "enemy ID")
 	if err != nil {
-		return value, err
+		return battlemodel.CombatEnemyDefinition{}, err
+	}
+	tribes := make([]int, 3)
+	for i := range tribes {
+		text := Field(row, 1+i)
+		if text == "" {
+			continue
+		}
+		number, err := strconv.ParseInt(text, 10, 32)
+		if err != nil || number < 0 {
+			return battlemodel.CombatEnemyDefinition{}, fmt.Errorf("enemy %d has an invalid tribe slot", id)
+		}
+		tribes[i] = int(number)
+	}
+	value := battlemodel.CombatEnemyDefinition{
+		ID: id, TribeIDs: tribes, ModelID: Field(row, 4),
+		ImageID: OptionalInt(row, 6), Live2DName: Field(row, 7), Name: Field(row, 8),
+		Attribute: Field(row, 9), HP: OptionalInt(row, 10), Attack: OptionalInt(row, 11),
+		Magic: OptionalInt(row, 12), Recovery: OptionalInt(row, 13),
+		Defense: OptionalInt(row, 14), MagicDefense: OptionalInt(row, 15),
+		DamageReduction: OptionalInt(row, 16), Size: Field(row, 29),
+		AttributeFixed: [5]int{OptionalInt(row, 17), OptionalInt(row, 18), OptionalInt(row, 19), OptionalInt(row, 20), OptionalInt(row, 21)},
+		TranceLimit:    OptionalInt(row, 25), OverheatLimit: OptionalInt(row, 26),
+		OverheatTurns: OptionalInt(row, 27), OverheatResist: OptionalInt(row, 28),
 	}
 	for _, field := range []struct {
 		column int

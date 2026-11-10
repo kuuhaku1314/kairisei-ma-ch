@@ -171,11 +171,6 @@ func TestCompleteRuntimeSetConstruction(t *testing.T) {
 					t.Fatal("modern login/version chain did not serve its pinned platform catalog")
 				}
 			}
-			retired := httptest.NewRecorder()
-			handler.ServeHTTP(retired, httptest.NewRequest(http.MethodPost, "/loginSDK.php", strings.NewReader(string(body))))
-			if retired.Code != http.StatusNotImplemented {
-				t.Fatal("modern-only mode still exposes an unused legacy login alias")
-			}
 		}
 		manifest, err := BuildCDNManifest(filepath.Join(root, "resource-set.json"), resources.PlatformDeliveries...)
 		if err != nil || manifest.SchemaVersion != 2 {

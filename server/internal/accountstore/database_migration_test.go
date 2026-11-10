@@ -288,10 +288,7 @@ func TestCardAcquisitionTimeMigratesUnknownDatesAndPersistsNewDates(t *testing.T
 }
 
 func TestOldDatabaseIsRejectedWithoutReset(t *testing.T) {
-	for _, old := range []struct {
-		version    int
-		legacyName bool
-	}{{0, false}, {1, false}, {1, true}, {2, false}, {2, true}} {
+	for _, version := range []int{0, 1, 2} {
 		storage, err := OpenDatabase(filepath.Join(t.TempDir(), "save.json"), filepath.Join("..", "..", "config", "cn602-save-template.json"), slog.New(slog.NewTextHandler(io.Discard, nil)))
 		if err != nil {
 			t.Fatal(err)
@@ -302,14 +299,11 @@ func TestOldDatabaseIsRejectedWithoutReset(t *testing.T) {
 			}
 		})
 		path := storage.databasePath
-		if old.legacyName {
-			path = storage.legacyDatabasePath
-		}
 		database, err := sql.Open("sqlite", path)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := database.Exec(fmt.Sprintf(`PRAGMA user_version = %d; CREATE TABLE preserved(value TEXT); INSERT INTO preserved VALUES ('keep')`, old.version)); err != nil {
+		if _, err := database.Exec(fmt.Sprintf(`PRAGMA user_version = %d; CREATE TABLE preserved(value TEXT); INSERT INTO preserved VALUES ('keep')`, version)); err != nil {
 			t.Fatal(err)
 		}
 		if err := database.Close(); err != nil {

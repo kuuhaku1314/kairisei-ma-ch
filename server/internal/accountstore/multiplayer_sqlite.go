@@ -233,11 +233,11 @@ func validateCompletedBattle(completed multiplayer.CompletedBattle, expiresAt ti
 	if completed.BattleIndex < 0 || completed.BattleIndex >= multiplayer.MaxBattleWaves || completed.Progress < 0 || completed.Progress > completed.BattleIndex {
 		return errors.New("multiplayer completion wave is invalid")
 	}
-	if completed.DropLedgerVersion < 0 || completed.DropLedgerVersion > 1 || completed.DestroyedEnemyBits < 0 || completed.DestroyedEnemyBits > 15 || len(completed.ReleasedDrops) > 512 {
+	if completed.DestroyedEnemyBits < 0 || completed.DestroyedEnemyBits > 15 || len(completed.ReleasedDrops) > 512 {
 		return errors.New("multiplayer completion drop ledger is invalid")
 	}
 	for _, drop := range completed.ReleasedDrops {
-		if completed.DropLedgerVersion != 1 || drop.BattleIndex < 0 || drop.BattleIndex > completed.BattleIndex || drop.EnemyIndex < 0 || drop.EnemyIndex >= 4 || drop.ChancePerMillion != nil || !masterdata.ValidPersistedRewardShape(drop.Reward) {
+		if drop.BattleIndex < 0 || drop.BattleIndex > completed.BattleIndex || drop.EnemyIndex < 0 || drop.EnemyIndex >= 4 || drop.ChancePerMillion != nil || !masterdata.ValidPersistedRewardShape(drop.Reward) {
 			return errors.New("multiplayer completion drop entry is invalid")
 		}
 	}

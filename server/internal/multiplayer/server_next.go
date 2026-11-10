@@ -18,9 +18,6 @@ func roomSpecBattles(spec RoomSpec) []gamestate.TeamBattleReplayBattle {
 }
 
 func roomSpecWaveDrops(spec RoomSpec, index int) []BattleDrop {
-	if spec.DropLedgerVersion == 0 {
-		return spec.Drops
-	}
 	var drops []BattleDrop
 	for _, drop := range gamestate.TeamBattleWaveDrops(spec.DropPlan, roomBattleEnemyTypes(spec.Battles), index) {
 		if drop.BattleIndex == index {
@@ -147,7 +144,7 @@ func (s *Server) tryAdvanceNextBattle(roomID int64) error {
 	}
 	index := current.nextBattleIndex
 	wave := current.battles[index]
-	drops := roomSpecWaveDrops(RoomSpec{DropLedgerVersion: current.dropLedgerVersion, DropPlan: current.dropPlan, Battles: current.battles}, index)
+	drops := roomSpecWaveDrops(RoomSpec{DropPlan: current.dropPlan, Battles: current.battles}, index)
 	if roomBodyRewardAlreadyReleased(current, index) {
 		kept := drops[:0]
 		for _, drop := range drops {
@@ -174,7 +171,7 @@ func (s *Server) tryAdvanceNextBattle(roomID int64) error {
 	}
 	current.engine, current.engineBattleEnd = engine, 0
 	current.battleIndex, current.progress = index, roomBattleProgress(current, index)
-	current.enemyPartyID, current.enemyType, current.drops = wave.EnemyPartyID, int(wave.EnemyType), drops
+	current.enemyPartyID, current.enemyType = wave.EnemyPartyID, int(wave.EnemyType)
 	current.nextBattlePending = false
 	current.gameNextFinished = nil
 	current.gameStartFinished = make(map[int]bool)

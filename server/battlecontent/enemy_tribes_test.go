@@ -5,29 +5,6 @@ import (
 	"testing"
 )
 
-func TestEnemyExplicitTribeExtension(t *testing.T) {
-	row := make([]string, 28)
-	row[0], row[1], row[2], row[25] = "42", "7", "ems_01111", "19"
-	legacy, err := ParseEnemy(row)
-	if err != nil || !reflect.DeepEqual(legacy.TribeIDs, []int{7}) {
-		t.Fatal(legacy, err)
-	}
-	modern := append(append([]string(nil), row...), "TRIBES_V1", "0", "3")
-	value, err := ParseEnemy(modern)
-	if err != nil || !reflect.DeepEqual(value.TribeIDs, []int{7, 0, 3}) || value.ModelID != legacy.ModelID {
-		t.Fatal(value, err)
-	}
-	for _, invalid := range [][]string{
-		append(append([]string(nil), row...), "JP", "0", "3"),
-		append(append([]string(nil), row...), "TRIBES_V1", "", "3"),
-		append(append([]string(nil), row...), "TRIBES_V1", "2147483648", "3"),
-	} {
-		if _, err := ParseEnemy(invalid); err == nil {
-			t.Fatal("invalid extension accepted")
-		}
-	}
-}
-
 func TestModernEnemyColumnsPreserveGaugeIdentity(t *testing.T) {
 	row := make([]string, 33)
 	row[0], row[1], row[2], row[3], row[4] = "42", "105", "1", "2", "ems_03901"

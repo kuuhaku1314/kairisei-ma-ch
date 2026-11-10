@@ -91,7 +91,7 @@ func InitializeOnboardingSnapshot(state *gamestate.State, userID int) error {
 			}
 		}
 		deck.SupportCardUniqueIDs = make([]int64, len(deck.SupportCardUniqueIDs))
-		deck.SphereUniqueIDs = []int64{}
+		deck.SphereUniqueIDs = make([]int64, 3)
 		deck.BuddyUniqueIDs = make([]int64, 5)
 		deck.Name = DefaultDeckNameByArthur[arthurType]
 		deck.IsActive = 1
@@ -160,7 +160,6 @@ func InitializeOnboardingSnapshot(state *gamestate.State, userID int) error {
 	state.TeamBattleScores = nil
 	state.TeamBattleSoloScores = nil
 	state.TowerQuestProgress = nil
-	state.TowerQuestConfigVersion = 0
 	progress, err := collectCatalogProgress(*state)
 	if err != nil {
 		return err

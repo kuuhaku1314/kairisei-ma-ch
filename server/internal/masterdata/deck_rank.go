@@ -8,11 +8,8 @@ import (
 )
 
 func validateDeckRankPolicy(policy gamestate.DeckRankPolicy, cards []gamestate.Card) error {
-	if policy.ConfigVersion == 0 && len(policy.Cards) == 0 {
+	if len(policy.ParameterThresholds) == 0 && len(policy.Cards) == 0 {
 		return nil // Isolated profiles without a rank master do not enable rank progression.
-	}
-	if policy.ConfigVersion != 1 {
-		return errors.New("invalid CN deck rank policy version")
 	}
 	for _, thresholds := range [][]int{policy.ParameterThresholds, policy.SkillThresholds} {
 		if len(thresholds) != 18 || thresholds[0] != 0 {

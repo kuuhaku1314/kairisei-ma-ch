@@ -7,7 +7,7 @@ import (
 )
 
 func TestEnemyMasterResistanceUsesNativeStatusIndices(t *testing.T) {
-	row := make([]string, 313)
+	row := make([]string, 334)
 	row[0], row[11], row[14], row[21] = "1", "100", "100", "77"
 	level, err := battlecontent.ParseEnemyLevel(row)
 	if err != nil {
@@ -67,13 +67,13 @@ func TestEnemyAttributeArmorAndDefenseProjectThroughUserAttack(t *testing.T) {
 		{"defense buff counted once", "DEF_UP_FIXED", 1200, 10500},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			row := make([]string, 25)
-			row[0], row[7], row[8], row[12], row[15], row[16] = "1", "WIND", "100000", "1000", "300", "400"
+			row := make([]string, 32)
+			row[0], row[9], row[10], row[14], row[17], row[18] = "1", "WIND", "100000", "1000", "300", "400"
 			definition, err := battlecontent.ParseEnemy(row)
 			if err != nil {
 				t.Fatal(err)
 			}
-			levelRow := make([]string, 313)
+			levelRow := make([]string, 334)
 			levelRow[0], levelRow[2], levelRow[3] = "1", "100", "100"
 			level, err := battlecontent.ParseEnemyLevel(levelRow)
 			if err != nil {

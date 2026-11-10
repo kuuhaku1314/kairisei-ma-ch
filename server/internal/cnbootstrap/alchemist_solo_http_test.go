@@ -18,7 +18,7 @@ import (
 // disposable SQLite database, real session routing and no listening sockets.
 func auditAlchemistSoloHTTP(t *testing.T, handler *cnDeploymentHandler, masterPath string) {
 	master, err := masterdata.LoadBattleRuntimeMaster(masterPath)
-	if err != nil || len(master.TowerProfiles) != 9 || master.Summary.TowerFloors != 367 {
+	if err != nil || len(master.TowerProfiles) != 9 {
 		t.Fatalf("complete tower input: %v", err)
 	}
 	identity, err := handler.accounts.ResolveInternalLogin("f1000000-0000-4000-8000-000000000005")

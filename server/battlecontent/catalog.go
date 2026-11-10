@@ -1,4 +1,4 @@
-// Package battlecontent maps legacy and modern master-file layouts into shared
+// Package battlecontent maps the unified master tables into shared
 // battle definitions. It does not execute combat or own accounts and rooms.
 package battlecontent
 
@@ -49,7 +49,7 @@ func LoadDefinitions(cardMasterPath string, battleMasterRoot string) (*battlemod
 	if err != nil || !info.IsDir() {
 		return nil, errors.New("battle master root is unavailable")
 	}
-	gaugeText, canonicalGauges, err := readEnemyGaugeFile(battleRoot)
+	gaugeText, err := readEnemyGaugeFile(battleRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func LoadDefinitions(cardMasterPath string, battleMasterRoot string) (*battlemod
 		if err != nil {
 			return err
 		}
-		if err := readCombatRows(path, name != "trance_gauge_reaction_rate.csv", consume); err != nil {
+		if err := readCombatRows(path, true, consume); err != nil {
 			return fmt.Errorf("load %s: %w", name, err)
 		}
 		return nil
@@ -74,7 +74,7 @@ func LoadDefinitions(cardMasterPath string, battleMasterRoot string) (*battlemod
 			return err
 		}
 		return readCombatParameterRules(path, rules)
-	}, canonicalGauges)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +117,7 @@ func LoadDefinitions(cardMasterPath string, battleMasterRoot string) (*battlemod
 	if err := applyNPCTables(definitions, modern); err != nil {
 		return nil, err
 	}
-	err = applyEnemyGaugeTables(definitions, gaugeText, canonicalGauges)
+	err = applyEnemyGaugeTables(definitions, gaugeText)
 	if err != nil {
 		return nil, err
 	}
@@ -131,8 +131,8 @@ func LoadDefinitions(cardMasterPath string, battleMasterRoot string) (*battlemod
 // the client resource layer. It shares all parsers with the file adapter and
 // neither requires a server filesystem nor retains the input map or strings.
 func LoadDefinitionsFromTables(tables map[string]string) (*battlemodel.Definitions, error) {
-	gaugeText, canonicalGauges := tables[EnemyGaugeTable]
-	if canonicalGauges && (len(gaugeText) == 0 || len(gaugeText) > maxCombatMasterBytes) {
+	gaugeText := tables[EnemyGaugeTable]
+	if len(gaugeText) == 0 || len(gaugeText) > maxCombatMasterBytes {
 		return nil, fmt.Errorf("invalid size for %s", EnemyGaugeTable)
 	}
 	read := func(name string) (io.Reader, error) {
@@ -154,7 +154,7 @@ func LoadDefinitionsFromTables(tables map[string]string) (*battlemodel.Definitio
 		if err != nil {
 			return err
 		}
-		if err := readCombatData(reader, name != "trance_gauge_reaction_rate.csv", consume); err != nil {
+		if err := readCombatData(reader, true, consume); err != nil {
 			return fmt.Errorf("load %s: %w", name, err)
 		}
 		return nil
@@ -164,7 +164,7 @@ func LoadDefinitionsFromTables(tables map[string]string) (*battlemodel.Definitio
 			return err
 		}
 		return readCombatParameterData(reader, rules)
-	}, canonicalGauges)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -183,7 +183,7 @@ func LoadDefinitionsFromTables(tables map[string]string) (*battlemodel.Definitio
 	if err := applyNPCTables(definitions, tables); err != nil {
 		return nil, err
 	}
-	err = applyEnemyGaugeTables(definitions, gaugeText, canonicalGauges)
+	err = applyEnemyGaugeTables(definitions, gaugeText)
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +209,7 @@ func bindSkillRoleMetadata(definitions *battlemodel.Definitions) error {
 	return nil
 }
 
-func loadDefinitions(readCards func(func([]string) error) error, load func(string, func([]string) error) error, readRules func(map[string]battlemodel.CombatRoleParameterRule) error, canonicalGauges bool) (*battlemodel.Definitions, error) {
+func loadDefinitions(readCards func(func([]string) error) error, load func(string, func([]string) error) error, readRules func(map[string]battlemodel.CombatRoleParameterRule) error) (*battlemodel.Definitions, error) {
 	catalog := &battlemodel.Definitions{
 		Cards:      make(map[int]battlemodel.CombatCardDefinition),
 		Spheres:    make(map[int]battlemodel.CombatSphereDefinition),
@@ -262,23 +262,6 @@ func loadDefinitions(readCards func(func([]string) error) error, load func(strin
 		return nil
 	}); err != nil {
 		return nil, err
-	}
-	if !canonicalGauges {
-		if err := load("trance_gauge_reaction_rate.csv", func(row []string) error {
-			kinds := map[string]int{"DAMAGE": 0, "ETC_DAMAGE": 1, "DEBUFF": 2, "COVERING": 3}
-			kind, ok := kinds[row[0]]
-			if !ok || len(row) < 11 {
-				return errors.New("invalid trance reaction row")
-			}
-			for state := range 2 {
-				for cost := range 5 {
-					catalog.TranceRates[kind][state][cost] = OptionalInt(row, 1+state*5+cost)
-				}
-			}
-			return nil
-		}); err != nil {
-			return nil, err
-		}
 	}
 	if err := load("burst_gauge.csv", func(row []string) error {
 		if catalog.BurstGauge.Maximum != 0 {
@@ -393,9 +376,6 @@ func loadDefinitions(readCards func(func([]string) error) error, load func(strin
 		return nil, err
 	}
 	if err := load("enemy.csv", func(row []string) error {
-		if canonicalGauges && len(row) != 32 && (len(row) != 33 || Field(row, 32) != "") {
-			return errors.New("canonical enemy tables require the modern enemy columns")
-		}
 		value, err := ParseEnemy(row)
 		if err != nil {
 			return err
@@ -409,7 +389,7 @@ func loadDefinitions(readCards func(func([]string) error) error, load func(strin
 		return nil, err
 	}
 	if err := load("enemy_lvup.csv", func(row []string) error {
-		value, err := parseEnemyLevel(row, canonicalGauges)
+		value, err := ParseEnemyLevel(row)
 		if err != nil {
 			return err
 		}
@@ -549,9 +529,6 @@ func readCombatData(stream io.Reader, numeric bool, consume func([]string) error
 			continue
 		}
 		row[0] = strings.TrimPrefix(row[0], "\ufeff")
-		if strings.HasPrefix(row[0], "#ENEMY_GAUGES_") {
-			return errors.New("enemy gauge JSON extensions are retired; use canonical enemy tables")
-		}
 		if row[0] == "" || strings.HasPrefix(row[0], "#") || numeric && !isDecimalCombatID(row[0]) {
 			continue
 		}
@@ -608,43 +585,6 @@ func readCombatParameterData(stream io.Reader, rules map[string]battlemodel.Comb
 		return errors.New("combat parameter rules contain no functions")
 	}
 	return nil
-}
-
-func ParseCard(row []string) (battlemodel.CombatCardDefinition, error) {
-	if len(row) >= 113 {
-		return parseModernCard(row)
-	}
-	return parseLegacyCard(row)
-}
-
-// parseLegacyCard remains at the published CN content boundary. Modern client
-// tables use the original JP prefix and never pass through this column layout.
-func parseLegacyCard(row []string) (battlemodel.CombatCardDefinition, error) {
-	if len(row) < 28 {
-		return battlemodel.CombatCardDefinition{}, errors.New("card row is too short")
-	}
-	id, err := RequiredInt(row, 0, "card ID")
-	if err != nil {
-		return battlemodel.CombatCardDefinition{}, err
-	}
-	card := battlemodel.CombatCardDefinition{
-		ID: id, BaseCardID: OptionalInt(row, 1), Rarity: Field(row, 7),
-		MaxLevel: OptionalInt(row, 23), NormalSkillID: OptionalInt(row, 26),
-		ArthurSkillID: OptionalInt(row, 27), CallSkillID: OptionalInt(row, 32), PassiveSkillID: OptionalInt(row, 33),
-		LoveMax:         OptionalInt(row, 24),
-		SupportSkillIDs: [4]int{OptionalInt(row, 28), OptionalInt(row, 29), OptionalInt(row, 30), OptionalInt(row, 31)},
-		HPBase:          OptionalInt(row, 10),
-		HPGrowth:        OptionalInt(row, 11), AttackBase: OptionalInt(row, 13),
-		AttackGrowth: OptionalInt(row, 14), MagicBase: OptionalInt(row, 16),
-		MagicGrowth: OptionalInt(row, 17), RecoveryBase: OptionalInt(row, 19),
-		RecoveryGrowth: OptionalInt(row, 20),
-	}
-	for index := range card.ProfileTags {
-		if tag := OptionalInt(row, 54+index); tag != -1 {
-			card.ProfileTags[index] = tag
-		}
-	}
-	return card, nil
 }
 
 func ParseSphere(row []string) (battlemodel.CombatSphereDefinition, error) {
@@ -769,57 +709,8 @@ func ParseEnemyParty(row []string) (battlemodel.CombatEnemyParty, error) {
 	return value, nil
 }
 
-func ParseEnemy(row []string) (battlemodel.CombatEnemyDefinition, error) {
-	if len(row) == 32 || len(row) == 33 {
-		return parseModernEnemy(row)
-	}
-	return parseLegacyEnemy(row)
-}
-
-func parseLegacyEnemy(row []string) (battlemodel.CombatEnemyDefinition, error) {
-	if len(row) < 25 {
-		return battlemodel.CombatEnemyDefinition{}, errors.New("enemy row is too short")
-	}
-	id, err := RequiredInt(row, 0, "enemy ID")
-	if err != nil {
-		return battlemodel.CombatEnemyDefinition{}, err
-	}
-	tribes := []int{OptionalInt(row, 1)}
-	// The modern common master retains the original 28-column prefix so the
-	// original presentation parser still reads model/voice fields unchanged.
-	// Its explicit extension restores the two memberships omitted by the CN
-	// wire layout. An unmarked row continues to have exactly one tribe slot.
-	if len(row) > 28 && Field(row, 28) != "" {
-		if Field(row, 28) != "TRIBES_V1" || len(row) != 31 {
-			return battlemodel.CombatEnemyDefinition{}, fmt.Errorf("enemy %d has an unknown tribe extension", id)
-		}
-		for _, column := range []int{29, 30} {
-			value, err := strconv.ParseInt(Field(row, column), 10, 32)
-			if err != nil || value < 0 {
-				return battlemodel.CombatEnemyDefinition{}, fmt.Errorf("enemy %d has an invalid tribe slot", id)
-			}
-			tribes = append(tribes, int(value))
-		}
-	}
-	return battlemodel.CombatEnemyDefinition{
-		ID: id, TribeIDs: tribes, ModelID: Field(row, 2),
-		ImageID: OptionalInt(row, 4), Live2DName: Field(row, 5), Name: Field(row, 6),
-		Attribute: Field(row, 7), HP: OptionalInt(row, 8), Attack: OptionalInt(row, 9),
-		Magic: OptionalInt(row, 10), Recovery: OptionalInt(row, 11),
-		Defense: OptionalInt(row, 12), MagicDefense: OptionalInt(row, 13),
-		DamageReduction: OptionalInt(row, 14), Size: Field(row, 24),
-		AttributeFixed: [5]int{OptionalInt(row, 15), OptionalInt(row, 16), OptionalInt(row, 17), OptionalInt(row, 18), OptionalInt(row, 19)},
-		TranceLimit:    OptionalInt(row, 20), OverheatLimit: OptionalInt(row, 21),
-		OverheatTurns: OptionalInt(row, 22), OverheatResist: OptionalInt(row, 23),
-	}, nil
-}
-
 func ParseEnemyLevel(row []string) (battlemodel.CombatEnemyLevel, error) {
-	return parseEnemyLevel(row, len(row) >= 334)
-}
-
-func parseEnemyLevel(row []string, canonical bool) (battlemodel.CombatEnemyLevel, error) {
-	if (!canonical && len(row) < 313) || (canonical && (len(row) < 30 || len(row) > 335)) {
+	if len(row) < 30 || len(row) > 335 {
 		return battlemodel.CombatEnemyLevel{}, errors.New("enemy level row has an unsupported number of columns")
 	}
 	id, err := RequiredInt(row, 0, "enemy level ID")
@@ -839,24 +730,21 @@ func parseEnemyLevel(row []string, canonical bool) (battlemodel.CombatEnemyLevel
 	for index := range value.DOTReductions {
 		value.DOTReductions[index] = OptionalInt(row, 22+index)
 	}
-	callStart := 30
-	if canonical {
-		for state := range value.GaugeActions {
-			offset := 30 + state*7
-			skillID := OptionalInt(row, offset)
-			if skillID <= 0 {
-				continue
-			}
-			action := battlemodel.CombatEnemyAction{Slot: state, Category: "gauge", SkillID: skillID, Target: Field(row, offset+1)}
-			for parameter := range action.TargetParams {
-				action.TargetParams[parameter] = Field(row, offset+2+parameter)
-			}
-			value.GaugeActions[state] = action
+	for state := range value.GaugeActions {
+		offset := 30 + state*7
+		skillID := OptionalInt(row, offset)
+		if skillID <= 0 {
+			continue
 		}
-		callStart += 21
+		action := battlemodel.CombatEnemyAction{Slot: state, Category: "gauge", SkillID: skillID, Target: Field(row, offset+1)}
+		for parameter := range action.TargetParams {
+			action.TargetParams[parameter] = Field(row, offset+2+parameter)
+		}
+		value.GaugeActions[state] = action
 	}
+
 	for index := range value.CallSkillIDs {
-		value.CallSkillIDs[index] = OptionalInt(row, callStart+index)
+		value.CallSkillIDs[index] = OptionalInt(row, 51+index)
 	}
 	actionSlot := 0
 	appendAction := func(category string, offset int) {
@@ -877,15 +765,14 @@ func parseEnemyLevel(row []string, canonical bool) (battlemodel.CombatEnemyLevel
 		value.Actions = append(value.Actions, action)
 		actionSlot++
 	}
-	shift := callStart - 30
-	appendAction("normal", 40+shift)
-	for offset := 53 + shift; offset <= 222+shift; offset += 13 {
+	appendAction("normal", 61)
+	for offset := 74; offset <= 243; offset += 13 {
 		appendAction("skill", offset)
 	}
-	for offset := 235 + shift; offset <= 287+shift; offset += 13 {
+	for offset := 256; offset <= 308; offset += 13 {
 		appendAction("special", offset)
 	}
-	appendAction("death", 300+shift)
+	appendAction("death", 321)
 	return value, nil
 }
 

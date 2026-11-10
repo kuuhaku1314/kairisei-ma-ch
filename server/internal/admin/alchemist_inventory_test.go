@@ -117,7 +117,7 @@ func TestAlchemistInventoryCandidate(t *testing.T) {
 		if _, err := masterdata.ApplyAvatarRuntimeMaster(&state, avatar); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := masterdata.ApplyItemRuntimeMaster(&state, items); err != nil {
+		if err := masterdata.ApplyItemRuntimeMaster(&state, items); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := masterdata.ApplyLoginBonusRuntimeMaster(&state, login); err != nil {

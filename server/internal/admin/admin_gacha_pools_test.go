@@ -714,7 +714,7 @@ func TestRuleTypesCreatePublishReloadAndKeepDailyClaim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := masterdata.ApplyItemRuntimeMaster(&state, item); err != nil {
+	if err := masterdata.ApplyItemRuntimeMaster(&state, item); err != nil {
 		t.Fatal(err)
 	}
 	login, err := masterdata.LoadLoginBonusRuntimeMaster("../../config/cn602-login-bonus-runtime.json")

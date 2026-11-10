@@ -68,7 +68,7 @@ func (s *Account) battleLoadoutLocked(userID int, arthurType int8, deckIndex int
 	if err := s.validateDeckCardFamilies(deck, owned, 0, 0, true); err != nil {
 		return BattleLoadout{}, err
 	}
-	if s.deckRankPolicy.ConfigVersion != 0 {
+	if len(s.deckRankPolicy.ParameterThresholds) > 0 {
 		deck.DeckRank = s.deckRankLocked(deck, s.rankInventoryLocked())
 	}
 	job := gamestate.JobParameter{}

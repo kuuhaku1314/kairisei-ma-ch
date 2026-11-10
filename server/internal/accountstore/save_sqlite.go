@@ -27,19 +27,18 @@ const (
 )
 
 type Database struct {
-	schemaOnce         sync.Once
-	schemaErr          error
-	poolMu             sync.Mutex
-	pool               *sql.DB
-	readPool           *sql.DB
-	readConns          int
-	closed             bool
-	catalog            *gamestate.State // immutable public configuration, initialized before serving accounts
-	databasePath       string
-	legacyDatabasePath string
-	jsonPath           string
-	seedPath           string
-	logger             *slog.Logger
+	schemaOnce   sync.Once
+	schemaErr    error
+	poolMu       sync.Mutex
+	pool         *sql.DB
+	readPool     *sql.DB
+	readConns    int
+	closed       bool
+	catalog      *gamestate.State // immutable public configuration, initialized before serving accounts
+	databasePath string
+	jsonPath     string
+	seedPath     string
+	logger       *slog.Logger
 }
 
 func OpenDatabase(jsonPath string, seedPath string, logger *slog.Logger) (*Database, error) {
@@ -56,7 +55,6 @@ func OpenDatabase(jsonPath string, seedPath string, logger *slog.Logger) (*Datab
 	extension := filepath.Ext(absoluteJSONPath)
 	basePath := absoluteJSONPath[:len(absoluteJSONPath)-len(extension)]
 	databasePath := basePath + "-state.sqlite3"
-	legacyDatabasePath := basePath + ".sqlite3"
 	if databasePath == absoluteJSONPath {
 		return nil, errors.New("CN save database path must differ from the JSON path")
 	}
@@ -72,12 +70,11 @@ func OpenDatabase(jsonPath string, seedPath string, logger *slog.Logger) (*Datab
 		}
 	}
 	return &Database{
-		readConns:          readConns,
-		databasePath:       databasePath,
-		legacyDatabasePath: legacyDatabasePath,
-		jsonPath:           absoluteJSONPath,
-		seedPath:           absoluteSeedPath,
-		logger:             logger,
+		readConns:    readConns,
+		databasePath: databasePath,
+		jsonPath:     absoluteJSONPath,
+		seedPath:     absoluteSeedPath,
+		logger:       logger,
 	}, nil
 }
 

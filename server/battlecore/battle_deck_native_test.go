@@ -171,8 +171,8 @@ func TestNativeOpeningDrawUsesCardPassiveAndSuffixShuffle(t *testing.T) {
 		{[]int{1, 3, 5, 7, 8, 9}, [10]int{1, 3, 5, 7, 8, 2, 9, 4, 0, 6}, 3316842567},
 	} {
 		base, members := coreBattleFixture(t)
-		row := make([]string, 34)
-		row[0], row[26], row[33] = "2", "1", "63000001"
+		row := make([]string, 113)
+		row[0], row[38], row[45] = "2", "1", "63000001"
 		card, err := battlecontent.ParseCard(row)
 		if err != nil {
 			t.Fatal(err)

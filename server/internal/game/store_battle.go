@@ -497,13 +497,12 @@ func (s *Account) ContinueTeamBattle(report TeamBattleContinueReport, base games
 }
 
 func planTeamBattleFameAwards(profile gamestate.TeamBattleRewardProfile, context TeamBattleContext, policy gamestate.TeamBattleFameBonusPolicy) ([]teamBattleFameAwardPlan, error) {
-	if policy.ConfigVersion == 0 {
+	if policy.ChanceMaximum == 0 {
 		return nil, nil
 	}
-	if policy.ConfigVersion != 1 || policy.ChanceMaximum != 100 ||
+	if policy.ChanceMaximum != 100 ||
 		policy.FullFameThreshold != 100 || policy.FullFameRewardCount != 2 ||
-		policy.BonusFameAdd < 0 || policy.RewardSource != "first_inventory_result_reward" ||
-		policy.RollPolicy != "sha256_seed_modulo_chance_maximum_plus_one" ||
+		policy.BonusFameAdd < 0 ||
 		strings.TrimSpace(context.FameSeed) == "" || len(context.FameSources) == 0 {
 		return nil, errors.New("local team battle fame-bonus policy is invalid")
 	}
@@ -552,13 +551,10 @@ func teamBattleFameRoll(seed string, memberType int, chanceMaximum int) int {
 }
 
 func planTeamBattleHostAwards(profile gamestate.TeamBattleRewardProfile, context TeamBattleContext, policy gamestate.TeamBattleHostBonusPolicy) ([]teamBattleFameAwardPlan, error) {
-	if policy.ConfigVersion == 0 {
+	if policy.RewardCount == 0 {
 		return nil, nil
 	}
-	if policy.ConfigVersion != 1 || policy.RewardCount != 1 || policy.RewardKind != 5 ||
-		policy.RewardSource != "first_inventory_result_reward" ||
-		policy.RecipientPolicy != "multiplayer_room_owner_only" ||
-		policy.BattlePointPayerPolicy != "multiplayer_room_owner_only" {
+	if policy.RewardCount != 1 || policy.RewardKind != 5 {
 		return nil, errors.New("local team battle host-bonus policy is invalid")
 	}
 	if context.HostBonusMemberType == 0 {

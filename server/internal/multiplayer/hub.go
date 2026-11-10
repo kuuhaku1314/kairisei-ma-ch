@@ -86,7 +86,6 @@ type RoomSpec struct {
 	FameRewardsSet     bool
 	FameRewards        []gamestate.Reward
 	Battles            []gamestate.TeamBattleReplayBattle
-	DropLedgerVersion  int
 	DropPlan           []gamestate.TeamBattleEnemyDrop
 	BattlePointUse     int
 	ContinueAllowed    bool
@@ -110,7 +109,6 @@ type RoomSpec struct {
 	HoldMax            int
 	BurstGaugeInitial  int
 	Seed               int
-	Drops              []BattleDrop
 	BossGroup          any
 	Owner              Member
 	OwnerFallbackParty []Member
@@ -154,7 +152,6 @@ type CompletedBattle struct {
 	Turns              int
 	BattleIndex        int
 	Progress           int
-	DropLedgerVersion  int
 	DestroyedEnemyBits int
 	ReleasedDrops      []gamestate.TeamBattleEnemyDrop
 	HostCostPaid       bool
@@ -223,7 +220,6 @@ type room struct {
 	waveOutcomes           map[int]battlecore.WaveOutcome
 	releasedDrops          []gamestate.TeamBattleEnemyDrop
 	destroyedEnemyBits     int
-	dropLedgerVersion      int
 	dropPlan               []gamestate.TeamBattleEnemyDrop
 	fameRewardsSet         bool
 	fameRewards            []gamestate.Reward
@@ -248,7 +244,6 @@ type room struct {
 	holdMax                int
 	burstGaugeInitial      int
 	seed                   int
-	drops                  []BattleDrop
 	countdownSyncs         int
 	countdownDeadline      time.Time
 	countdownChecking      bool
@@ -956,33 +951,13 @@ func validateRoomSpec(spec RoomSpec) error {
 	if spec.CostInitial < 0 || spec.HoldMax <= 0 || spec.BurstGaugeInitial < 0 {
 		return errors.New("room battle start configuration is invalid")
 	}
-	for _, drop := range spec.Drops {
-		if drop.EnemyIndex >= maxRoomMembers || !ValidBattleDrop(drop) {
-			return errors.New("room battle drop configuration is invalid")
-		}
+	if len(spec.DropPlan) > 512 {
+		return errors.New("room drop ledger is too large")
 	}
-	if spec.DropLedgerVersion < 0 || spec.DropLedgerVersion > 1 || len(spec.DropPlan) > 512 ||
-		(spec.DropLedgerVersion == 0 && (len(spec.DropPlan) != 0 || len(waves) > 1)) {
-		return errors.New("room drop ledger is invalid")
-	}
-	firstWaveDrops := make([]BattleDrop, 0)
 	for _, drop := range spec.DropPlan {
 		wire := BattleDrop{EnemyIndex: drop.EnemyIndex, RewardType: drop.Reward.Type, RewardTypeID: drop.Reward.RewardTypeID, Num: drop.Reward.Num}
 		if drop.BattleIndex < 0 || drop.BattleIndex >= len(waves) || drop.ChancePerMillion != nil || wire.EnemyIndex >= maxRoomMembers || !ValidBattleDrop(wire) {
 			return errors.New("room drop ledger differs from the engine plan")
-		}
-		if drop.BattleIndex == 0 {
-			firstWaveDrops = append(firstWaveDrops, wire)
-		}
-	}
-	if spec.DropLedgerVersion == 1 {
-		if len(firstWaveDrops) != len(spec.Drops) {
-			return errors.New("room first wave drops differ from ledger")
-		}
-		for index := range firstWaveDrops {
-			if firstWaveDrops[index] != spec.Drops[index] {
-				return errors.New("room first wave drops differ from ledger")
-			}
 		}
 	}
 	if len(spec.OwnerFallbackParty) > maxRoomMembers-1 || (spec.AutoStart && len(spec.OwnerFallbackParty) != maxRoomMembers-1) {
@@ -1126,7 +1101,6 @@ func cloneRoomSpec(spec RoomSpec) RoomSpec {
 	spec.Battles = append([]gamestate.TeamBattleReplayBattle(nil), spec.Battles...)
 	spec.DropPlan = cloneDropPlan(spec.DropPlan)
 	spec.Owner = cloneMember(spec.Owner)
-	spec.Drops = append([]BattleDrop(nil), spec.Drops...)
 	spec.OwnerFallbackParty = append([]Member(nil), spec.OwnerFallbackParty...)
 	for index := range spec.OwnerFallbackParty {
 		spec.OwnerFallbackParty[index] = cloneMember(spec.OwnerFallbackParty[index])

@@ -34,7 +34,8 @@ func (s *Server) tryStartLoadedBattle(roomID int64) error {
 		ContinueAllowed: current.continueAllowed,
 		AwakeTakeover:   current.awakeTakeover,
 		HoldMax:         current.holdMax, BurstGaugeInitial: current.burstGaugeInitial, Seed: current.seed,
-		Drops: append([]BattleDrop(nil), current.drops...),
+		DropPlan: current.dropPlan,
+		Battles:  current.battles,
 	}
 	engine, err := newBattleEngine(hub.combat, spec, current.Members)
 	if err != nil {

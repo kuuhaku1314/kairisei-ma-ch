@@ -70,7 +70,7 @@ func CalculateCardParameters(req CardParameterRequest) (CardParameterResult, err
 		ParameterMaximum:          gamestate.CardParameter{HP: req.Base.HPLimit, Attack: req.Base.AtkLimit, Magic: req.Base.MagLimit, Mind: req.Base.MndLimit},
 		ParameterLoveMaximumBonus: gamestate.CardParameter{HP: req.Base.HPLove, Attack: req.Base.AtkLove, Magic: req.Base.MagLove, Mind: req.Base.MndLove},
 	}
-	policy := gamestate.CardProgressionPolicy{ConfigVersion: 1, FameNormal: gamestate.CardParameter{HP: req.Bonus.HP, Attack: req.Bonus.Attack, Magic: req.Bonus.Magic, Mind: req.Bonus.Mind}}
+	policy := gamestate.CardProgressionPolicy{FameNormal: gamestate.CardParameter{HP: req.Bonus.HP, Attack: req.Bonus.Attack, Magic: req.Bonus.Magic, Mind: req.Bonus.Mind}}
 	result, err := policy.ParametersAt(card, req.Level, req.Love, req.Fame)
 	if err != nil {
 		return CardParameterResult{}, err

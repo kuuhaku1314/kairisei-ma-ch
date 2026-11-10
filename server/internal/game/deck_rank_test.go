@@ -14,7 +14,6 @@ func TestDeckSaveAcceptsNewlyUnlockedEmptySlotInSameRequest(t *testing.T) {
 		highestDeckRank:      3,
 		cardDefinitions:      make(map[int]gamestate.Card),
 		deckRankPolicy: gamestate.DeckRankPolicy{
-			ConfigVersion:       1,
 			ParameterThresholds: []int{0, 600, 650, 700, 750, 800, 850, 900, 1000, 1100},
 			SkillThresholds:     []int{0, 2400, 2500, 2600, 2700, 2800, 2900, 3100, 3300, 3600},
 			Cards:               make(map[int]gamestate.CardRankRule),
@@ -59,7 +58,6 @@ func TestDeckRankRetainsHistoricalUnlockAfterChangingToWeakerDeck(t *testing.T) 
 	s := &Account{
 		lastHomeDeckRank: 8,
 		deckRankPolicy: gamestate.DeckRankPolicy{
-			ConfigVersion:       1,
 			ParameterThresholds: []int{0, 600, 650, 700, 750, 800, 850, 900, 1000, 1100, 1250, 1800, 2300, 2600, 4000, 5000, 6000, 7000},
 			SkillThresholds:     []int{0, 2400, 2500, 2600, 2700, 2800, 2900, 3100, 3300, 3600, 4000, 4500, 5000, 5600, 5800, 6000, 6200, 6400},
 			Cards:               map[int]gamestate.CardRankRule{},
@@ -107,7 +105,7 @@ func TestDeckRankRetainsHistoricalUnlockAfterChangingToWeakerDeck(t *testing.T) 
 
 func TestDeckRankCardUseAllowsHiddenDeckMaterialBeforeA(t *testing.T) {
 	s := &Account{
-		deckRankPolicy: gamestate.DeckRankPolicy{ConfigVersion: 1}, highestDeckRank: 9,
+		deckRankPolicy: gamestate.DeckRankPolicy{ParameterThresholds: []int{0}}, highestDeckRank: 9,
 		currentActiveArthur: 1,
 		cards:               []CardInfo{{UniqueID: 1, CardID: 101}, {UniqueID: 2, CardID: 102}, {UniqueID: 3, CardID: 101}, {UniqueID: 4, CardID: 102}},
 		cardDefinitions:     map[int]gamestate.Card{101: {SellGold: 10}, 102: {SellGold: 10}},

@@ -921,7 +921,7 @@ func (s *Account) checkCardConsumptionLocked(card CardInfo) error {
 func (s *Account) uniqueIDInDeck(uniqueID int64) bool {
 	// The Alchemist deck opens after training, independently of the A-rank
 	// gate on ordinary professions. Protect its main and EX slots at any rank.
-	allDecks := s.deckRankPolicy.ConfigVersion == 0 || s.highestDeckRank >= 10
+	allDecks := len(s.deckRankPolicy.ParameterThresholds) == 0 || s.highestDeckRank >= 10
 	if !allDecks {
 		current, found := SelectPartnerDeck(s.decks, s.currentActiveArthur)
 		if found && deckContainsCardUniqueID(current, uniqueID) {
@@ -1049,12 +1049,12 @@ func (s *Account) SetDecks(incoming []DeckInfo) ([]CardInfo, []DeckInfo, error) 
 		// The client batches the edited deck and any newly opened empty slot.
 		// Compute its earned rank before checking the other slots, without
 		// committing rank or decks until the whole request has been validated.
-		if s.deckRankPolicy.ConfigVersion > 0 && deck.ArthurType <= 4 && s.highestDeckRank >= requiredDeckRank(deck.Index) {
+		if len(s.deckRankPolicy.ParameterThresholds) > 0 && deck.ArthurType <= 4 && s.highestDeckRank >= requiredDeckRank(deck.Index) {
 			unlockedRank = max(unlockedRank, int(s.deckRankLocked(deck, inventory)))
 		}
 	}
 	for _, deck := range incoming {
-		if s.deckRankPolicy.ConfigVersion > 0 && deck.ArthurType <= 4 && unlockedRank < requiredDeckRank(deck.Index) {
+		if len(s.deckRankPolicy.ParameterThresholds) > 0 && deck.ArthurType <= 4 && unlockedRank < requiredDeckRank(deck.Index) {
 			return nil, nil, errors.New("deck slot is locked by highest deck rank")
 		}
 	}

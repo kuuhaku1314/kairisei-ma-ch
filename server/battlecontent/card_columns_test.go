@@ -9,28 +9,28 @@ import (
 	"kairisei.local/server/battlemodel"
 )
 
-// The two public content boundaries must describe the same existing card,
-// including its skill references and profile tags. Distinct JP-only fields
-// make an accidental old-column read fail instead of returning plausible zeros.
-func TestModernCardColumnsPreserveExistingBattleDefinition(t *testing.T) {
-	legacy := make([]string, 99)
+func TestUnifiedCardColumns(t *testing.T) {
 	modern := make([]string, 119)
 	for column, value := range map[int]string{0: "42", 1: "41", 7: "MILLION_RARE", 10: "100", 11: "200", 13: "300", 14: "400", 16: "500", 17: "600", 19: "700", 20: "800"} {
-		legacy[column], modern[column] = value, value
+		modern[column] = value
 	}
 	for _, field := range []struct {
-		old, current int
-		value        string
-	}{{23, 35, "65"}, {24, 36, "1000"}, {26, 38, "123"}, {27, 39, "456"}, {28, 40, "710"}, {29, 41, "720"}, {30, 42, "730"}, {31, 43, "740"}, {32, 44, "810"}, {33, 45, "820"}, {54, 68, "7"}, {55, 69, "11"}, {61, 75, "19"}} {
-		legacy[field.old], modern[field.current] = field.value, field.value
+		current int
+		value   string
+	}{{35, "65"}, {36, "1000"}, {38, "123"}, {39, "456"}, {40, "710"}, {41, "720"}, {42, "730"}, {43, "740"}, {44, "810"}, {45, "820"}, {68, "7"}, {69, "11"}, {75, "19"}} {
+		modern[field.current] = field.value
 	}
 	modern[23], modern[26], modern[27] = "9991", "9992", "9993"
 	modern[46], modern[49], modern[113], modern[118] = "910", "920", "SPECIAL", "1"
 	modern[8], modern[34] = "GREEN", "1"
-	want, err := ParseCard(legacy)
-	if err != nil {
-		t.Fatal(err)
+	want := battlemodel.CombatCardDefinition{
+		ID: 42, BaseCardID: 41, Rarity: "MILLION_RARE", MaxLevel: 65, LoveMax: 1000,
+		NormalSkillID: 123, ArthurSkillID: 456, SupportSkillIDs: [4]int{710, 720, 730, 740},
+		CallSkillID: 810, PassiveSkillID: 820,
+		HPBase: 100, HPGrowth: 200, AttackBase: 300, AttackGrowth: 400,
+		MagicBase: 500, MagicGrowth: 600, RecoveryBase: 700, RecoveryGrowth: 800,
 	}
+	want.ProfileTags[0], want.ProfileTags[1], want.ProfileTags[7] = 7, 11, 19
 	want.ArthurPassiveSkillID, want.SummonID = 910, 920
 	want.RarityPlus = 4
 	want.HasParameterFamilies = true
@@ -51,7 +51,7 @@ func TestModernCardColumnsPreserveExistingBattleDefinition(t *testing.T) {
 
 // A limit reader's EOF must never silently omit the end of a valid modern
 // master. Both ends of a table larger than the old CN limit must be consumed.
-func TestCompleteModernCardMasterIsNotTruncatedAtLegacyLimit(t *testing.T) {
+func TestCompleteCardMasterSizeBoundary(t *testing.T) {
 	line := "#" + strings.Repeat(" ", 4095) + "\n"
 	padding := strings.Repeat(line, maxCombatMasterBytes/len(line)+1)
 	rows := 0
@@ -65,23 +65,23 @@ func TestCompleteModernCardMasterIsNotTruncatedAtLegacyLimit(t *testing.T) {
 	}
 }
 
-func TestCardPresentationLegacyHeaderAndModernLayout(t *testing.T) {
-	legacy := make([]string, 99)
-	legacy[0], legacy[7], legacy[22], legacy[36] = "42", "MILLIONRARE", "1", "10001234"
-	got, err := ParseCardPresentation(legacy)
-	if err != nil || got.PictureID != 10001234 || got.LimitCount != 1 || got.Modern {
-		t.Fatalf("legacy presentation: %+v %v", got, err)
+func TestUnifiedCardPresentation(t *testing.T) {
+	row := make([]string, 119)
+	row[0], row[7], row[34], row[50] = "42", "MILLIONRARE", "1", "10001234"
+	got, err := ParseCardPresentation(row)
+	if err != nil || got.PictureID != 10001234 || got.LimitCount != 1 {
+		t.Fatalf("card presentation: %+v %v", got, err)
 	}
-	header := append([]string(nil), legacy...)
-	header[0], header[36] = "#ID", "PictID"
+	header := append([]string(nil), row...)
+	header[0], header[50] = "#ID", "PictID"
 	if err := ValidateCardPresentationHeader(header); err != nil {
 		t.Fatal(err)
 	}
-	header[36] = "OtherColumn"
+	header[50] = "OtherColumn"
 	if err := ValidateCardPresentationHeader(header); err == nil {
 		t.Fatal("accepted shifted named header")
 	}
-	if err := ValidateCardPresentationHeader(legacy); err != nil {
+	if err := ValidateCardPresentationHeader(row); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -101,10 +101,10 @@ func TestAlchemistCardsShareOrdinaryIdentityWithoutReplacement(t *testing.T) {
 		t.Fatal("alchemist loading changed an ordinary identity or lost modern fields")
 	}
 	row[0] = "42"
-	for _, invalid := range []string{text + text, strings.Join(row, ",") + "\n", "# empty\n", strings.Join(row[:99], ",") + "\n"} {
+	for _, invalid := range []string{text + text, strings.Join(row, ",") + "\n", "# empty\n"} {
 		candidate := &battlemodel.Definitions{Cards: map[int]battlemodel.CombatCardDefinition{42: ordinary}}
 		if err := applyAlchemistCardTable(candidate, map[string]string{"card_alchemist.csv": invalid}); err == nil {
-			t.Fatal("accepted a colliding, empty or legacy-layout alchemist table")
+			t.Fatal("accepted a colliding or empty alchemist table")
 		}
 	}
 }

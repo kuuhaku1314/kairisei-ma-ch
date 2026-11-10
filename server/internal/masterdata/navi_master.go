@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
 
 	"kairisei.local/server/internal/gamestate"
 )
@@ -30,30 +29,15 @@ type naviDefinition struct {
 }
 
 type naviLocalPurchase struct {
-	Currency string `json:"currency"`
-	Price    int    `json:"price"`
-}
-
-type naviPublicationPolicy struct {
-	Live2DBundleRequired *bool  `json:"live2d_bundle_required"`
-	VoiceSourceRequired  *bool  `json:"voice_source_required"`
-	VoiceFallback        string `json:"voice_fallback"`
-}
-
-type naviSummary struct {
-	ClientPublished          int   `json:"client_published"`
-	ExcludedMissingLive2D    int   `json:"excluded_missing_live2d"`
-	ExcludedMissingLive2DIDs []int `json:"excluded_missing_live2d_ids"`
+	Price int `json:"price"`
 }
 
 type naviRuntimeMaster struct {
 	SchemaVersion int    `json:"schema_version"`
 	ClientProfile string `json:"client_profile"`
 
-	Publication   naviPublicationPolicy `json:"publication_policy"`
-	LocalPurchase naviLocalPurchase     `json:"local_purchase"`
-	Summary       naviSummary           `json:"summary"`
-	Navigators    []naviDefinition      `json:"navigators"`
+	LocalPurchase naviLocalPurchase `json:"local_purchase"`
+	Navigators    []naviDefinition  `json:"navigators"`
 }
 
 func LoadNaviRuntimeMaster(masterPath string) (naviRuntimeMaster, error) {
@@ -94,20 +78,14 @@ func validateNaviRuntimeMaster(master naviRuntimeMaster) error {
 	if master.SchemaVersion != 3 || master.ClientProfile != "cn602-bootstrap" {
 		return errors.New("CN navigator runtime master identity is invalid")
 	}
-	if master.LocalPurchase.Currency != "CRYSTAL" || master.LocalPurchase.Price <= 0 {
+	if master.LocalPurchase.Price <= 0 {
 		return errors.New("CN navigator local purchase profile is invalid")
-	}
-	if master.Publication.Live2DBundleRequired == nil || !*master.Publication.Live2DBundleRequired ||
-		master.Publication.VoiceSourceRequired == nil || *master.Publication.VoiceSourceRequired ||
-		master.Publication.VoiceFallback != "OPTIONAL_SILENT_FALLBACK" {
-		return errors.New("CN navigator publication policy is invalid")
 	}
 	if len(master.Navigators) == 0 {
 		return errors.New("CN navigator runtime master source is incomplete")
 	}
 	seen := make(map[int]struct{}, len(master.Navigators))
 	published := 0
-	excluded := make([]int, 0)
 	for _, navigator := range master.Navigators {
 
 		if navigator.PresentationKind != naviPresentationLive2D ||
@@ -129,20 +107,17 @@ func validateNaviRuntimeMaster(master naviRuntimeMaster) error {
 			if navigator.Live2DBundle != "" {
 				return fmt.Errorf("excluded CN navigator %d must not publish a bundle", navigator.NaviID)
 			}
-			excluded = append(excluded, navigator.NaviID)
 		}
 		seen[navigator.NaviID] = struct{}{}
 	}
-	if master.Summary.ClientPublished != published || published == 0 ||
-		master.Summary.ExcludedMissingLive2D != len(excluded) ||
-		!slices.Equal(master.Summary.ExcludedMissingLive2DIDs, excluded) {
-		return errors.New("CN navigator runtime master summary is inconsistent")
+	if published == 0 {
+		return errors.New("CN navigator catalog has no published entries")
 	}
 	return nil
 }
 
 func ApplyNaviRuntimeMaster(state *gamestate.State, master naviRuntimeMaster) error {
-	state.User.NaviCatalogIDs = make([]int8, 0, master.Summary.ClientPublished)
+	state.User.NaviCatalogIDs = make([]int8, 0, len(master.Navigators))
 	available := make(map[int8]struct{}, len(master.Navigators))
 	for _, navigator := range master.Navigators {
 		if !navigator.ClientPublished {

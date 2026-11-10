@@ -3,7 +3,6 @@ package gamestate
 // DeckRankPolicy is immutable data from the CN card/skill/rank TextAssets.
 // It is carried by the runtime master, never by a client request or save.
 type DeckRankPolicy struct {
-	ConfigVersion       int                  `json:"config_version"`
 	ParameterThresholds []int                `json:"parameter_thresholds"`
 	SkillThresholds     []int                `json:"skill_thresholds"`
 	Cards               map[int]CardRankRule `json:"cards"`

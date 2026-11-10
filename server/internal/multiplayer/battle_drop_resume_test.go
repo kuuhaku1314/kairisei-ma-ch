@@ -52,8 +52,7 @@ func TestCompletedComebackAfterFinalFrameDisconnect(t *testing.T) {
 			t.Cleanup(func() { left.Close(); right.Close() })
 			old := &clientConn{server: server, conn: left, roomID: 123, memberType: 1, userID: 1001}
 			current := &room{RoomSnapshot: RoomSnapshot{RoomID: 123, BossID: 1, State: RoomStateBattle, Members: members},
-				engine: engine, engineBattleEnd: endType, gameStarted: true, hostCostPaid: true, dropLedgerVersion: 1,
-				connections: map[int]*clientConn{1: old}, comebackTokens: map[int]string{1: "final-token"},
+				engine: engine, engineBattleEnd: endType, gameStarted: true, hostCostPaid: true, connections: map[int]*clientConn{1: old}, comebackTokens: map[int]string{1: "final-token"},
 				disconnectedUntil: map[int]time.Time{},
 				dropPlan:          []gamestate.TeamBattleEnemyDrop{{EnemyIndex: 0, Reward: gamestate.Reward{Type: 4, Num: 10}}},
 			}

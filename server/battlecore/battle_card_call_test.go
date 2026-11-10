@@ -8,11 +8,11 @@ import (
 )
 
 func TestCardCallFieldFlowsThroughUserAttackToIndependentBlessPayload(t *testing.T) {
-	row := make([]string, 34)
-	row[0], row[26], row[32] = "101", "1", "2"
+	row := make([]string, 113)
+	row[0], row[38], row[44] = "101", "1", "2"
 	card, err := battlecontent.ParseCard(row)
 	if err != nil || card.CallSkillID != 2 {
-		t.Fatalf("CALL column 32 lost: %+v, %v", card, err)
+		t.Fatalf("CALL column 44 lost: %+v, %v", card, err)
 	}
 	main := CombatSkillDefinition{ID: 1, FunctionID: 1, Target: "USER_ONE", Attribute: "FIRE"}
 	call := CombatSkillDefinition{ID: 2, FunctionID: 2, Target: "USER_ALL", Attribute: "FIRE", AppendTrigger: "USER_ATTACK_END", AppendCondition: "TURN", AppendParameters: [5]string{"1", "0"}, AppendDuration: 3}

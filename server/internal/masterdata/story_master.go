@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"slices"
 
 	"kairisei.local/server/internal/game"
 	"kairisei.local/server/internal/gamestate"
@@ -17,12 +16,11 @@ import (
 const maxStoryMasterBytes = 4 * 1024 * 1024
 
 type storyMasterStory struct {
-	StoryMainID        int    `json:"story_mainid"`
-	StateFlag          int    `json:"state_flag"`
-	Title              string `json:"title"`
-	UnlockText         string `json:"unlock_text"`
-	RewardTypeFlag     int    `json:"reward_type_flag"`
-	ScriptSegmentCount int    `json:"script_segment_count"`
+	StoryMainID    int    `json:"story_mainid"`
+	StateFlag      int    `json:"state_flag"`
+	Title          string `json:"title"`
+	UnlockText     string `json:"unlock_text"`
+	RewardTypeFlag int    `json:"reward_type_flag"`
 }
 
 type storyMasterSection struct {
@@ -38,12 +36,11 @@ type storyMasterPart struct {
 }
 
 type storyMasterSubStory struct {
-	StorySubID         int              `json:"story_subid"`
-	StateFlag          int              `json:"state_flag"`
-	Title              string           `json:"title"`
-	UnlockText         string           `json:"unlock_text"`
-	FeatureReward      gamestate.Reward `json:"feature_reward"`
-	ScriptSegmentCount int              `json:"script_segment_count"`
+	StorySubID    int              `json:"story_subid"`
+	StateFlag     int              `json:"state_flag"`
+	Title         string           `json:"title"`
+	UnlockText    string           `json:"unlock_text"`
+	FeatureReward gamestate.Reward `json:"feature_reward"`
 }
 
 type storyMasterSubSection struct {
@@ -73,14 +70,6 @@ type storyMasterEvent struct {
 	Stories      []storyMasterEventStory `json:"stories"`
 }
 
-type storyEventMapping struct {
-	StoryEventID        int      `json:"story_eventid"`
-	ScriptChapterLabels []string `json:"script_chapter_labels"`
-	StoryIDs            []int    `json:"story_ids"`
-	PictID              int      `json:"pictid"`
-	PictCandidates      []int    `json:"pict_candidates"`
-}
-
 type storyBattleReference struct {
 	StoryKind      string `json:"story_kind"`
 	StoryID        int    `json:"story_id"`
@@ -88,46 +77,21 @@ type storyBattleReference struct {
 }
 
 type storyBattleCatalog struct {
-	OfficialIDs     []int                  `json:"official_ids"`
-	ReferencedIDs   []int                  `json:"referenced_ids"`
-	UnreferencedIDs []int                  `json:"unreferenced_ids"`
-	References      []storyBattleReference `json:"references"`
-}
-
-type storySubSectionMapping struct {
-	StorySubSectionID int    `json:"story_sub_sectionid"`
-	CardName          string `json:"card_name"`
-	ScriptChapter     string `json:"script_chapter"`
-	StoryIDs          []int  `json:"story_ids"`
+	OfficialIDs []int                  `json:"official_ids"`
+	References  []storyBattleReference `json:"references"`
 }
 
 type storyRuntimeMaster struct {
 	SchemaVersion int    `json:"schema_version"`
 	ClientProfile string `json:"client_profile"`
 
-	NormalParts              []storyMasterPart           `json:"normal_parts"`
-	CNParts                  []storyMasterPart           `json:"cn_parts"`
-	SubCharacters            []storyMasterSubCharacter   `json:"sub_characters"`
-	SubSectionMappings       []storySubSectionMapping    `json:"sub_section_mappings"`
-	Events                   []storyMasterEvent          `json:"events"`
-	EventMappings            []storyEventMapping         `json:"event_mappings"`
-	RewardPolicy             gamestate.StoryRewardPolicy `json:"reward_policy"`
-	EventPageProfile         gamestate.EventPageProfile  `json:"event_page_profile"`
-	StoryBattles             storyBattleCatalog          `json:"story_battles"`
-	NormalStoryCount         int                         `json:"normal_story_count"`
-	CNStoryCount             int                         `json:"cn_story_count"`
-	SubStoryCount            int                         `json:"sub_story_count"`
-	EventStoryCount          int                         `json:"event_story_count"`
-	NormalMissingTalkIDs     []int                       `json:"normal_missing_talk_ids"`
-	CNMissingTalkIDs         []int                       `json:"cn_missing_talk_ids"`
-	NormalOrphanScriptIDs    []int                       `json:"normal_orphan_script_ids"`
-	CNOrphanScriptIDs        []int                       `json:"cn_orphan_script_ids"`
-	SubOrphanScriptIDs       []int                       `json:"sub_orphan_script_ids"`
-	SubMissingTalkIDs        []int                       `json:"sub_missing_talk_ids"`
-	SubMissingPictSectionIDs []int                       `json:"sub_missing_pict_section_ids"`
-	UnmappedSubSectionIDs    []int                       `json:"unmapped_sub_section_ids"`
-	ExcludedTestScriptIDs    []int                       `json:"excluded_test_script_ids"`
-	ScriptLabelFallbackIDs   []int                       `json:"script_label_fallback_ids"`
+	NormalParts      []storyMasterPart           `json:"normal_parts"`
+	CNParts          []storyMasterPart           `json:"cn_parts"`
+	SubCharacters    []storyMasterSubCharacter   `json:"sub_characters"`
+	Events           []storyMasterEvent          `json:"events"`
+	RewardPolicy     gamestate.StoryRewardPolicy `json:"reward_policy"`
+	EventPageProfile gamestate.EventPageProfile  `json:"event_page_profile"`
+	StoryBattles     storyBattleCatalog          `json:"story_battles"`
 }
 
 func LoadStoryRuntimeMaster(masterPath string) (storyRuntimeMaster, error) {
@@ -179,12 +143,11 @@ func validateStoryRuntimeMaster(master storyRuntimeMaster) error {
 	}
 	subCount, err := validateStoryMasterSubCharacters(
 		master.SubCharacters,
-		master.SubSectionMappings,
 	)
 	if err != nil {
 		return fmt.Errorf("validate sub story catalog: %w", err)
 	}
-	eventCount, err := validateStoryMasterEvents(master.Events, master.EventMappings)
+	eventCount, err := validateStoryMasterEvents(master.Events)
 	if err != nil {
 		return fmt.Errorf("validate event story catalog: %w", err)
 	}
@@ -209,49 +172,15 @@ func validateStoryRuntimeMaster(master storyRuntimeMaster) error {
 			return errors.New("CN permanent event replay has no complete story")
 		}
 	}
-	if normalCount != master.NormalStoryCount ||
-		cnCount != master.CNStoryCount ||
-		subCount != master.SubStoryCount ||
-		eventCount != master.EventStoryCount ||
-		normalCount == 0 || cnCount == 0 || subCount == 0 || eventCount == 0 {
-		return errors.New("CN story runtime master counts are inconsistent")
-	}
-	seenMissingPictSections := make(map[int]struct{}, len(master.SubMissingPictSectionIDs))
-	for _, sectionID := range master.SubMissingPictSectionIDs {
-		if sectionID <= 0 {
-			return errors.New("CN story missing-pict section ID is invalid")
-		}
-		if _, duplicate := seenMissingPictSections[sectionID]; duplicate {
-			return fmt.Errorf("duplicate CN story missing-pict section ID %d", sectionID)
-		}
-		seenMissingPictSections[sectionID] = struct{}{}
-	}
-	seenUnmappedSections := make(map[int]struct{}, len(master.UnmappedSubSectionIDs))
-	for _, sectionID := range master.UnmappedSubSectionIDs {
-		if sectionID <= 0 {
-			return errors.New("story unmapped section ID is invalid")
-		}
-		if _, duplicate := seenUnmappedSections[sectionID]; duplicate {
-			return fmt.Errorf("duplicate story unmapped section ID %d", sectionID)
-		}
-		if _, overlap := seenMissingPictSections[sectionID]; overlap {
-			return fmt.Errorf("story section %d is both unmapped and missing a picture", sectionID)
-		}
-		for _, mapping := range master.SubSectionMappings {
-			if mapping.StorySubSectionID == sectionID {
-				return fmt.Errorf("story section %d is both published and unmapped", sectionID)
-			}
-		}
-		seenUnmappedSections[sectionID] = struct{}{}
+	if normalCount == 0 || cnCount == 0 || subCount == 0 || eventCount == 0 {
+		return errors.New("CN story runtime catalog is empty")
 	}
 	return nil
 }
 
 func validateStoryRewardPolicy(master storyRuntimeMaster) error {
 	policy := master.RewardPolicy
-	if policy.ConfigVersion != 1 || policy.State != "PASS" {
-		return errors.New("story first-clear policy identity is invalid")
-	}
+
 	for name, reward := range map[string]gamestate.Reward{
 		"main":  policy.MainFirstClear,
 		"sub":   policy.SubFirstClear,
@@ -284,34 +213,26 @@ func validateStoryRewardPolicy(master storyRuntimeMaster) error {
 
 func validateStoryMasterEvents(
 	events []storyMasterEvent,
-	mappings []storyEventMapping,
 ) (int, error) {
-	if len(events) == 0 || len(events) != len(mappings) {
+	if len(events) == 0 {
 		return 0, errors.New("event story catalog or mappings are incomplete")
 	}
 	eventIDs := make(map[int]struct{}, len(events))
 	storyIDs := make(map[int]struct{})
 	count := 0
-	for eventIndex, event := range events {
-		mapping := mappings[eventIndex]
-		if event.StoryEventID <= 0 || event.Name == "" || event.PictID <= 0 || len(event.Stories) == 0 ||
-			mapping.StoryEventID != event.StoryEventID || mapping.PictID != event.PictID ||
-			len(mapping.ScriptChapterLabels) == 0 || len(mapping.StoryIDs) != len(event.Stories) ||
-			len(mapping.PictCandidates) == 0 {
-			return 0, fmt.Errorf("event story %d mapping is incomplete", event.StoryEventID)
-		}
-		if !slices.Contains(mapping.PictCandidates, event.PictID) {
-			return 0, fmt.Errorf("event story %d portrait is outside its source candidates", event.StoryEventID)
+	for _, event := range events {
+		if event.StoryEventID <= 0 || event.Name == "" || event.PictID <= 0 || len(event.Stories) == 0 {
+			return 0, fmt.Errorf("event story %d is incomplete", event.StoryEventID)
 		}
 		if _, duplicate := eventIDs[event.StoryEventID]; duplicate {
 			return 0, fmt.Errorf("duplicate event story %d", event.StoryEventID)
 		}
 		eventIDs[event.StoryEventID] = struct{}{}
-		for storyIndex, wrapper := range event.Stories {
+		for _, wrapper := range event.Stories {
 			story := wrapper.Sub
 			if story.StorySubID <= 0 || story.StateFlag&^(8|16) != 0 || story.Title == "" ||
-				story.ScriptSegmentCount <= 0 || story.FeatureReward.CardSkillLevels == nil ||
-				wrapper.Materials == nil || mapping.StoryIDs[storyIndex] != story.StorySubID {
+				story.FeatureReward.CardSkillLevels == nil ||
+				wrapper.Materials == nil {
 				return 0, fmt.Errorf("event sub story %d has invalid static fields", story.StorySubID)
 			}
 			if _, duplicate := storyIDs[story.StorySubID]; duplicate {
@@ -375,35 +296,7 @@ func validateStoryBattleCatalog(master storyRuntimeMaster) error {
 	if len(official) == 0 {
 		return errors.New("official story battle catalog is empty")
 	}
-	referenced := make(map[int]struct{}, len(master.StoryBattles.ReferencedIDs))
-	for _, battleID := range master.StoryBattles.ReferencedIDs {
-		if _, exists := official[battleID]; !exists {
-			return fmt.Errorf("referenced story battle %d is not official", battleID)
-		}
-		if _, duplicate := referenced[battleID]; duplicate {
-			return fmt.Errorf("duplicate referenced story battle ID %d", battleID)
-		}
-		referenced[battleID] = struct{}{}
-	}
-	unreferenced := make(map[int]struct{}, len(master.StoryBattles.UnreferencedIDs))
-	for _, battleID := range master.StoryBattles.UnreferencedIDs {
-		if _, exists := official[battleID]; !exists {
-			return fmt.Errorf("unreferenced story battle %d is not official", battleID)
-		}
-		if _, overlap := referenced[battleID]; overlap {
-			return fmt.Errorf("story battle %d is both referenced and unreferenced", battleID)
-		}
-		if _, duplicate := unreferenced[battleID]; duplicate {
-			return fmt.Errorf("duplicate unreferenced story battle ID %d", battleID)
-		}
-		unreferenced[battleID] = struct{}{}
-	}
-	if len(referenced)+len(unreferenced) != len(official) {
-		return errors.New("story battle partition does not close official IDs")
-	}
-
 	referencePairs := make(map[string]struct{}, len(master.StoryBattles.References))
-	referenceIDs := make(map[int]struct{})
 	for _, reference := range master.StoryBattles.References {
 		stories, exists := storyKinds[reference.StoryKind]
 		if !exists || reference.StoryID <= 0 || !stories[reference.StoryID] || len(reference.StoryBattleIDs) == 0 {
@@ -416,14 +309,13 @@ func validateStoryBattleCatalog(master storyRuntimeMaster) error {
 		referencePairs[pair] = struct{}{}
 		seenBattleIDs := make(map[int]struct{}, len(reference.StoryBattleIDs))
 		for _, battleID := range reference.StoryBattleIDs {
-			if _, exists := referenced[battleID]; !exists {
+			if _, exists := official[battleID]; !exists {
 				return fmt.Errorf("story %s references unpublished fixed battle %d", pair, battleID)
 			}
 			if _, duplicate := seenBattleIDs[battleID]; duplicate {
 				return fmt.Errorf("story %s repeats fixed battle %d", pair, battleID)
 			}
 			seenBattleIDs[battleID] = struct{}{}
-			referenceIDs[battleID] = struct{}{}
 		}
 	}
 	for storyKind, stories := range storyKinds {
@@ -433,9 +325,6 @@ func validateStoryBattleCatalog(master storyRuntimeMaster) error {
 				return fmt.Errorf("story fixed-battle flag/reference differs for %s/%d", storyKind, storyID)
 			}
 		}
-	}
-	if len(referenceIDs) != len(referenced) {
-		return errors.New("story fixed-battle references do not cover referenced IDs")
 	}
 	return nil
 }
@@ -464,7 +353,7 @@ func validateStoryMasterParts(parts []storyMasterPart, storyIDs map[int]struct{}
 			}
 			sectionIDs[section.StoryMainSectionID] = struct{}{}
 			for _, story := range section.Stories {
-				if story.StoryMainID <= 0 || story.Title == "" || story.ScriptSegmentCount <= 0 || story.RewardTypeFlag < 0 || story.StateFlag&^8 != 0 {
+				if story.StoryMainID <= 0 || story.Title == "" || story.RewardTypeFlag < 0 || story.StateFlag&^8 != 0 {
 					return 0, fmt.Errorf("story %d has invalid static fields", story.StoryMainID)
 				}
 				if _, duplicate := storyIDs[story.StoryMainID]; duplicate {
@@ -480,25 +369,10 @@ func validateStoryMasterParts(parts []storyMasterPart, storyIDs map[int]struct{}
 
 func validateStoryMasterSubCharacters(
 	characters []storyMasterSubCharacter,
-	mappings []storySubSectionMapping,
 ) (int, error) {
-	if len(characters) == 0 || len(mappings) == 0 {
+	if len(characters) == 0 {
 		return 0, errors.New("sub story catalog is empty")
 	}
-	mappingBySectionID := make(map[int]storySubSectionMapping, len(mappings))
-	for _, mapping := range mappings {
-		if mapping.StorySubSectionID <= 0 ||
-			mapping.CardName == "" ||
-			mapping.ScriptChapter == "" ||
-			len(mapping.StoryIDs) == 0 {
-			return 0, errors.New("sub story section mapping is incomplete")
-		}
-		if _, duplicate := mappingBySectionID[mapping.StorySubSectionID]; duplicate {
-			return 0, fmt.Errorf("duplicate sub story mapping %d", mapping.StorySubSectionID)
-		}
-		mappingBySectionID[mapping.StorySubSectionID] = mapping
-	}
-
 	characterIDs := make(map[int]struct{}, len(characters))
 	sectionIDs := make(map[int]struct{})
 	storyIDs := make(map[int]struct{})
@@ -521,23 +395,15 @@ func validateStoryMasterSubCharacters(
 				return 0, fmt.Errorf("duplicate sub story section %d", section.StorySubSectionID)
 			}
 			sectionIDs[section.StorySubSectionID] = struct{}{}
-			mapping, exists := mappingBySectionID[section.StorySubSectionID]
-			if !exists || mapping.CardName != section.SectionTitle || len(mapping.StoryIDs) != len(section.Stories) {
-				return 0, fmt.Errorf("sub story section %d mapping differs", section.StorySubSectionID)
-			}
-			for storyIndex, story := range section.Stories {
+			for _, story := range section.Stories {
 				if story.StorySubID <= 0 ||
 					story.StateFlag&^8 != 0 ||
 					story.Title == "" ||
-					story.ScriptSegmentCount <= 0 ||
 					story.FeatureReward.Type < 0 ||
 					story.FeatureReward.Num < 0 ||
 					story.FeatureReward.RewardTypeID < 0 ||
 					story.FeatureReward.CardSkillLevels == nil {
 					return 0, fmt.Errorf("sub story %d has invalid static fields", story.StorySubID)
-				}
-				if mapping.StoryIDs[storyIndex] != story.StorySubID {
-					return 0, fmt.Errorf("sub story section %d story order differs", section.StorySubSectionID)
 				}
 				if _, duplicate := storyIDs[story.StorySubID]; duplicate {
 					return 0, fmt.Errorf("duplicate sub story ID %d", story.StorySubID)
@@ -546,9 +412,6 @@ func validateStoryMasterSubCharacters(
 				count++
 			}
 		}
-	}
-	if len(mappingBySectionID) != len(sectionIDs) {
-		return 0, errors.New("sub story mappings contain unused sections")
 	}
 	return count, nil
 }

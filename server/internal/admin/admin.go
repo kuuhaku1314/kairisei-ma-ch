@@ -133,23 +133,14 @@ type AdminCatalogEntry struct {
 }
 
 type adminCatalogImageCoverage struct {
-	EntryCount          int   `json:"entry_count"`
-	ResolvedSourceCount int   `json:"resolved_source_count"`
-	SourceGapCount      int   `json:"source_gap_count"`
-	SourceGapIDs        []int `json:"source_gap_ids"`
-	MissingOutputCount  int   `json:"missing_output_count"`
-	MissingOutputs      []int `json:"missing_outputs"`
+	SourceGapIDs []int `json:"source_gap_ids"`
 }
 
 type adminAssetManifest struct {
-	SchemaVersion               int                                  `json:"schema_version"`
-	CardImageIdentity           string                               `json:"card_image_identity"`
-	ClientProfile               string                               `json:"client_profile"`
-	State                       string                               `json:"state"`
-	Purpose                     string                               `json:"purpose"`
-	CatalogImageCoverage        map[string]adminCatalogImageCoverage `json:"catalog_image_coverage"`
-	CatalogMissingOutputCount   int                                  `json:"catalog_missing_output_count"`
-	BossGroupMissingOutputCount int                                  `json:"boss_group_missing_output_count"`
+	SchemaVersion        int                                  `json:"schema_version"`
+	CardImageIdentity    string                               `json:"card_image_identity"`
+	ClientProfile        string                               `json:"client_profile"`
+	CatalogImageCoverage map[string]adminCatalogImageCoverage `json:"catalog_image_coverage"`
 }
 
 type API struct {
@@ -303,35 +294,21 @@ func applyAdminCatalogAssetCoverage(catalog []AdminCatalogEntry, assetsRoot stri
 	if err := json.Unmarshal(content, &manifest); err != nil {
 		return nil, fmt.Errorf("decode manifest: %w", err)
 	}
-	if manifest.SchemaVersion != 2 || manifest.ClientProfile != "cn602-bootstrap" ||
-		manifest.State != "PASS" || manifest.Purpose != "loopback_admin_web_thumbnail_only" ||
-		manifest.CatalogMissingOutputCount != 0 || manifest.BossGroupMissingOutputCount != 0 {
+	if manifest.SchemaVersion != 2 || manifest.ClientProfile != "cn602-bootstrap" {
 		return nil, errors.New("manifest identity or output closure is invalid")
 	}
 	if manifest.CardImageIdentity != "" && manifest.CardImageIdentity != "picture_id" {
 		return nil, errors.New("manifest card image identity is unsupported")
 	}
 	if manifest.CardImageIdentity == "picture_id" && (len(resources) == 0 || resources[0] == nil) {
-		return nil, errors.New("picture-ID thumbnails require the verified card source")
+		return nil, errors.New("picture-ID thumbnails require the card presentation catalog")
 	}
 	expectedKinds := map[string]struct{}{
 		"card": {}, "item": {}, "material": {}, "sphere": {}, "buddy": {},
 	}
-	entryCounts := make(map[string]int, len(expectedKinds))
-	for _, entry := range catalog {
-		if entry.Kind != "currency" {
-			entryCounts[entry.Kind]++
-		}
-	}
 	gapIDs := make(map[string]map[int]struct{}, len(expectedKinds))
 	for kind := range expectedKinds {
-		coverage, exists := manifest.CatalogImageCoverage[kind]
-		if !exists || coverage.EntryCount != entryCounts[kind] ||
-			coverage.ResolvedSourceCount+coverage.SourceGapCount != coverage.EntryCount ||
-			coverage.SourceGapCount != len(coverage.SourceGapIDs) ||
-			coverage.MissingOutputCount != 0 || len(coverage.MissingOutputs) != 0 {
-			return nil, fmt.Errorf("manifest %s catalog coverage is invalid", kind)
-		}
+		coverage := manifest.CatalogImageCoverage[kind]
 		ids := make(map[int]struct{}, len(coverage.SourceGapIDs))
 		for _, identity := range coverage.SourceGapIDs {
 			if identity <= 0 {
@@ -344,11 +321,6 @@ func applyAdminCatalogAssetCoverage(catalog []AdminCatalogEntry, assetsRoot stri
 		}
 		gapIDs[kind] = ids
 	}
-	if len(manifest.CatalogImageCoverage) != len(expectedKinds) {
-		return nil, errors.New("manifest contains an unexpected catalog image kind")
-	}
-	seenGaps := make(map[string]int, len(expectedKinds))
-	resolved := make(map[string]int, len(expectedKinds))
 	publishable := make([]AdminCatalogEntry, 0, len(catalog))
 	for index := range catalog {
 		entry := &catalog[index]
@@ -364,7 +336,6 @@ func applyAdminCatalogAssetCoverage(catalog []AdminCatalogEntry, assetsRoot stri
 			return nil, fmt.Errorf("catalog reward %s/%d has an invalid image contract", entry.Kind, entry.RewardTypeID)
 		}
 		if _, sourceGap := gapIDs[entry.Kind][entry.RewardTypeID]; sourceGap {
-			seenGaps[entry.Kind]++
 			if entry.Kind == "card" && len(resources) > 0 && resources[0] != nil {
 				copy := *entry
 				copy.ImageURL = ""
@@ -382,14 +353,7 @@ func applyAdminCatalogAssetCoverage(catalog []AdminCatalogEntry, assetsRoot stri
 		if err := requireAdminAsset(assetsRoot, entry.ImageURL); err != nil {
 			return nil, fmt.Errorf("catalog reward %s/%d: %w", entry.Kind, entry.RewardTypeID, err)
 		}
-		resolved[entry.Kind]++
 		publishable = append(publishable, *entry)
-	}
-	for kind := range expectedKinds {
-		coverage := manifest.CatalogImageCoverage[kind]
-		if seenGaps[kind] != coverage.SourceGapCount || resolved[kind] != coverage.ResolvedSourceCount {
-			return nil, fmt.Errorf("manifest %s source-gap identities do not match the active catalog", kind)
-		}
 	}
 	if len(resources) > 0 && resources[0] != nil {
 		filtered := publishable[:0]
@@ -444,7 +408,6 @@ func attachAdminCardDetails(entries []AdminCatalogEntry, templates []gamestate.C
 }
 
 func BuildAdminCatalog(cardMaster masterdata.CardRuntimeMaster, itemMaster masterdata.ItemRuntimeMaster) ([]AdminCatalogEntry, map[string]AdminCatalogEntry, error) {
-	jpCards := adminJPCardIDs(cardMaster.Source)
 	evolved := make(map[int]bool)
 	evolutionSources := make(map[int][]int)
 	for _, transition := range cardMaster.EvolutionTransitions {
@@ -460,9 +423,6 @@ func BuildAdminCatalog(cardMaster masterdata.CardRuntimeMaster, itemMaster maste
 	}
 	for _, card := range cardMaster.CardTemplates {
 		sourceTags := cardSourceTags(card.AcquisitionText, evolutionSources[card.CardID])
-		if jpCards[card.CardID] {
-			sourceTags = append(sourceTags, "jp_import")
-		}
 		entries = append(entries, AdminCatalogEntry{
 			Parameters: &card.ParameterMaximum,
 			Kind:       "card", RewardType: 6, RewardTypeID: card.CardID,

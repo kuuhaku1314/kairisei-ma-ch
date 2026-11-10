@@ -39,7 +39,7 @@ func TestRarityFiveTicketGachaConsumesOfficialItemAndAddsCard(t *testing.T) {
 		cardMax:           10,
 		nextUniqueID:      1,
 		cardProgression: gamestate.CardProgressionPolicy{
-			ConfigVersion: 1, FusionGoldPerMaterialPerBaseLevel: 1,
+			FusionGoldPerMaterialPerBaseLevel: 1,
 		},
 	}
 

@@ -32,7 +32,7 @@ func TestCardFusionFame(t *testing.T) {
 				},
 				cardExperience: map[int][]int{1: {10}},
 				stackCards:     []gamestate.CardStack{{CardID: 20, Num: 3, AddExperience: 10}},
-				cardProgression: gamestate.CardProgressionPolicy{ConfigVersion: 5, MaximumCardMaterialCount: 100,
+				cardProgression: gamestate.CardProgressionPolicy{MaximumCardMaterialCount: 100,
 					FusionGoldPerMaterialPerBaseLevel: 100,
 					FusionSuccessTypes:                []gamestate.CardFusionSuccessPolicy{{SuccessType: 0, Weight: 1, ExperiencePermille: 1000}},
 					FameMaterials:                     map[int][5]int{20: {1, 5}},
@@ -320,7 +320,7 @@ func TestCardEvolutionRecipes(t *testing.T) {
 				cardDefinitions: map[int]gamestate.Card{11: {CardID: 11, LevelMax: 3, ExperienceTableID: 2, LoveMax: 10000, FameMax: 100}},
 				cardTemplates:   map[int]CardInfo{11: {CardID: 11, Level: 1, LevelMax: 3}},
 				cardExperience:  map[int][]int{2: {20, 30}},
-				cardProgression: gamestate.CardProgressionPolicy{ConfigVersion: 5, FusionGoldPerMaterialPerBaseLevel: 100},
+				cardProgression: gamestate.CardProgressionPolicy{FusionGoldPerMaterialPerBaseLevel: 100},
 				missionCatalog: missionCatalogFixture(t, map[int]gamestate.MissionDefinition{
 					1: {MissionID: 1, Published: true, Title: "进化为指定卡", Rule: &gamestate.MissionRule{Event: gamestate.MissionCardEvolution, SubjectID: 11, Target: 1}},
 				}),

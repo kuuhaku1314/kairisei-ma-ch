@@ -11,9 +11,9 @@ import (
 
 func TestCardProfileTagsDriveEnhancedUserAttack(t *testing.T) {
 	engine, _ := coreBattleFixture(t)
-	row := make([]string, 62)
-	row[0], row[26] = "1", "1"
-	row[54], row[55], row[61] = "-1", "30020003", "30020004"
+	row := make([]string, 113)
+	row[0], row[38] = "1", "1"
+	row[68], row[69], row[75] = "-1", "30020003", "30020004"
 	card, err := battlecontent.ParseCard(row)
 	if err != nil || card.ProfileTags[0] != 0 || card.ProfileTags[1] != 30020003 || card.ProfileTags[7] != 30020004 {
 		t.Fatalf("wrong profile CSV mapping: %+v, %v", card, err)

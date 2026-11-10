@@ -145,14 +145,13 @@ func TestApplyAdminCatalogAssetCoverage(t *testing.T) {
 		}
 	}
 	manifest := adminAssetManifest{
-		SchemaVersion: 2, ClientProfile: "cn602-bootstrap", State: "PASS",
-		Purpose: "loopback_admin_web_thumbnail_only",
+		SchemaVersion: 2, ClientProfile: "cn602-bootstrap",
 		CatalogImageCoverage: map[string]adminCatalogImageCoverage{
-			"card":     {EntryCount: 2, ResolvedSourceCount: 1, SourceGapCount: 1, SourceGapIDs: []int{2}},
-			"item":     {EntryCount: 1, ResolvedSourceCount: 1},
-			"material": {EntryCount: 1, ResolvedSourceCount: 1},
-			"sphere":   {EntryCount: 1, ResolvedSourceCount: 1},
-			"buddy":    {EntryCount: 1, ResolvedSourceCount: 1},
+			"card":     {SourceGapIDs: []int{2}},
+			"item":     {},
+			"material": {},
+			"sphere":   {},
+			"buddy":    {},
 		},
 	}
 	content, err := json.Marshal(manifest)

@@ -32,24 +32,19 @@ func TestCanonicalGaugeGroupsPreserveOrderAndParameterSlots(t *testing.T) {
 	if _, err := ParseEnemyGaugeReactions(reactionRow("1", "UNKNOWN")); err == nil {
 		t.Fatal("unknown reaction kind accepted")
 	}
-	if err := readCombatData(strings.NewReader("#ENEMY_GAUGES_V1,1\n1,1\n"), true, func([]string) error { return nil }); err == nil {
-		t.Fatal("retired required extension silently ignored")
-	}
 }
 
 func TestCanonicalGaugeRequiresReferencedGroupAndLevel(t *testing.T) {
 	text := reactionRow("10000001", "COST_FIXED", "3")
 	for _, test := range []struct {
-		name                   string
-		group                  int
-		level, canonical, fail bool
+		name        string
+		group       int
+		level, fail bool
 	}{
-		{"complete", 10000001, true, true, false},
-		{"missing-group", 10000002, true, true, true},
-		{"missing-level", 10000001, false, true, true},
-		{"missing-table", 10000001, true, false, true},
-		{"legacy-no-gauge", 0, true, false, false},
-		{"canonical-no-reactions", 0, true, true, false},
+		{"complete", 10000001, true, false},
+		{"missing-group", 10000002, true, true},
+		{"missing-level", 10000001, false, true},
+		{"canonical-no-reactions", 0, true, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			defs := &battlemodel.Definitions{
@@ -59,7 +54,7 @@ func TestCanonicalGaugeRequiresReferencedGroupAndLevel(t *testing.T) {
 			if test.level {
 				defs.EnemyLevels[1] = battlemodel.CombatEnemyLevel{ID: 1}
 			}
-			err := applyEnemyGaugeTables(defs, text, test.canonical)
+			err := applyEnemyGaugeTables(defs, text)
 			if (err != nil) != test.fail {
 				t.Fatalf("load error = %v", err)
 			}
@@ -68,9 +63,6 @@ func TestCanonicalGaugeRequiresReferencedGroupAndLevel(t *testing.T) {
 				if gauge == nil || gauge.InitialState != 2 || gauge.InitialRate != 50 || len(gauge.Reactions) != 1 {
 					t.Fatal("canonical gauge definition not attached")
 				}
-			}
-			if test.name == "legacy-no-gauge" && defs.Enemies[1].ReactiveGauge != nil {
-				t.Fatal("legacy input invented a gauge")
 			}
 			if test.name == "canonical-no-reactions" {
 				gauge := defs.Enemies[1].ReactiveGauge
@@ -101,15 +93,7 @@ func TestCanonicalEnemyLevelStateSkillsDoNotShiftOtherActions(t *testing.T) {
 		modern.Actions[0].SkillID != 2001 || modern.Actions[1].SkillID != 3001 || modern.Actions[2].SkillID != 4001 {
 		t.Fatalf("state/call/ordinary/special/death columns changed: %+v", modern)
 	}
-	legacy, err := ParseEnemyLevel(append(append([]string{}, row[:30]...), row[51:]...))
-	if err != nil {
-		t.Fatal(err)
-	}
-	modern.GaugeActions = legacy.GaugeActions
-	if !reflect.DeepEqual(modern, legacy) {
-		t.Fatal("unchanged enemy fields differ between explicit layouts")
-	}
-	short, err := parseEnemyLevel(row[:51], true)
+	short, err := ParseEnemyLevel(row[:51])
 	if err != nil || short.GaugeActions[2].SkillID != 9003 || len(short.Actions) != 0 {
 		t.Fatalf("original short modern row rejected or shifted: %+v %v", short, err)
 	}

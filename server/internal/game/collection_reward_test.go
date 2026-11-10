@@ -40,7 +40,7 @@ func TestCollectionRewardExchangeAndDuplicateGift(t *testing.T) {
 }
 
 func TestConfiguredFamePoolKeepsTriggerAndFrozenRewards(t *testing.T) {
-	policy := gamestate.TeamBattleFameBonusPolicy{ConfigVersion: 1, ChanceMaximum: 100, FullFameThreshold: 100, FullFameRewardCount: 2, RewardSource: "first_inventory_result_reward", RollPolicy: "sha256_seed_modulo_chance_maximum_plus_one", EligibleRewardTypes: []int{6, 13, 8}}
+	policy := gamestate.TeamBattleFameBonusPolicy{ChanceMaximum: 100, FullFameThreshold: 100, FullFameRewardCount: 2, EligibleRewardTypes: []int{6, 13, 8}}
 	s := &Account{teamBattleFameBonus: policy}
 	profile := gamestate.TeamBattleRewardProfile{ResultRewards: []gamestate.Reward{{Type: 13, RewardTypeID: 1, Num: 1}}, FameRewards: []gamestate.Reward{{Type: 8, RewardTypeID: 4000, Num: 600}}}
 	context := TeamBattleContext{FameSeed: "multi:room=123", FameSources: []TeamBattleFameSource{{MemberType: 4, LeaderFame: 100}, {MemberType: 2, LeaderFame: 0}}, FameRewardsSet: true, FameRewards: TeamBattleFamePool(profile, policy)}

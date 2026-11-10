@@ -5,22 +5,7 @@ import (
 	"strings"
 
 	"kairisei.local/server/internal/gamestate"
-	"kairisei.local/server/internal/masterdata"
 )
-
-// Region comes from the import receipt, never from names or card ID ranges.
-// It is a catalog shortcut, not evidence of a crystal-gacha acquisition path.
-func adminJPCardIDs(source masterdata.CardMasterIdentity) map[int]bool {
-	ids := make(map[int]bool)
-	for _, imported := range source.Imports {
-		if imported.Region == "JP" {
-			for _, id := range imported.IDs.Cards {
-				ids[id] = true
-			}
-		}
-	}
-	return ids
-}
 
 // Operator pools may offer any existing card (user decision 2026-09-27, LOCAL_POLICY); the
 // unowned-six-star pool keeps its six-star identity because its draw excludes owned card families.

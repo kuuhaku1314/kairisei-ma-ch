@@ -135,7 +135,7 @@ func (s *Account) battleCardSourcesLocked(profiles []gamestate.TeamBattleRewardP
 					}
 				}
 			}
-			if s.teamBattleFameBonus.ConfigVersion != 0 {
+			if s.teamBattleFameBonus.ChanceMaximum > 0 {
 				entry := target.entry
 				entry.Text += "（名声奖励）"
 				for _, reward := range TeamBattleFamePool(profile, s.teamBattleFameBonus) {
@@ -162,7 +162,7 @@ func (s *Account) battleCardSourcesLocked(profiles []gamestate.TeamBattleRewardP
 					}
 				}
 			}
-			if s.teamBattleHostBonus.ConfigVersion != 0 && target.multi {
+			if s.teamBattleHostBonus.RewardCount > 0 && target.multi {
 				for _, reward := range profile.ResultRewards {
 					if slices.Contains(s.teamBattleHostBonus.EligibleRewardTypes, reward.Type) {
 						entry := target.entry

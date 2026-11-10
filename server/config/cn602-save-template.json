@@ -1,13 +1,6 @@
 {
   "schema_version": 1,
   "player_progression_config_version": 6,
-  "card_progression_config_version": 0,
-  "feature_unlock_config_version": 7,
-  "profile_config_version": 4,
-  "currency_config_version": 1,
-  "explore_config_version": 2,
-  "battle_loadout_config_version": 2,
-  "battle_point_config_version": 1,
   "battle_point": {
     "recovery_seconds": 180
   },
@@ -18,7 +11,6 @@
     "defense_decks": [],
     "history": []
   },
-  "sphere_config_version": 0,
   "spheres": [],
   "battle_loadout_card_unique_ids": [
     602000101,
@@ -326,7 +318,7 @@
       "name": "特异型伊丽莎白一世",
       "level": 60,
       "level_max": 60,
-      "experience": 0,
+      "experience": 598300,
       "love": 10000,
       "skill_levels": [
         1
@@ -346,7 +338,7 @@
       "name": "异界型 间桐 樱",
       "level": 60,
       "level_max": 60,
-      "experience": 0,
+      "experience": 598300,
       "love": 10000,
       "skill_levels": [
         1
@@ -366,7 +358,7 @@
       "name": "炎夏型贝琳",
       "level": 60,
       "level_max": 60,
-      "experience": 0,
+      "experience": 598300,
       "love": 10000,
       "skill_levels": [
         1
@@ -386,7 +378,7 @@
       "name": "新春型莫德雷德",
       "level": 60,
       "level_max": 60,
-      "experience": 0,
+      "experience": 598300,
       "love": 10000,
       "skill_levels": [
         1
@@ -406,7 +398,7 @@
       "name": "炎夏型盗贼亚瑟",
       "level": 60,
       "level_max": 60,
-      "experience": 0,
+      "experience": 598300,
       "love": 10000,
       "skill_levels": [
         1
@@ -426,7 +418,7 @@
       "name": "特异型伊丽莎白一世",
       "level": 60,
       "level_max": 60,
-      "experience": 0,
+      "experience": 598300,
       "love": 10000,
       "skill_levels": [
         1
@@ -446,7 +438,7 @@
       "name": "神话型乌尔德",
       "level": 60,
       "level_max": 60,
-      "experience": 0,
+      "experience": 598300,
       "love": 10000,
       "skill_levels": [
         1
@@ -466,7 +458,7 @@
       "name": "异界型 卫宫 士郎",
       "level": 60,
       "level_max": 60,
-      "experience": 0,
+      "experience": 598300,
       "love": 10000,
       "skill_levels": [
         1
@@ -486,7 +478,7 @@
       "name": "第二型佩里亚丝",
       "level": 60,
       "level_max": 60,
-      "experience": 0,
+      "experience": 598300,
       "love": 10000,
       "skill_levels": [
         1
@@ -506,7 +498,7 @@
       "name": "新春型高文",
       "level": 60,
       "level_max": 60,
-      "experience": 0,
+      "experience": 598300,
       "love": 10000,
       "skill_levels": [
         1
@@ -526,7 +518,7 @@
       "name": "特异型伊丽莎白-巴托里",
       "level": 60,
       "level_max": 60,
-      "experience": 0,
+      "experience": 598300,
       "love": 10000,
       "skill_levels": [
         1
@@ -546,7 +538,7 @@
       "name": "特异型伊丽莎白一世",
       "level": 60,
       "level_max": 60,
-      "experience": 0,
+      "experience": 598300,
       "love": 10000,
       "skill_levels": [
         1
@@ -566,7 +558,7 @@
       "name": "圣骑型卡拉德克",
       "level": 60,
       "level_max": 60,
-      "experience": 0,
+      "experience": 598300,
       "love": 10000,
       "skill_levels": [
         1
@@ -586,7 +578,7 @@
       "name": "圣夜型贝莉珊",
       "level": 60,
       "level_max": 60,
-      "experience": 0,
+      "experience": 598300,
       "love": 10000,
       "skill_levels": [
         1
@@ -606,7 +598,7 @@
       "name": "特异型牛若丸",
       "level": 60,
       "level_max": 60,
-      "experience": 0,
+      "experience": 598300,
       "love": 10000,
       "skill_levels": [
         1
@@ -626,7 +618,7 @@
       "name": "复制型法莎莉雅",
       "level": 60,
       "level_max": 60,
-      "experience": 0,
+      "experience": 598300,
       "love": 10000,
       "skill_levels": [
         1
@@ -646,7 +638,7 @@
       "name": "感谢型歌姬亚瑟",
       "level": 60,
       "level_max": 60,
-      "experience": 0,
+      "experience": 598300,
       "love": 10000,
       "skill_levels": [
         1
@@ -666,7 +658,7 @@
       "name": "异界型Saber(剑士) -魔力解放-",
       "level": 60,
       "level_max": 60,
-      "experience": 0,
+      "experience": 598300,
       "love": 10000,
       "skill_levels": [
         1
@@ -686,7 +678,7 @@
       "name": "学徒型乌莎哈",
       "level": 60,
       "level_max": 60,
-      "experience": 0,
+      "experience": 598300,
       "love": 10000,
       "skill_levels": [
         1
@@ -706,7 +698,7 @@
       "name": "特异型伊丽莎白一世",
       "level": 60,
       "level_max": 60,
-      "experience": 0,
+      "experience": 598300,
       "love": 10000,
       "skill_levels": [
         1
@@ -1015,7 +1007,6 @@
     "beginner_day": 0,
     "total_claims": 0
   },
-  "item_shop_config_version": 2,
   "items": [
     {
       "itemid": 1000,
@@ -1163,7 +1154,6 @@
       "lineup": []
     }
   ],
-  "gacha_config_version": 16,
   "gachas": [
     {
       "gachaid": 60200001,
@@ -88152,7 +88142,6 @@
     "fusion_gold_per_card": 500,
     "evolution_transitions": []
   },
-  "support_deck_config_version": 1,
   "support_deck": {
     "unlock_slot_nums": [
       0,
@@ -88162,7 +88151,6 @@
     ],
     "card_collection_ids": []
   },
-  "stage_quest_config_version": 3,
   "main_quest": {
     "stage_quest": {
       "areaid": 200001,
@@ -88281,7 +88269,6 @@
     "stage_clear": [],
     "new_clear_stage": []
   },
-  "team_battle_config_version": 7,
   "team_battle_solo_show": {
     "0": 5,
     "1": 5,

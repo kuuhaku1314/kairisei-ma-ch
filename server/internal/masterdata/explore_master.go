@@ -14,22 +14,17 @@ import (
 const maxExploreMasterBytes = 1024 * 1024
 
 type exploreMap struct {
-	ID      int    `json:"id"`
-	MapType string `json:"map_type"`
-	MapIDs  []int  `json:"map_ids"`
-	BGMID   int    `json:"bgm_id"`
+	ID int `json:"id"`
 }
 
 type exploreRuntimeMaster struct {
 	SchemaVersion int    `json:"schema_version"`
 	ClientProfile string `json:"client_profile"`
 
-	Maps               []exploreMap             `json:"maps"`
-	ExcludedTestMapIDs []int                    `json:"excluded_test_map_ids"`
-	Stage              gamestate.ExploreStage   `json:"stage"`
-	Stages             []gamestate.ExploreStage `json:"stages"`
-	FloorRarity        int                      `json:"floor_rarity"`
-	Events             []json.RawMessage        `json:"events"`
+	Maps        []exploreMap             `json:"maps"`
+	Stages      []gamestate.ExploreStage `json:"stages"`
+	FloorRarity int                      `json:"floor_rarity"`
+	Events      []json.RawMessage        `json:"events"`
 }
 
 func LoadExploreRuntimeMaster(masterPath string) (exploreRuntimeMaster, error) {
@@ -70,13 +65,12 @@ func validateExploreRuntimeMaster(master exploreRuntimeMaster) error {
 	if master.SchemaVersion != 1 || master.ClientProfile != "cn602-bootstrap" {
 		return errors.New("CN Explore runtime master identity is invalid")
 	}
-	if len(master.Maps) == 0 {
+	if len(master.Maps) == 0 || len(master.Stages) == 0 {
 		return errors.New("CN Explore runtime master source is incomplete")
 	}
 	maps := make(map[int]struct{}, len(master.Maps))
 	for _, exploreMap := range master.Maps {
-		if exploreMap.ID <= 0 || exploreMap.MapType == "" || len(exploreMap.MapIDs) != 2 ||
-			exploreMap.MapIDs[0] <= 0 || exploreMap.MapIDs[1] <= 0 || exploreMap.BGMID <= 0 {
+		if exploreMap.ID <= 0 {
 			return fmt.Errorf("invalid CN Explore map %d", exploreMap.ID)
 		}
 		if _, exists := maps[exploreMap.ID]; exists {
@@ -85,9 +79,6 @@ func validateExploreRuntimeMaster(master exploreRuntimeMaster) error {
 		maps[exploreMap.ID] = struct{}{}
 	}
 	stages := master.Stages
-	if len(stages) == 0 {
-		stages = []gamestate.ExploreStage{master.Stage}
-	}
 	stageIDs := make(map[int]struct{}, len(stages))
 	floorIDs := make(map[int]struct{})
 	for _, stage := range stages {
@@ -112,22 +103,6 @@ func validateExploreRuntimeMaster(master exploreRuntimeMaster) error {
 			floorIDs[floor.ExploreFloorID] = struct{}{}
 		}
 	}
-	if master.Stage.ExploreStageID != stages[0].ExploreStageID {
-		return errors.New("CN Explore default stage differs from the first published stage")
-	}
-	excluded := make(map[int]struct{}, len(master.ExcludedTestMapIDs))
-	for _, mapID := range master.ExcludedTestMapIDs {
-		if _, exists := maps[mapID]; !exists {
-			return fmt.Errorf("CN Explore excluded test map %d is absent from the official registry", mapID)
-		}
-		if _, published := stageIDs[mapID]; published {
-			return fmt.Errorf("CN Explore test map %d is also published", mapID)
-		}
-		if _, duplicate := excluded[mapID]; duplicate {
-			return fmt.Errorf("duplicate CN Explore excluded test map %d", mapID)
-		}
-		excluded[mapID] = struct{}{}
-	}
 	if master.FloorRarity < 0 || master.FloorRarity > 1 || len(master.Events) == 0 {
 		return errors.New("CN Explore runtime event sequence is incomplete")
 	}
@@ -147,12 +122,9 @@ func validateExploreRuntimeMaster(master exploreRuntimeMaster) error {
 }
 
 func ApplyExploreRuntimeMaster(state *gamestate.State, master exploreRuntimeMaster) error {
-	state.Explore.Stage = master.Stage
-	state.Explore.Stage.Floors = append([]gamestate.ExploreFloor(nil), master.Stage.Floors...)
+	state.Explore.Stage = master.Stages[0]
+	state.Explore.Stage.Floors = append([]gamestate.ExploreFloor(nil), master.Stages[0].Floors...)
 	stages := master.Stages
-	if len(stages) == 0 {
-		stages = []gamestate.ExploreStage{master.Stage}
-	}
 	state.Explore.Stages = make([]gamestate.ExploreStage, len(stages))
 	knownStageIDs := make(map[int]struct{}, len(stages))
 	for index, stage := range stages {
@@ -165,7 +137,7 @@ func ApplyExploreRuntimeMaster(state *gamestate.State, master exploreRuntimeMast
 	}
 	if state.Explore.Active {
 		if _, exists := knownStageIDs[state.Explore.ActiveStageID]; !exists {
-			state.Explore.ActiveStageID = master.Stage.ExploreStageID
+			state.Explore.ActiveStageID = master.Stages[0].ExploreStageID
 		}
 	} else {
 		state.Explore.ActiveStageID = 0

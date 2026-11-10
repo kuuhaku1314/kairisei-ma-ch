@@ -22,7 +22,7 @@ func TestAwakeInheritsUnreleasedBodyDrops(t *testing.T) {
 		{EnemyIndex: 1, Reward: gamestate.Reward{Type: 13, RewardTypeID: 20000003, Num: 1}},
 	}
 	current := &room{battles: waves, dropPlan: plan}
-	drops := roomSpecWaveDrops(RoomSpec{DropLedgerVersion: 1, DropPlan: plan, Battles: waves}, 1)
+	drops := roomSpecWaveDrops(RoomSpec{DropPlan: plan, Battles: waves}, 1)
 	if len(drops) != 2 {
 		t.Fatalf("awake drops: %+v", drops)
 	}
@@ -45,7 +45,7 @@ func TestMultiplayerWavesFinishOnceAndShareAllDrops(t *testing.T) {
 	hub := NewHub()
 	server := &Server{hub: hub, logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	current := &room{RoomSnapshot: RoomSnapshot{RoomID: 123, BossID: 1, State: RoomStateBattle, Members: members},
-		engine: engine, gameStarted: true, hostCostPaid: true, dropLedgerVersion: 1, connections: map[int]*clientConn{}, gameStartFinished: map[int]bool{},
+		engine: engine, gameStarted: true, hostCostPaid: true, connections: map[int]*clientConn{}, gameStartFinished: map[int]bool{},
 		turnPhaseFinished: map[int]bool{}, cardPlaySubmissions: map[int]cardPlaySubmission{}, userAttackFinished: map[int]bool{},
 	}
 	hub.rooms[123] = current
@@ -175,8 +175,7 @@ func TestRoomAwakeningCarriesBossCostAndDiscard(t *testing.T) {
 			server := &Server{hub: hub, logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
 			client := &clientConn{server: server, conn: &sessionTestConn{}}
 			spec := RoomSpec{BossID: 1, EnemyPartyID: 1, CostInitial: 3, HoldMax: 6, Seed: 602, Owner: members[0],
-				AwakeTakeover: battlecore.WaveTakeover{KeepCost: keep, KeepDeckTrash: keep}, DropLedgerVersion: 1,
-				Battles: []gamestate.TeamBattleReplayBattle{{EnemyPartyID: 1}, {EnemyPartyID: 1, EnemyType: 4}}}
+				AwakeTakeover: battlecore.WaveTakeover{KeepCost: keep, KeepDeckTrash: keep}, Battles: []gamestate.TeamBattleReplayBattle{{EnemyPartyID: 1}, {EnemyPartyID: 1, EnemyType: 4}}}
 			credential, err := hub.IssueCreate(spec)
 			if err != nil {
 				t.Fatal(err)
@@ -285,8 +284,7 @@ func TestComebackBetweenWavesUsesActualIndexAndWaitsForScene(t *testing.T) {
 	output := &hubCheckingConn{Conn: left, hub: hub}
 	client := &clientConn{server: server, conn: output}
 	current := &room{RoomSnapshot: RoomSnapshot{RoomID: 123, BossID: 1, State: RoomStateBattle, Members: members},
-		engine: engine, engineBattleEnd: 1, gameStarted: true, dropLedgerVersion: 1,
-		battleIndex: 3, progress: 3, nextBattlePending: true, nextBattleIndex: 4,
+		engine: engine, engineBattleEnd: 1, gameStarted: true, battleIndex: 3, progress: 3, nextBattlePending: true, nextBattleIndex: 4,
 		connections: map[int]*clientConn{}, disconnectedUntil: map[int]time.Time{1: time.Now().Add(time.Minute)},
 		comebackTokens: map[int]string{1: "resume-token"}, gameNextFinished: map[int]bool{},
 	}

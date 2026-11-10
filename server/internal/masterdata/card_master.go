@@ -20,58 +20,36 @@ import (
 const maxCardMasterBytes = 32 * 1024 * 1024
 
 type CardRuntimeMaster struct {
-	Source                       CardMasterIdentity                `json:"source"`
-	SchemaVersion                int                               `json:"schema_version"`
-	ClientProfile                string                            `json:"client_profile"`
-	CardProgressionConfigVersion int                               `json:"card_progression_config_version"`
-	CardProgressionPolicy        gamestate.CardProgressionPolicy   `json:"card_progression_policy"`
-	CardExperienceTables         map[int][]int                     `json:"card_experience_tables"`
-	SphereConfigVersion          int                               `json:"sphere_config_version"`
-	SphereProgressionPolicy      gamestate.SphereProgressionPolicy `json:"sphere_progression_policy"`
-	BuddyConfigVersion           int                               `json:"buddy_config_version"`
-	BuddyProgressionPolicy       gamestate.BuddyProgressionPolicy  `json:"buddy_progression_policy"`
-	SupportDeckConfigVersion     int                               `json:"support_deck_config_version"`
-	SupportDeckSetCardNum        int                               `json:"support_deck_set_card_num"`
+	SchemaVersion           int                               `json:"schema_version"`
+	ClientProfile           string                            `json:"client_profile"`
+	CardProgressionPolicy   gamestate.CardProgressionPolicy   `json:"card_progression_policy"`
+	CardExperienceTables    map[int][]int                     `json:"card_experience_tables"`
+	SphereProgressionPolicy gamestate.SphereProgressionPolicy `json:"sphere_progression_policy"`
+	BuddyProgressionPolicy  gamestate.BuddyProgressionPolicy  `json:"buddy_progression_policy"`
+	SupportDeckSetCardNum   int                               `json:"support_deck_set_card_num"`
 
-	CardTemplates                     []gamestate.Card                      `json:"card_templates"`
-	CardSellExtract                   *gamestate.CardSellExtractPolicy      `json:"card_sell_extract,omitempty"`
-	CardCollectionPages               [][]int                               `json:"card_collection_pages"`
-	DeckRankPolicy                    gamestate.DeckRankPolicy              `json:"deck_rank_policy"`
-	AlchemistStarterDeck              *gamestate.AlchemistStarterDeck       `json:"alchemist_starter_deck,omitempty"`
-	StackCardTemplates                []gamestate.CardStack                 `json:"stack_card_templates"`
-	CardCategoryProfiles              []gamestate.CardCategoryProfile       `json:"card_category_profiles"`
-	CardGroupProfiles                 []gamestate.CardGroupProfile          `json:"card_group_profiles"`
-	CardGroupPolicy                   gamestate.CardGroupPolicy             `json:"card_group_policy"`
-	EvolutionTransitions              []gamestate.EvolutionTransition       `json:"evolution_transitions"`
-	CardDevelopmentPolicy             gamestate.CardDevelopmentPolicy       `json:"card_development_policy"`
-	SkippedIncompleteEvolutionCardIDs []int                                 `json:"skipped_incomplete_evolution_source_cardids"`
-	SphereDefinitions                 []gamestate.SphereDefinition          `json:"sphere_definitions"`
-	SphereExperienceTables            map[int][]int                         `json:"sphere_experience_tables"`
-	SphereEvolutionPrices             map[string][]int                      `json:"sphere_evolution_prices"`
-	SphereSeedTemplates               []gamestate.Sphere                    `json:"sphere_seed_templates"`
-	SphereSeedDecks                   map[string][]int64                    `json:"sphere_seed_decks"`
-	BuddyDefinitions                  []gamestate.BuddyDefinition           `json:"buddy_definitions"`
-	BuddyExperienceTables             map[int][]int                         `json:"buddy_experience_tables"`
-	BuddyEvolutionPrices              map[string][]int                      `json:"buddy_evolution_prices"`
-	BuddySeedTemplates                []gamestate.Buddy                     `json:"buddy_seed_templates"`
-	BuddySeedDecks                    map[string][]int64                    `json:"buddy_seed_decks"`
-	BuddySeedStackCards               []gamestate.CardStack                 `json:"buddy_seed_stack_cards"`
-	SupportDeckSlotUnlockRules        []gamestate.SupportDeckSlotUnlockRule `json:"support_deck_slot_unlock_rules"`
-}
-
-// CardMasterIdentity retains only identities used by the catalog and CSV validation.
-type CardMasterIdentity struct {
-	Files []struct {
-		Path   string `json:"path"`
-		Bytes  int    `json:"bytes"`
-		SHA256 string `json:"sha256"`
-	} `json:"files"`
-	Imports []struct {
-		Region string `json:"region"`
-		IDs    struct {
-			Cards []int `json:"card"`
-		} `json:"ids"`
-	} `json:"imported_inventory"`
+	CardTemplates              []gamestate.Card                      `json:"card_templates"`
+	CardSellExtract            *gamestate.CardSellExtractPolicy      `json:"card_sell_extract,omitempty"`
+	CardCollectionPages        [][]int                               `json:"card_collection_pages"`
+	DeckRankPolicy             gamestate.DeckRankPolicy              `json:"deck_rank_policy"`
+	AlchemistStarterDeck       *gamestate.AlchemistStarterDeck       `json:"alchemist_starter_deck,omitempty"`
+	StackCardTemplates         []gamestate.CardStack                 `json:"stack_card_templates"`
+	CardCategoryProfiles       []gamestate.CardCategoryProfile       `json:"card_category_profiles"`
+	CardGroupProfiles          []gamestate.CardGroupProfile          `json:"card_group_profiles"`
+	EvolutionTransitions       []gamestate.EvolutionTransition       `json:"evolution_transitions"`
+	CardDevelopmentPolicy      gamestate.CardDevelopmentPolicy       `json:"card_development_policy"`
+	SphereDefinitions          []gamestate.SphereDefinition          `json:"sphere_definitions"`
+	SphereExperienceTables     map[int][]int                         `json:"sphere_experience_tables"`
+	SphereEvolutionPrices      map[string][]int                      `json:"sphere_evolution_prices"`
+	SphereSeedTemplates        []gamestate.Sphere                    `json:"sphere_seed_templates"`
+	SphereSeedDecks            map[string][]int64                    `json:"sphere_seed_decks"`
+	BuddyDefinitions           []gamestate.BuddyDefinition           `json:"buddy_definitions"`
+	BuddyExperienceTables      map[int][]int                         `json:"buddy_experience_tables"`
+	BuddyEvolutionPrices       map[string][]int                      `json:"buddy_evolution_prices"`
+	BuddySeedTemplates         []gamestate.Buddy                     `json:"buddy_seed_templates"`
+	BuddySeedDecks             map[string][]int64                    `json:"buddy_seed_decks"`
+	BuddySeedStackCards        []gamestate.CardStack                 `json:"buddy_seed_stack_cards"`
+	SupportDeckSlotUnlockRules []gamestate.SupportDeckSlotUnlockRule `json:"support_deck_slot_unlock_rules"`
 }
 
 func LoadCardRuntimeMaster(masterPath string) (CardRuntimeMaster, error) {
@@ -116,17 +94,11 @@ func validateCardRuntimeMaster(master CardRuntimeMaster) error {
 		return err
 	}
 	if master.SchemaVersion != 15 || master.ClientProfile != "cn602-bootstrap" ||
-		master.CardProgressionConfigVersion <= 0 ||
-		master.CardProgressionPolicy.ConfigVersion != master.CardProgressionConfigVersion ||
 		master.CardProgressionPolicy.FusionGoldPerMaterialPerBaseLevel <= 0 ||
 		master.CardProgressionPolicy.MaximumCardMaterialCount != 100 ||
-		master.SphereConfigVersion <= 0 ||
-		master.SphereProgressionPolicy.ConfigVersion != master.SphereConfigVersion ||
 		master.SphereProgressionPolicy.MaterialLevelBonusPermillePerLevel <= 0 ||
-		master.BuddyConfigVersion <= 0 ||
-		master.BuddyProgressionPolicy.ConfigVersion != master.BuddyConfigVersion ||
 		master.BuddyProgressionPolicy.MaximumMaterialCount <= 0 ||
-		master.SupportDeckConfigVersion <= 0 || master.SupportDeckSetCardNum <= 0 ||
+		master.SupportDeckSetCardNum <= 0 ||
 		master.SupportDeckSetCardNum > 10 {
 		return errors.New("CN card runtime master identity is invalid")
 	}
@@ -185,7 +157,7 @@ func validateCardRuntimeMaster(master CardRuntimeMaster) error {
 		if card.LevelMax > 1 && (!exists || len(values) < card.LevelMax-1) {
 			return fmt.Errorf("CN card %d experience table is incomplete", card.CardID)
 		}
-		normalized, err := normalizeCard(card, card, values, master.CardProgressionPolicy, false)
+		normalized, err := normalizeCard(card, card, values, master.CardProgressionPolicy)
 		if err != nil || !reflect.DeepEqual(normalized, card) {
 			return fmt.Errorf("CN card template %d derived fields are invalid", card.CardID)
 		}
@@ -488,15 +460,7 @@ func ApplyCardRuntimeMaster(state *gamestate.State, master CardRuntimeMaster) (b
 		[]gamestate.SupportDeckSlotUnlockRule(nil),
 		master.SupportDeckSlotUnlockRules...,
 	)
-	if state.CardProgressionConfigVersion < 0 ||
-		state.CardProgressionConfigVersion > master.CardProgressionConfigVersion {
-		return false, fmt.Errorf(
-			"CN save card progression config version %d is unsupported",
-			state.CardProgressionConfigVersion,
-		)
-	}
 	changed := false
-	legacyCardProgression := state.CardProgressionConfigVersion < master.CardProgressionConfigVersion
 	cardTemplates := make(map[int]gamestate.Card, len(master.CardTemplates))
 	for _, template := range master.CardTemplates {
 		cardTemplates[template.CardID] = template
@@ -509,64 +473,18 @@ func ApplyCardRuntimeMaster(state *gamestate.State, master CardRuntimeMaster) (b
 			}
 			values := master.CardExperienceTables[template.ExperienceTableID]
 			normalized, err := normalizeCard(
-				card, template, values, master.CardProgressionPolicy, legacyCardProgression,
+				card, template, values, master.CardProgressionPolicy,
 			)
 			if err != nil {
 				return false, err
 			}
 			if !reflect.DeepEqual(normalized, card) {
-				if !legacyCardProgression {
-					return false, fmt.Errorf("CN card %d differs from its progression contract", card.UniqueID)
-				}
 				(*inventory)[index] = normalized
 				changed = true
 			}
 		}
 	}
-	if legacyCardProgression {
-		state.CardProgressionConfigVersion = master.CardProgressionConfigVersion
-		state.CardActions.FusionGoldPerCard = master.CardProgressionPolicy.FusionGoldPerMaterialPerBaseLevel
-		changed = true
-	}
-	if state.CardActions.FusionGoldPerCard != master.CardProgressionPolicy.FusionGoldPerMaterialPerBaseLevel {
-		return false, errors.New("CN save card fusion price differs from its progression contract")
-	}
-	if state.SupportDeckConfigVersion < 0 ||
-		state.SupportDeckConfigVersion > master.SupportDeckConfigVersion {
-		return false, fmt.Errorf(
-			"CN save support-deck config version %d is unsupported",
-			state.SupportDeckConfigVersion,
-		)
-	}
-	if state.SupportDeckConfigVersion < master.SupportDeckConfigVersion {
-		if len(state.SupportDeck.UnlockSlotNums) == 0 {
-			state.SupportDeck.UnlockSlotNums = make([]int8, 4)
-		}
-		// Preserve any support cards already present in a legacy local save while
-		// replacing the old erroneous "all ten slots unlocked" projection.
-		for _, deck := range state.Decks {
-			if deck.ArthurType < 1 || deck.ArthurType > 4 {
-				continue
-			}
-			occupied := 0
-			for index, uniqueID := range deck.SupportCardUniqueIDs {
-				if uniqueID != 0 && index+1 > occupied {
-					occupied = index + 1
-				}
-			}
-			if occupied > master.SupportDeckSetCardNum {
-				return false, fmt.Errorf(
-					"CN legacy deck %d/%d uses support slot %d beyond the official active count",
-					deck.ArthurType, deck.Index, occupied,
-				)
-			}
-			if int(state.SupportDeck.UnlockSlotNums[deck.ArthurType-1]) < occupied {
-				state.SupportDeck.UnlockSlotNums[deck.ArthurType-1] = int8(occupied)
-			}
-		}
-		state.SupportDeckConfigVersion = master.SupportDeckConfigVersion
-		changed = true
-	}
+	state.CardActions.FusionGoldPerCard = master.CardProgressionPolicy.FusionGoldPerMaterialPerBaseLevel
 	if len(state.SupportDeck.UnlockSlotNums) != 4 {
 		return false, errors.New("CN save support-deck progression must contain four Arthur slots")
 	}
@@ -633,26 +551,6 @@ func ApplyCardRuntimeMaster(state *gamestate.State, master CardRuntimeMaster) (b
 	state.SphereDefinitions = append([]gamestate.SphereDefinition(nil), master.SphereDefinitions...)
 	state.SphereExperienceTables = cloneSphereExperienceTables(master.SphereExperienceTables)
 	state.SphereEvolutionPrices = cloneSphereEvolutionPrices(master.SphereEvolutionPrices)
-	onboarding := state.Onboarding.ConfigVersion == OnboardingConfigVersion &&
-		state.Onboarding.Step < OnboardingStepCount
-	if onboarding {
-		// Account creation already removes QA spheres. Later preparation must
-		// preserve legitimately received instances and their equipped slots.
-		for index := range state.Decks {
-			if len(state.Decks[index].SphereUniqueIDs) == 0 {
-				state.Decks[index].SphereUniqueIDs = make([]int64, 3)
-				changed = true
-			}
-		}
-	}
-	if state.SphereConfigVersion < 0 || state.SphereConfigVersion > master.SphereConfigVersion {
-		return false, fmt.Errorf("CN save sphere config version %d is unsupported", state.SphereConfigVersion)
-	}
-	legacySphereProgression := state.SphereConfigVersion < master.SphereConfigVersion
-	if legacySphereProgression {
-		state.SphereConfigVersion = master.SphereConfigVersion
-		changed = true
-	}
 	definitions := make(map[int]gamestate.SphereDefinition, len(master.SphereDefinitions))
 	for _, definition := range master.SphereDefinitions {
 		definitions[definition.SphereID] = definition
@@ -667,15 +565,6 @@ func ApplyCardRuntimeMaster(state *gamestate.State, master CardRuntimeMaster) (b
 			return false, fmt.Errorf("CN save repeats sphere unique ID %d", sphere.UniqueID)
 		}
 		uniqueIDs[sphere.UniqueID] = struct{}{}
-		if legacySphereProgression {
-			migrated, err := migrateLegacySphereExperience(
-				sphere, definition, master.SphereExperienceTables,
-			)
-			if err != nil {
-				return false, err
-			}
-			sphere = migrated
-		}
 		normalized, err := normalizeSphere(
 			sphere, definition, master.SphereExperienceTables, master.SphereProgressionPolicy,
 		)
@@ -683,12 +572,6 @@ func ApplyCardRuntimeMaster(state *gamestate.State, master CardRuntimeMaster) (b
 			return false, err
 		}
 		if normalized != sphere {
-			if !legacySphereProgression {
-				return false, fmt.Errorf("CN sphere %d differs from its progression contract", sphere.UniqueID)
-			}
-			state.Spheres[index] = normalized
-			changed = true
-		} else if legacySphereProgression && state.Spheres[index] != normalized {
 			state.Spheres[index] = normalized
 			changed = true
 		}
@@ -696,19 +579,6 @@ func ApplyCardRuntimeMaster(state *gamestate.State, master CardRuntimeMaster) (b
 	state.BuddyDefinitions = append([]gamestate.BuddyDefinition(nil), master.BuddyDefinitions...)
 	state.BuddyExperienceTables = cloneBuddyExperienceTables(master.BuddyExperienceTables)
 	state.BuddyEvolutionPrices = cloneBuddyEvolutionPrices(master.BuddyEvolutionPrices)
-	if state.BuddyConfigVersion < 0 || state.BuddyConfigVersion > master.BuddyConfigVersion {
-		return false, fmt.Errorf("CN save buddy config version %d is unsupported", state.BuddyConfigVersion)
-	}
-	if state.BuddyConfigVersion < master.BuddyConfigVersion {
-		if state.BuddyConfigVersion == 0 && len(state.Buddies) == 0 {
-			for index := range state.Decks {
-				state.Decks[index].BuddyUniqueIDs = make([]int64, 5)
-			}
-		}
-		state.BuddyConfigVersion = master.BuddyConfigVersion
-		state.Buddy = gamestate.Buddy{}
-		changed = true
-	}
 	buddyDefinitions := make(map[int]gamestate.BuddyDefinition, len(master.BuddyDefinitions))
 	for _, definition := range master.BuddyDefinitions {
 		buddyDefinitions[definition.BuddyID] = definition
@@ -745,10 +615,6 @@ func ApplyCardRuntimeMaster(state *gamestate.State, master CardRuntimeMaster) (b
 }
 
 func validateCardGroupProfiles(master CardRuntimeMaster) error {
-	policy := master.CardGroupPolicy
-	if policy.ConfigVersion != 2 {
-		return errors.New("CN card group policy is invalid")
-	}
 	// Dynamic directory keys continue the sourced packaged base inventory.
 	// Exact offsets are established by the catalog producer; only continuity
 	// and the established minimum base keys belong to this runtime contract.
@@ -828,22 +694,13 @@ func normalizeCard(
 	template gamestate.Card,
 	experienceTable []int,
 	policy gamestate.CardProgressionPolicy,
-	migrateLegacy bool,
 ) (gamestate.Card, error) {
 	if card.UniqueID < 0 || card.Level < 1 || card.Level > template.LevelMax ||
 		card.Experience < 0 || card.Love < 0 || card.Love > template.LoveMax ||
 		card.Fame < 0 || card.Fame > template.FameMax || card.IsLock < 0 || card.IsLock > 1 {
 		return gamestate.Card{}, fmt.Errorf("CN card %d mutable state is invalid", card.UniqueID)
 	}
-	experience := card.Experience
-	if migrateLegacy && experience == 0 && card.Level > 1 {
-		var err error
-		experience, err = gamestate.CardExperienceAtLevelStart(card.Level, template.LevelMax, experienceTable)
-		if err != nil {
-			return gamestate.Card{}, fmt.Errorf("normalize CN legacy card %d: %w", card.UniqueID, err)
-		}
-	}
-	experienceState, err := gamestate.NormalizeCardExperience(template.LevelMax, experience, experienceTable)
+	experienceState, err := gamestate.NormalizeCardExperience(template.LevelMax, card.Experience, experienceTable)
 	if err != nil {
 		return gamestate.Card{}, fmt.Errorf("normalize CN card %d experience: %w", card.UniqueID, err)
 	}
@@ -912,42 +769,6 @@ func normalizeSphere(
 	}
 	sphere.AddExperience = addExperience
 	sphere.BaseAddPrice = definition.FusionBaseAddPrice
-	return sphere, nil
-}
-
-func migrateLegacySphereExperience(
-	sphere gamestate.Sphere,
-	definition gamestate.SphereDefinition,
-	tables map[int][]int,
-) (gamestate.Sphere, error) {
-	values, exists := tables[definition.ExperienceTableID]
-	if !exists && definition.MaxLevel > 1 {
-		return gamestate.Sphere{}, fmt.Errorf("CN sphere %d experience table is unavailable", sphere.UniqueID)
-	}
-	if sphere.Level < 1 || sphere.Level > definition.MaxLevel || sphere.Experience < 0 {
-		return gamestate.Sphere{}, fmt.Errorf("CN legacy sphere %d level or experience is invalid", sphere.UniqueID)
-	}
-	start, err := gamestate.SphereExperienceAtLevelStart(sphere.Level, definition.MaxLevel, values)
-	if err != nil {
-		return gamestate.Sphere{}, fmt.Errorf("CN legacy sphere %d: %w", sphere.UniqueID, err)
-	}
-	within := sphere.Experience
-	if sphere.Level > 1 {
-		within -= values[sphere.Level-2]
-	}
-	if within < 0 {
-		within = 0
-	}
-	if sphere.Level < definition.MaxLevel && within >= values[sphere.Level-1] {
-		within = values[sphere.Level-1] - 1
-	}
-	if sphere.Level == definition.MaxLevel {
-		within = 0
-	}
-	if start > math.MaxInt-within {
-		return gamestate.Sphere{}, fmt.Errorf("CN legacy sphere %d experience overflows", sphere.UniqueID)
-	}
-	sphere.Experience = start + within
 	return sphere, nil
 }
 

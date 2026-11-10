@@ -14,7 +14,7 @@ func TestAlchemistAcquisitionUsesSummonDefinitionAndKeepsOrdinaryLevels(t *testi
 		cardDefinitions: map[int]gamestate.Card{},
 		cardTemplates:   map[int]CardInfo{},
 		cardExperience:  map[int][]int{1: {5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5}},
-		cardProgression: gamestate.CardProgressionPolicy{ConfigVersion: 1, FusionGoldPerMaterialPerBaseLevel: 1},
+		cardProgression: gamestate.CardProgressionPolicy{FusionGoldPerMaterialPerBaseLevel: 1},
 		combatDefinitions: &battlemodel.Definitions{Cards: map[int]battlemodel.CombatCardDefinition{
 			skillID: {ID: skillID}, summonID: {ID: summonID, SummonID: 17},
 		}, Summons: map[int]battlemodel.CombatSummonDefinition{17: {ID: 17}}},

@@ -30,7 +30,7 @@ func RuntimeState(t *testing.T) gamestate.State {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = masterdata.ApplyItemRuntimeMaster(&state, item); err != nil {
+	if err = masterdata.ApplyItemRuntimeMaster(&state, item); err != nil {
 		t.Fatal(err)
 	}
 	avatar, err := masterdata.LoadAvatarRuntimeMaster(WriteTestAvatarMaster(t, root))

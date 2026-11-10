@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"kairisei.local/server/internal/gamestate"
@@ -147,13 +146,12 @@ func WriteTestCardMaster(t *testing.T, root string) string {
 		}
 	}
 	master := map[string]any{
-		"schema_version":                  15,
-		"card_collection_pages":           [][]int{{10000010, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
-		"client_profile":                  "cn602-bootstrap",
-		"card_progression_config_version": 4,
+		"schema_version":        15,
+		"card_collection_pages": [][]int{{10000010, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+		"client_profile":        "cn602-bootstrap",
 		"card_progression_policy": map[string]any{
-			"config_version": 4, "fusion_gold_per_material_per_base_level": 100,
-			"maximum_card_material_count": 100,
+			"fusion_gold_per_material_per_base_level": 100,
+			"maximum_card_material_count":             100,
 			"fusion_success_types": []map[string]any{
 				{"success_type": 0, "weight": 90, "experience_permille": 1000},
 				{"success_type": 1, "weight": 9, "experience_permille": 1500},
@@ -161,15 +159,6 @@ func WriteTestCardMaster(t *testing.T, root string) string {
 			},
 			"fame_normal":  map[string]any{"hp": 300, "attack": 200, "magic": 200, "mind": 100},
 			"fame_premium": map[string]any{"hp": 600, "attack": 400, "magic": 400, "mind": 200},
-			"source_state": map[string]any{
-				"experience_tables": "CONFIRMED: test", "parameter_formula": "CONFIRMED: test",
-				"fusion_material_experience": "INFERRED: test", "fusion_gold": "INFERRED: test",
-				"fusion_gold_consumption": "CONFIRMED: test", "sell_gold_consumption": "CONFIRMED: test",
-				"ordinary_card_material_experience": "PLACEHOLDER: test",
-				"material_selection":                "CONFIRMED: test", "skill_level_maximum": "CONFIRMED: test",
-				"fame_inheritance": "CONFIRMED: test", "success_multipliers": "INFERRED: test",
-				"success_weights": "PLACEHOLDER: test",
-			},
 		},
 		"card_experience_tables": map[string]any{"1": func() []int {
 			values := make([]int, 59)
@@ -178,50 +167,28 @@ func WriteTestCardMaster(t *testing.T, root string) string {
 			}
 			return values
 		}()},
-		"sphere_config_version": 3,
 		"sphere_progression_policy": map[string]any{
-			"config_version": 3, "material_level_bonus_permille_per_level": 100,
-			"source_state": map[string]any{
-				"experience_tables": "CONFIRMED: test", "material_base_experience": "INFERRED: test",
-				"material_level_bonus": "INFERRED: test", "fusion_gold": "PLACEHOLDER: test",
-				"evolution_material_selection": "CONFIRMED: test", "evolution_level_requirement": "CONFIRMED: test",
-				"evolution_progression_preservation": "INFERRED: test", "account_seed": "PLACEHOLDER: test",
-			},
+			"material_level_bonus_permille_per_level": 100,
 		},
-		"buddy_config_version": 2,
 		"buddy_progression_policy": map[string]any{
-			"config_version": 2, "maximum_material_count": 100,
-			"source_state": map[string]any{
-				"experience_tables": "CONFIRMED: test", "material_experience_consumption": "CONFIRMED: test",
-				"fusion_gold_consumption": "CONFIRMED: test", "ordinary_buddy_material_experience": "PLACEHOLDER: test",
-				"ancient_melody_experience": "INFERRED: test", "success_multipliers": "INFERRED: test",
-				"success_weights": "PLACEHOLDER: test", "evolution_material_selection": "CONFIRMED: test",
-				"evolution_level_requirement": "CONFIRMED: test", "evolution_progression_preservation": "INFERRED: test",
-				"account_seed": "PLACEHOLDER: test",
-			},
+			"maximum_material_count": 100,
 		},
-		"support_deck_config_version": 1,
-		"support_deck_set_card_num":   3,
-		"source":                      map[string]any{"test": true},
-		"card_templates":              cardTemplates,
+		"support_deck_set_card_num": 3,
+
+		"card_templates": cardTemplates,
 		"card_category_profiles": []map[string]any{{
 			"categoryid": 60200001, "name": "Test card series", "order": 2,
-			"view_type": 0, "evidence": "PLACEHOLDER: test",
+			"view_type": 0,
 		}},
 		"card_group_profiles": []map[string]any{
-			{"groupid": 20020001, "categoryid": 60200001, "name": "Test 1", "order": 10, "deck_limit_bossid": 0, "member_cardids": []int{10000010}, "name_evidence": "INFERRED: test"},
-			{"groupid": 30020001, "categoryid": 60200001, "name": "Test 2", "order": 11, "deck_limit_bossid": 0, "member_cardids": []int{10000010}, "name_evidence": "INFERRED: test"},
-			{"groupid": 30020002, "categoryid": 60200001, "name": "Test 3", "order": 12, "deck_limit_bossid": 0, "member_cardids": []int{10000010}, "name_evidence": "INFERRED: test"},
-			{"groupid": 30020003, "categoryid": 60200001, "name": "Test 4", "order": 13, "deck_limit_bossid": 0, "member_cardids": []int{10000010}, "name_evidence": "INFERRED: test"},
-			{"groupid": 30020005, "categoryid": 60200001, "name": "Test 5", "order": 14, "deck_limit_bossid": 0, "member_cardids": []int{10000010}, "name_evidence": "INFERRED: test"},
-			{"groupid": 90020001, "categoryid": 60200001, "name": "Test 6", "order": 15, "deck_limit_bossid": 0, "member_cardids": []int{10000010}, "name_evidence": "INFERRED: test"},
+			{"groupid": 20020001, "categoryid": 60200001, "name": "Test 1", "order": 10, "deck_limit_bossid": 0, "member_cardids": []int{10000010}},
+			{"groupid": 30020001, "categoryid": 60200001, "name": "Test 2", "order": 11, "deck_limit_bossid": 0, "member_cardids": []int{10000010}},
+			{"groupid": 30020002, "categoryid": 60200001, "name": "Test 3", "order": 12, "deck_limit_bossid": 0, "member_cardids": []int{10000010}},
+			{"groupid": 30020003, "categoryid": 60200001, "name": "Test 4", "order": 13, "deck_limit_bossid": 0, "member_cardids": []int{10000010}},
+			{"groupid": 30020005, "categoryid": 60200001, "name": "Test 5", "order": 14, "deck_limit_bossid": 0, "member_cardids": []int{10000010}},
+			{"groupid": 90020001, "categoryid": 60200001, "name": "Test 6", "order": 15, "deck_limit_bossid": 0, "member_cardids": []int{10000010}},
 		},
-		"card_group_policy": map[string]any{
-			"config_version": 2, "client_contract": "CONFIRMED: test",
-			"group_membership": "CONFIRMED: test", "display_names": "INFERRED: test",
-			"category_projection": "PLACEHOLDER: test", "deck_limit_bossid": "CONFIRMED: test",
-			"claims_original_service_topology": false,
-		},
+
 		"stack_card_templates": []map[string]any{
 			stackTemplate(20000006),
 			stackTemplate(20000011),
@@ -243,7 +210,6 @@ func WriteTestCardMaster(t *testing.T, root string) string {
 			"time_every_fame_seconds": 3600,
 			"coin_every_hour":         1,
 			"help_path":               "/disabled/web",
-			"evidence":                "PLACEHOLDER",
 		},
 		"skipped_incomplete_evolution_source_cardids": []int{},
 		"sphere_definitions": []map[string]any{
@@ -341,16 +307,16 @@ func WriteTestExploreMaster(t *testing.T, root string) string {
 	master := map[string]any{
 		"schema_version": 1,
 		"client_profile": "cn602-bootstrap",
-		"source":         map[string]any{"test": true},
+
 		"maps": []map[string]any{{
 			"id": 1000, "map_type": "GRASS", "map_ids": []int{1000, 1000}, "bgm_id": 10020,
 		}},
-		"stage": map[string]any{
+		"stages": []map[string]any{{
 			"explore_stageid": 1000, "stage_name": "Test Explore",
 			"stage_mapid": 1000, "stage_type": 0, "state_flag": 0,
 			"limit_sec": 60,
 			"floors":    []map[string]any{{"explore_floorid": 1000, "floor_name": "Test Floor"}},
-		},
+		}},
 		"floor_rarity": 0,
 		"events": []map[string]any{{
 			"treasureboxes": []map[string]any{{
@@ -375,7 +341,7 @@ func WriteTestStoryMaster(t *testing.T, root string) string {
 	story := func(id int) map[string]any {
 		return map[string]any{
 			"story_mainid": id, "state_flag": 0, "title": "第1话",
-			"unlock_text": "", "reward_type_flag": 0, "script_segment_count": 1,
+			"unlock_text": "", "reward_type_flag": 0,
 		}
 	}
 	part := func(id int, name string, storyID int) []map[string]any {
@@ -391,7 +357,7 @@ func WriteTestStoryMaster(t *testing.T, root string) string {
 	}
 	master := map[string]any{
 		"schema_version": 5, "client_profile": "cn602-bootstrap",
-		"source":       map[string]any{"kind": "test"},
+
 		"normal_parts": part(1, "第一部", 10001),
 		"cn_parts":     part(1, "国服专属剧情", 100001),
 		"sub_characters": []map[string]any{{
@@ -401,7 +367,7 @@ func WriteTestStoryMaster(t *testing.T, root string) string {
 				"section_title": "Test Card", "pictid": 10000010,
 				"stories": []map[string]any{{
 					"story_subid": 20010110, "state_flag": 0, "title": "Test Sub Story",
-					"unlock_text": "获得对应卡牌后解锁", "script_segment_count": 1,
+					"unlock_text": "获得对应卡牌后解锁",
 					"feature_reward": map[string]any{
 						"type": 10, "num": 1, "reward_typeid": 0, "card_lv": 0,
 						"card_fame": 0, "card_love": 0, "card_skill_lv": []int{},
@@ -409,17 +375,13 @@ func WriteTestStoryMaster(t *testing.T, root string) string {
 				}},
 			}},
 		}},
-		"sub_section_mappings": []map[string]any{{
-			"story_sub_sectionid": 10000010, "card_name": "Test Card",
-			"script_chapter": "Test Card", "story_ids": []int{20010110},
-			"evidence": "CONFIRMED",
-		}},
+
 		"events": []map[string]any{{
 			"story_eventid": 100964, "name": "Test Event", "pictid": 10000010,
 			"stories": []map[string]any{{
 				"sub": map[string]any{
 					"story_subid": 10096410, "state_flag": 8, "title": "Test Event Story",
-					"unlock_text": "", "script_segment_count": 1,
+					"unlock_text": "",
 					"feature_reward": map[string]any{
 						"type": 10, "num": 1, "reward_typeid": 0, "card_lv": 0,
 						"card_fame": 0, "card_love": 0, "card_skill_lv": []int{},
@@ -428,15 +390,9 @@ func WriteTestStoryMaster(t *testing.T, root string) string {
 				"materials": []any{},
 			}},
 		}},
-		"event_mappings": []map[string]any{{
-			"story_eventid": 100964, "script_chapter_labels": []string{"Test Event"},
-			"story_ids": []int{10096410}, "pictid": 10000010,
-			"pict_candidates":   []int{10000010},
-			"topology_evidence": "CONFIRMED_STORY_ID_PREFIX",
-			"pictid_evidence":   "INFERRED_FIRST_SCRIPT_CARD_PICT",
-		}},
+
 		"reward_policy": map[string]any{
-			"config_version": 1, "state": "PASS",
+
 			"main_first_clear": map[string]any{
 				"type": 10, "num": 1, "reward_typeid": 0, "card_lv": 0,
 				"card_fame": 0, "card_love": 0, "card_skill_lv": []int{},
@@ -449,14 +405,10 @@ func WriteTestStoryMaster(t *testing.T, root string) string {
 				"type": 10, "num": 1, "reward_typeid": 0, "card_lv": 0,
 				"card_fame": 0, "card_love": 0, "card_skill_lv": []int{},
 			},
-			"source_state": map[string]any{
-				"client_contract": "CONFIRMED", "reward_schedule": "PLACEHOLDER",
-			},
 		},
 		"story_battles": map[string]any{
-			"official_ids":     []int{60004110},
-			"referenced_ids":   []int{60004110},
-			"unreferenced_ids": []int{},
+			"official_ids": []int{60004110},
+
 			"references": []map[string]any{{
 				"story_kind": "sub", "story_id": 10096410,
 				"story_battle_ids": []int{60004110},
@@ -467,14 +419,7 @@ func WriteTestStoryMaster(t *testing.T, root string) string {
 			"end_time": 2147483647, "info_url": "",
 			"update_info": "本地活动中心", "itemid": []int{},
 			"buttons": []any{}, "is_new_solo": 0, "is_new_multi": 0,
-			"evidence": "PLACEHOLDER_GENERIC_OFFICIAL_EVENTPAGE_ASSETS",
 		},
-		"normal_story_count": 1, "cn_story_count": 1,
-		"sub_story_count": 1, "event_story_count": 1,
-		"normal_missing_talk_ids": []int{}, "cn_missing_talk_ids": []int{},
-		"normal_orphan_script_ids": []int{}, "cn_orphan_script_ids": []int{},
-		"sub_orphan_script_ids": []int{}, "sub_missing_talk_ids": []int{},
-		"excluded_test_script_ids": []int{}, "script_label_fallback_ids": []int{},
 	}
 	content, err := json.Marshal(master)
 	if err != nil {
@@ -497,38 +442,27 @@ func WriteTestNaviMaster(t *testing.T, root string) string {
 		}
 		folder := fmt.Sprintf("navi_%d", naviID)
 		navigators = append(navigators, map[string]any{
-			"navi_id":             naviID,
-			"name":                fmt.Sprintf("Test Navi %d", naviID),
-			"pict_id":             50000000 + naviID*1000,
-			"item_pict_id":        30000 + naviID,
-			"live2d_folder":       folder,
-			"live2d_bundle":       "live2d/live2d_" + folder + ".dat",
-			"live2d_source_state": "PRESENT_IN_CN_OFFICIAL_ASSET_MAP",
-			"voice_id":            voiceID,
-			"client_published":    true,
+			"navi_id":       naviID,
+			"name":          fmt.Sprintf("Test Navi %d", naviID),
+			"pict_id":       50000000 + naviID*1000,
+			"item_pict_id":  30000 + naviID,
+			"live2d_folder": folder,
+			"live2d_bundle": "live2d/live2d_" + folder + ".dat",
+
+			"voice_id":         voiceID,
+			"client_published": true,
 		})
 	}
 	master := map[string]any{
 		"schema_version": 3,
 		"client_profile": "cn602-bootstrap",
-		"source":         map[string]any{"test": true},
-		"publication_policy": map[string]any{
-			"evidence":               "CONFIRMED_CN_OFFICIAL_ASSET_MAP",
-			"live2d_bundle_required": true,
-			"voice_source_required":  false,
-			"voice_fallback":         "OPTIONAL_SILENT_FALLBACK",
-		},
+
 		"local_purchase": map[string]any{
-			"evidence": "PLACEHOLDER_LOCAL_PROFILE",
+
 			"currency": "CRYSTAL",
 			"price":    50,
 		},
-		"summary": map[string]any{
-			"official_navigator_rows":     len(navigators),
-			"client_published":            len(navigators),
-			"excluded_missing_live2d":     0,
-			"excluded_missing_live2d_ids": []int{},
-		},
+
 		"navigators": navigators,
 	}
 	content, err := json.Marshal(master)
@@ -569,7 +503,6 @@ func WriteTestItemMaster(t *testing.T, root string) string {
 				"type": 6, "num": 1, "reward_typeid": 11000001 + index,
 				"card_lv": 1, "card_fame": 1, "card_love": 0, "card_skill_lv": []int{1},
 			}},
-			"evidence": "INFERRED_OFFICIAL_CN_BOSS_COIN_EXCHANGE_ACQUISITION",
 		}
 	}
 	exchangeItemIDs := []int{
@@ -603,81 +536,37 @@ func WriteTestItemMaster(t *testing.T, root string) string {
 				"type": 6, "num": 1, "reward_typeid": 11000001 + index,
 				"card_lv": 1, "card_fame": 1, "card_love": 0, "card_skill_lv": []int{1},
 			},
-			"evidence": "INFERRED_OFFICIAL_CN_ITEM_NAME_EXACT_CARD_FAMILY_LOCAL_POLICY",
 		}
 	}
 	master := map[string]any{
-		"schema_version": 9,
-		"client_profile": "cn602-bootstrap",
-		"source": map[string]any{
-			"test": true,
-			"user_buff": map[string]any{
-				"container_path":  "assets/resources/container/user/user_buff.csv.txt",
-				"container_bytes": 1, "container_sha256": strings.Repeat("0", 64),
-				"textasset_bytes": 1, "textasset_sha256": strings.Repeat("0", 64),
-			},
-		},
-		"user_buff_profiles":          userBuffProfiles,
-		"items":                       testItems,
-		"item_gacha_profiles":         []map[string]any{},
-		"item_gacha_source_gap_ids":   []int{},
-		"item_exchange_profiles":      exchangeProfiles,
-		"item_exchange_source_status": "PUBLISHED_LOCAL_POLICY_FROM_OFFICIAL_CN_ITEM_AND_CARD_IDENTITIES",
-		"item_exchange_policy": map[string]any{
-			"config_version": 1, "need_num": 1, "event_id_offset": 60280000,
-			"selection": "exact_card_name_else_unique_same_card_family_substring",
-			"source_state": map[string]any{
-				"client_contract": "CONFIRMED", "item_identity": "CONFIRMED",
-				"card_family_identity": "INFERRED", "explicit_fame": "CONFIRMED",
-				"default_fame": "PLACEHOLDER", "need_num": "PLACEHOLDER", "event_id": "PLACEHOLDER",
-			},
-			"official_service_values_claimed": false,
-		},
+		"schema_version":    9,
+		"client_profile":    "cn602-bootstrap",
+		"boss_coin_item_id": 4000,
+
+		"user_buff_profiles":  userBuffProfiles,
+		"items":               testItems,
+		"item_gacha_profiles": []map[string]any{},
+
+		"item_exchange_profiles": exchangeProfiles,
+
 		"item_lack_tip_profiles": []map[string]any{
-			{"idx": 1, "title": "徽章不足", "desc": "test", "way": "test", "txt_url_info": []map[string]any{{"txt": "暂不前往", "url": ""}}, "evidence": "LOCAL_POLICY_OVER_CONFIRMED_CN_ITEM_LACK_ENUM"},
-			{"idx": 2, "title": "水晶不足", "desc": "test", "way": "test", "txt_url_info": []map[string]any{{"txt": "暂不前往", "url": ""}}, "evidence": "LOCAL_POLICY_OVER_CONFIRMED_CN_ITEM_LACK_ENUM"},
-			{"idx": 3, "title": "金币不足", "desc": "test", "way": "test", "txt_url_info": []map[string]any{{"txt": "暂不前往", "url": ""}}, "evidence": "LOCAL_POLICY_OVER_CONFIRMED_CN_ITEM_LACK_ENUM"},
-			{"idx": 4, "title": "强化素材不足", "desc": "test", "way": "test", "txt_url_info": []map[string]any{{"txt": "暂不前往", "url": ""}}, "evidence": "LOCAL_POLICY_OVER_CONFIRMED_CN_ITEM_LACK_ENUM"},
-			{"idx": 5, "title": "体力不足", "desc": "test", "way": "test", "txt_url_info": []map[string]any{{"txt": "暂不前往", "url": ""}}, "evidence": "LOCAL_POLICY_OVER_CONFIRMED_CN_ITEM_LACK_ENUM"},
-			{"idx": 6, "title": "钥匙不足", "desc": "test", "way": "test", "txt_url_info": []map[string]any{{"txt": "暂不前往", "url": ""}}, "evidence": "LOCAL_POLICY_OVER_CONFIRMED_CN_ITEM_LACK_ENUM"},
-			{"idx": 7, "title": "扭蛋券不足", "desc": "test", "way": "test", "txt_url_info": []map[string]any{{"txt": "暂不前往", "url": ""}}, "evidence": "LOCAL_POLICY_OVER_CONFIRMED_CN_ITEM_LACK_ENUM"},
-			{"idx": 8, "title": "水晶扭蛋币不足", "desc": "test", "way": "test", "txt_url_info": []map[string]any{{"txt": "暂不前往", "url": ""}}, "evidence": "LOCAL_POLICY_OVER_CONFIRMED_CN_ITEM_LACK_ENUM"},
+			{"idx": 1, "title": "徽章不足", "desc": "test", "way": "test", "txt_url_info": []map[string]any{{"txt": "暂不前往", "url": ""}}},
+			{"idx": 2, "title": "水晶不足", "desc": "test", "way": "test", "txt_url_info": []map[string]any{{"txt": "暂不前往", "url": ""}}},
+			{"idx": 3, "title": "金币不足", "desc": "test", "way": "test", "txt_url_info": []map[string]any{{"txt": "暂不前往", "url": ""}}},
+			{"idx": 4, "title": "强化素材不足", "desc": "test", "way": "test", "txt_url_info": []map[string]any{{"txt": "暂不前往", "url": ""}}},
+			{"idx": 5, "title": "体力不足", "desc": "test", "way": "test", "txt_url_info": []map[string]any{{"txt": "暂不前往", "url": ""}}},
+			{"idx": 6, "title": "钥匙不足", "desc": "test", "way": "test", "txt_url_info": []map[string]any{{"txt": "暂不前往", "url": ""}}},
+			{"idx": 7, "title": "扭蛋券不足", "desc": "test", "way": "test", "txt_url_info": []map[string]any{{"txt": "暂不前往", "url": ""}}},
+			{"idx": 8, "title": "水晶扭蛋币不足", "desc": "test", "way": "test", "txt_url_info": []map[string]any{{"txt": "暂不前往", "url": ""}}},
 		},
-		"item_lack_tip_source_status": "PUBLISHED_LOCAL_TEXT_POLICY_FROM_MANAGED_ENUM_AND_OFFICIAL_CN_IDENTITIES",
-		"item_lack_tip_policy": map[string]any{
-			"config_version": 2, "reachable_indices": []int{2, 8},
-			"navigation_publication": "NON_NAVIGATING_LOCAL_CLIENT_CONTRACT_ROW",
-			"source_state": map[string]any{
-				"client_contract": "CONFIRMED", "enum_identity": "CONFIRMED",
-				"item_9010_identity": "CONFIRMED", "display_text": "PLACEHOLDER",
-			},
-			"official_service_text_claimed": false,
-		},
-		"event_shop_profiles":      []map[string]any{},
-		"event_shop_source_status": "ABSENT_FROM_CN_OFFICIAL_CONTAINER_AND_PACKAGED_EVENT_SHOP_WEB_FILES",
-		"event_shop_source_audit": map[string]any{
-			"textasset_count":                135,
-			"candidate_paths":                []string{},
-			"packaged_web_files":             []string{"assets/a.js", "assets/b.js", "assets/c.html"},
-			"packaged_event_shop_candidates": []string{},
-		},
+
+		"event_shop_profiles": []map[string]any{},
+
 		"trade_shop_profiles": []map[string]any{{
 			"trade_shopid": 60290001, "name": "BOSS币交换所", "text": "Test trade shop",
 			"shop_type": 1, "tab_type": 0, "end_time": 2147483647, "is_new": 0, "pictid": 0,
-			"lineups": tradeShopLineups, "evidence": "LOCAL_POLICY_OVER_OFFICIAL_CN_ITEM_AND_CARD_IDENTITIES",
+			"lineups": tradeShopLineups,
 		}},
-		"trade_shop_policy": map[string]any{
-			"config_version": 1, "currency_item_id": 4000, "price_per_card": 1000,
-			"stock_per_card": 1, "card_acquisition_text": "BOSS币交换所",
-			"selection": "lowest_rarity_then_card_id_per_official_same_card_family",
-			"source_state": map[string]any{
-				"client_contract": "CONFIRMED", "currency_identity": "CONFIRMED",
-				"card_identity": "INFERRED", "price": "PLACEHOLDER", "stock": "PLACEHOLDER",
-			},
-			"official_service_values_claimed": false,
-		},
-		"trade_shop_source_status":  "PUBLISHED_LOCAL_POLICY_FROM_OFFICIAL_CN_IDENTITIES",
-		"skipped_inactive_item_ids": []int{},
 	}
 	content, err := json.Marshal(master)
 	if err != nil {
@@ -701,8 +590,8 @@ func WriteTestAvatarMaster(t *testing.T, root string) string {
 	}
 	master := map[string]any{
 		"schema_version": 1, "client_profile": "cn602-bootstrap",
-		"source": map[string]any{"test": true}, "local_account_config_version": 1,
-		"initial_owned_part_ids": []int{1, 2, 3, 4, 11, 12, 13, 14},
+		"local_account_config_version": 1,
+		"initial_owned_part_ids":       []int{1, 2, 3, 4, 11, 12, 13, 14},
 		"default_decks": map[string]any{
 			"1": []int{0, 1, 1, 0, 0, 0, 0}, "2": []int{11, 2, 2, 0, 11, 0, 0},
 			"3": []int{0, 3, 3, 3, 0, 0, 14}, "4": []int{12, 4, 4, 0, 12, 0, 13},
@@ -710,7 +599,6 @@ func WriteTestAvatarMaster(t *testing.T, root string) string {
 		"shop_policy": map[string]any{
 			"pay_type": 1, "pay_typeid": 0, "price": 1000,
 			"appear_end": 0, "new_appear_end": 0,
-			"evidence": "PLACEHOLDER_LOCAL_GOLD_PRICE",
 		},
 		"part_definitions": []map[string]any{
 			part(1, 2, 6), part(2, 4, 6), part(3, 8, 14), part(4, 16, 6),
@@ -742,7 +630,7 @@ func WriteTestStampMaster(t *testing.T, root string) string {
 	master := map[string]any{
 		"schema_version": 1,
 		"client_profile": "cn602-bootstrap",
-		"source":         map[string]any{"test": true},
+
 		"category_order": []int{1, 7, 2, 3, 4, 5, 6},
 		"stamps": []map[string]any{{
 			"stamp_id": 100001, "category": 1, "label": "Test Stamp",
@@ -765,7 +653,7 @@ func WriteTestHonorMaster(t *testing.T, root string) string {
 	master := map[string]any{
 		"schema_version": 1,
 		"client_profile": "cn602-bootstrap",
-		"source":         map[string]any{"test": true},
+
 		"honors": []map[string]any{{
 			"honor_id": 10100001, "name": "Test Honor", "slot_mask": 5,
 			"same_card_id": 0, "get_type": 0, "default_owned": true,

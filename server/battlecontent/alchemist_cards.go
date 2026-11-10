@@ -20,7 +20,7 @@ func applyAlchemistCardTable(catalog *battlemodel.Definitions, tables map[string
 	}
 	count := 0
 	err := readCombatData(strings.NewReader(text), true, func(row []string) error {
-		card, err := parseModernCard(row)
+		card, err := ParseCard(row)
 		if err != nil {
 			return err
 		}

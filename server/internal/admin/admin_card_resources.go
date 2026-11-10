@@ -2,8 +2,6 @@ package admin
 
 import (
 	"bufio"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -52,16 +50,6 @@ func loadAdminCardResources(master masterdata.CardRuntimeMaster, masterPath, ass
 		content, err := os.ReadFile(filepath.Join(filepath.Dir(masterPath), "cn602-card-master", name))
 		if err != nil {
 			return nil, err
-		}
-		digest := sha256.Sum256(content)
-		verified := false
-		for _, source := range master.Source.Files {
-			if filepath.Base(filepath.FromSlash(source.Path)) == name && source.Bytes == len(content) && source.SHA256 == hex.EncodeToString(digest[:]) {
-				verified = true
-			}
-		}
-		if !verified {
-			return nil, fmt.Errorf("admin card source %s differs from the runtime master receipt", name)
 		}
 		lines := bufio.NewScanner(strings.NewReader(strings.TrimPrefix(string(content), "\ufeff")))
 		lines.Buffer(make([]byte, 4096), 4*1024*1024)

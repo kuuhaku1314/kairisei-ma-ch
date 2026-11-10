@@ -52,7 +52,7 @@ func TestRoomSequenceReservesUnfinishedRooms(t *testing.T) {
 func TestMultiWaveCompletionPersistsAcrossDatabaseConnections(t *testing.T) {
 	accounts := testfixture.NewFriendCapacityTestAccounts(t)
 	now := time.Now()
-	completed := multiplayer.CompletedBattle{RoomID: 123, BossID: 1, OwnerMemberType: 1, Members: make([]multiplayer.Member, 4), OnlineUserIDs: []int{1001}, CompletedAtUnix: now.Unix(), DropLedgerVersion: 1, BattleIndex: 5, Progress: 5, HostCostPaid: true}
+	completed := multiplayer.CompletedBattle{RoomID: 123, BossID: 1, OwnerMemberType: 1, Members: make([]multiplayer.Member, 4), OnlineUserIDs: []int{1001}, CompletedAtUnix: now.Unix(), BattleIndex: 5, Progress: 5, HostCostPaid: true}
 	for i := range completed.Members {
 		completed.Members[i] = multiplayer.Member{MemberType: i + 1, UserID: 1001 + i}
 	}

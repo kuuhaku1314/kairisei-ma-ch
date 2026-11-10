@@ -6,9 +6,9 @@ import (
 	"kairisei.local/server/battlemodel"
 )
 
-// parseModernCard projects the original 113-column JP prefix into the battle
-// definitions. Six CN-only display/development fields can follow that prefix.
-func parseModernCard(row []string) (battlemodel.CombatCardDefinition, error) {
+// ParseCard reads the unified 113-column card definition and its optional
+// six display/development fields.
+func ParseCard(row []string) (battlemodel.CombatCardDefinition, error) {
 	switch len(row) {
 	case 113, 119:
 	case 114, 120:
