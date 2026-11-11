@@ -1698,9 +1698,10 @@ for (const modal of $$('.modal')) {
     }
   }).observe(modal, { attributes: true, attributeFilter: ['class'] });
 }
+// Border box: the scrolled topbar shrinks by its padding, which a content-box observer never sees.
 new ResizeObserver(() =>
   document.documentElement.style.setProperty('--topbar-h', $('.topbar').offsetHeight + 'px'),
-).observe($('.topbar'));
+).observe($('.topbar'), { box: 'border-box' });
 addEventListener(
   'scroll',
   () => {

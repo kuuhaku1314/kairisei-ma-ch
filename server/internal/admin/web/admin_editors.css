@@ -2022,6 +2022,7 @@
 }
 
 .hb-frame {
+  position: relative;
   display: grid;
   place-items: center;
   aspect-ratio: 408 / 150;
@@ -2030,8 +2031,11 @@
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
-/* The game stretches the whole image into its 408×150 frame, so previews fill rather than crop. */
+/* The game stretches the whole image into its 408×150 frame, so previews fill rather than crop.
+   Pinned to the frame: as a grid item, an image of another ratio would grow the row and overflow. */
 .hb-frame img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: fill;
@@ -2201,6 +2205,8 @@
 }
 
 .hb-thumb img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: fill;

@@ -1942,8 +1942,10 @@ td details summary {
   height: 100%;
   object-fit: cover;
 }
-/* The game stretches the whole cover into its 934×372 frame, so the preview fills rather than crops. */
+/* Keep the image out of grid sizing so the game frame, not the source ratio, sets its height. */
 .gacha-art img {
+  position: absolute;
+  inset: 0;
   object-fit: fill;
 }
 .boss-select,
