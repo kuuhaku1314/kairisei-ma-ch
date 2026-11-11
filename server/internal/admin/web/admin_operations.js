@@ -5,6 +5,7 @@ const poolEditor = {
   cards: [],
   selected: new Map(),
   fames: new Map(),
+  loves: new Map(),
   coverPath: '',
   customRevision: 0,
   variants: [],
@@ -61,6 +62,7 @@ function poolVariantState(c) {
   return {
     selected: new Map((c.card_ids || []).map((id, i) => [id, c.weights[i]])),
     fames: new Map(Object.entries(c.card_fames || {}).map(([id, f]) => [Number(id), Number(f)])),
+    loves: new Map(Object.entries(c.card_loves || {}).map(([id, v]) => [Number(id), Number(v)])),
     filters: {},
   };
 }
@@ -75,8 +77,9 @@ function poolRememberActive() {
   if (!s) return;
   s.selected = poolEditor.selected;
   s.fames = poolEditor.fames;
+  s.loves = poolEditor.loves;
   s.filters = { job: poolEditor.job };
-  for (const key of ['search', 'rarity', 'attribute', 'cost', 'resource', 'ready', 'eligible-only']) {
+  for (const key of ['search', 'rarity', 'attribute', 'cost', 'eligible-only']) {
     const el = $(`#pool-${key}`);
     if (el) s.filters[key] = el.type === 'checkbox' ? el.checked : el.value;
   }
@@ -89,8 +92,9 @@ function selectPoolVariant(id, remember = true) {
   poolEditor.editSerial++;
   poolEditor.selected = s.selected;
   poolEditor.fames = s.fames;
+  poolEditor.loves = s.loves;
   poolEditor.job = s.filters.job || 0;
-  for (const key of ['search', 'rarity', 'attribute', 'cost', 'resource', 'ready', 'eligible-only']) {
+  for (const key of ['search', 'rarity', 'attribute', 'cost', 'eligible-only']) {
     const el = $(`#pool-${key}`);
     if (el) {
       if (el.type === 'checkbox') el.checked = s.filters[key] ?? key === 'eligible-only';
@@ -123,9 +127,10 @@ function poolVariantSummary(v) {
   const count = m
     ? `${(m.steps.length ? m.steps[0].reward_pool : m.reward_pool).length} 项奖励${m.steps.length ? ` · ${m.steps.length} 个阶段` : ''}`
     : `${s.selected.size} 张${v.base.user_select_max ? '候选' : ''}卡牌`;
-  const fames = m ? 0 : [...s.fames.keys()].filter((id) => s.selected.has(id)).length;
+  const fames = m ? 0 : [...s.fames.keys()].filter((id) => s.selected.has(id)).length,
+    loves = m ? 0 : [...s.loves].filter(([id, v]) => v && s.selected.has(id)).length;
   const gifts = poolEditor.randomGifts?.get(v.gacha_id)?.length || 0;
-  return `<b>${count}</b>${poolPendingDraft(v) ? ' <span class="tag warn">草稿</span>' : ''}${fames ? `<span class="sub">${fames} 张自定义名声</span>` : ''}${gifts ? `<span class="sub">随机附赠 ${gifts} 组</span>` : ''}`;
+  return `<b>${count}</b>${poolPendingDraft(v) ? ' <span class="tag warn">草稿</span>' : ''}${fames ? `<span class="sub">${fames} 张自定义名声</span>` : ''}${loves ? `<span class="sub">${loves} 张初始忠诚度</span>` : ''}${gifts ? `<span class="sub">随机附赠 ${gifts} 组</span>` : ''}`;
 }
 function renderPoolCopyTargets() {
   const rows = poolEditor.variants.filter(
@@ -692,7 +697,7 @@ $('#pool-copy-apply').onclick = async () => {
   if (
     !(await askConfirm(
       `复制到 ${ids.length} 个分池草稿？`,
-      '当前分池的卡牌、权重、名声和筛选会复制过去；目标的消耗和价格各自保留。',
+      '当前分池的卡牌、权重、名声、初始忠诚度和筛选会复制过去；目标的消耗和价格各自保留。',
       { ok: '复制' },
     ))
   )
@@ -706,6 +711,7 @@ $('#pool-copy-apply').onclick = async () => {
       [...source.selected].filter(([card]) => poolCardEligibleFor(cards.get(card), row)),
     );
     target.fames = new Map([...source.fames].filter(([card]) => target.selected.has(card)));
+    target.loves = new Map([...source.loves].filter(([card]) => target.selected.has(card)));
     target.filters = structuredClone(source.filters);
   }
   poolChanged();
@@ -724,7 +730,7 @@ $('#pool-split-apply').onclick = async () => {
   if (
     !(await askConfirm(
       `按职业把卡牌分到 ${plan.length} 个职业分池草稿？`,
-      `${plan.map((p) => `${poolSplitLabel(p)}：${p.selected.size} 张`).join('\n')}${replacing ? `\n其中 ${replacing} 个分池已有卡牌，会被替换。` : ''}${skipped.length ? `\n\n无匹配卡牌，跳过并保留原配置：\n${skipped.map(poolSplitLabel).join('\n')}` : ''}\n\n权重和名声随卡牌一起分配；各分池的消耗和价格不变。`,
+      `${plan.map((p) => `${poolSplitLabel(p)}：${p.selected.size} 张`).join('\n')}${replacing ? `\n其中 ${replacing} 个分池已有卡牌，会被替换。` : ''}${skipped.length ? `\n\n无匹配卡牌，跳过并保留原配置：\n${skipped.map(poolSplitLabel).join('\n')}` : ''}\n\n权重、名声和初始忠诚度随卡牌一起分配；各分池的消耗和价格不变。`,
       { ok: '分配' },
     ))
   )
@@ -733,6 +739,7 @@ $('#pool-split-apply').onclick = async () => {
     const target = poolEditor.contents.get(p.v.gacha_id);
     target.selected = p.selected;
     target.fames = new Map([...poolEditor.fames].filter(([id]) => p.selected.has(id)));
+    target.loves = new Map([...poolEditor.loves].filter(([id]) => p.selected.has(id)));
   }
   poolChanged();
   renderStrategies();
@@ -757,14 +764,12 @@ function poolIneligibleReason() {
 function poolCardFilter() {
   const q = $('#pool-search').value.trim().toLowerCase(),
     eligibleOnly = $('#pool-eligible-only').checked,
-    ready = $('#pool-ready').checked,
     f = cardFilterQuery('pool', true),
     row = poolActiveRow();
   return (card) =>
     (!eligibleOnly || poolCardEligibleFor(card, row) || poolEditor.selected.has(card.reward_type_id)) &&
     matchesCardQuery(card, f) &&
     cardMatchesJob(card, poolEditor.job) &&
-    (!ready || card.resource_state !== 'unavailable') &&
     (!q || matchesWords(cardSearchText(card), q));
 }
 // Any existing card may join an operator pool; only the unowned-six-star pool keeps its six-star identity (server rule).
@@ -816,6 +821,28 @@ function renderPoolCards() {
       }),
   );
 }
+// 初始忠诚度: points up to the card's love_max; the game's odds page shows floor(points × 100 / love_max)%.
+const poolLovePercent = (points, max) => (max ? Math.floor((points * 100) / max) : 0);
+const poolLoveValid = (v, card) => Number.isInteger(v) && v >= 0 && v <= (card?.love_max || 0);
+// The note shows what the game's odds page shows; the card's cap stays in the input's tooltip.
+function poolLoveNote(v, card) {
+  const max = card?.love_max || 0;
+  if (!max) return v ? '<span class="pool-love-note bad">无忠诚度，须为 0</span>' : '无忠诚度';
+  if (!poolLoveValid(v, card)) return `<span class="pool-love-note bad">0–${num(max)} 的整数</span>`;
+  return `${poolLovePercent(v, max)}%`;
+}
+function poolLoveCell(id, card) {
+  const max = card?.love_max || 0,
+    v = poolEditor.loves.get(id) ?? 0;
+  return `<input aria-label="${id} 初始忠诚度" data-love="${id}" type="number" min="0" max="${max}" step="1" value="${esc(v)}" title="${max ? `0–${num(max)} 点` : '此卡无忠诚度'}" class="${poolLoveValid(v, card) ? '' : 'invalid'}" ${max || v ? '' : 'disabled'}><span class="sub" data-love-note>${poolLoveNote(v, card)}</span>`;
+}
+function syncPoolLoveCell(input) {
+  const id = Number(input.dataset.love),
+    card = poolEditor.cards.find((c) => c.reward_type_id === id),
+    v = poolEditor.loves.get(id) ?? 0;
+  input.classList.toggle('invalid', !poolLoveValid(v, card));
+  input.nextElementSibling.innerHTML = poolLoveNote(v, card);
+}
 function renderSelectedCards() {
   const cards = new Map(poolEditor.cards.map((card) => [card.reward_type_id, card]));
   const match = poolCardFilter(),
@@ -839,11 +866,11 @@ function renderSelectedCards() {
       .slice(poolEditor.selectedPage * 100, (poolEditor.selectedPage + 1) * 100)
       .map(
         ([id, weight]) =>
-          `<tr><td class="cell-wrap"><div class="reward-cell"><span class="thumb thumb-sm">${image(cards.get(id)?.image_url, cards.get(id)?.name || '?')}</span><div><b class="pool-card-name">${esc(cards.get(id)?.name || '未知卡牌')}</b><span class="sub"><code>${id}</code>${cards.get(id)?.rarity ? ` · ${cardStars(cards.get(id))}` : ''}${cards.get(id)?.resource_state === 'unavailable' ? ' <span class="tag bad">资源待补齐</span>' : ''}</span></div></div></td><td><input aria-label="${id} 权重" data-weight="${id}" type="number" min="1" max="1000000" step="1" value="${esc(weight)}"><span class="sub">约 ${total ? ((Number(weight) / total) * 100).toFixed(3) : '0'}%</span></td><td><input aria-label="${id} 抽出名声" data-fame="${id}" type="number" min="1" max="${cards.get(id)?.fame_max || 1}" step="1" value="${poolEditor.fames.get(id) || 1}" title="1–${cards.get(id)?.fame_max || 1}"><span class="sub">上限 ${cards.get(id)?.fame_max || '—'}</span></td><td><button class="x-button" data-remove="${id}" aria-label="移除 ${id}"><svg class="icon"><use href="#i-close"/></svg></button></td></tr>`,
+          `<tr><td class="cell-wrap"><div class="reward-cell"><span class="thumb thumb-sm">${image(cards.get(id)?.image_url, cards.get(id)?.name || '?')}</span><div><b class="pool-card-name">${esc(cards.get(id)?.name || '未知卡牌')}</b><span class="sub"><code>${id}</code>${cards.get(id)?.rarity ? ` · ${cardStars(cards.get(id))}` : ''}${cards.get(id)?.resource_state === 'unavailable' ? ' <span class="tag bad">资源待补齐</span>' : ''}</span></div></div></td><td><input aria-label="${id} 权重" data-weight="${id}" type="number" min="1" max="1000000" step="1" value="${esc(weight)}"><span class="sub">约 ${total ? ((Number(weight) / total) * 100).toFixed(3) : '0'}%</span></td><td><input aria-label="${id} 抽出名声" data-fame="${id}" type="number" min="1" max="${cards.get(id)?.fame_max || 1}" step="1" value="${poolEditor.fames.get(id) || 1}" title="1–${cards.get(id)?.fame_max || 1}"><span class="sub">上限 ${cards.get(id)?.fame_max || '—'}</span></td><td>${poolLoveCell(id, cards.get(id))}</td><td><button class="x-button" data-remove="${id}" aria-label="移除 ${id}"><svg class="icon"><use href="#i-close"/></svg></button></td></tr>`,
       )
       .join('') ||
     emptyRow(
-      4,
+      5,
       poolEditor.selected.size ? '当前筛选下没有已选卡牌' : '还没有选择卡牌',
       '在左侧目录点击卡牌加入草稿。',
     );
@@ -870,11 +897,22 @@ function renderSelectedCards() {
         poolChanged();
       }),
   );
+  $$('#pool-selected [data-love]').forEach(
+    (input) =>
+      (input.oninput = () => {
+        const id = Number(input.dataset.love),
+          v = input.value.trim() === '' ? 0 : Number(input.value);
+        v === 0 ? poolEditor.loves.delete(id) : poolEditor.loves.set(id, v);
+        syncPoolLoveCell(input);
+        poolChanged();
+      }),
+  );
   $$('#pool-selected [data-remove]').forEach(
     (button) =>
       (button.onclick = () => {
         poolEditor.selected.delete(Number(button.dataset.remove));
         poolEditor.fames.delete(Number(button.dataset.remove));
+        poolEditor.loves.delete(Number(button.dataset.remove));
         poolChanged();
         renderPoolCards();
         renderSelectedCards();
@@ -997,6 +1035,10 @@ function poolVariantConfig(id) {
     [...state.fames].filter(([id, f]) => f > 1 && state.selected.has(id)).sort((a, b) => a[0] - b[0]),
   );
   if (!poolEditor.mixedByID.has(id) && Object.keys(fames).length) shared.card_fames = fames;
+  const loves = Object.fromEntries(
+    [...state.loves].filter(([id, v]) => v !== 0 && state.selected.has(id)).sort((a, b) => a[0] - b[0]),
+  );
+  if (!poolEditor.mixedByID.has(id) && Object.keys(loves).length) shared.card_loves = loves;
   if (poolEditor.coverPath) shared.cover_path = poolEditor.coverPath;
   return shared;
 }
@@ -1057,6 +1099,15 @@ function poolProblems(configs) {
         )
       )
         problems.push(`${label(c)}抽出名声超出对应卡牌上限`);
+      const loves = Object.entries(c.card_loves || {}).filter(
+        ([id, v]) => !poolLoveValid(v, cards.get(Number(id))),
+      );
+      if (loves.length) {
+        problems.push(`${label(c)}有 ${loves.length} 张卡牌的初始忠诚度不是 0 到该卡上限的整数`);
+        if (c.gacha_id === poolEditor.activeID)
+          for (const [id] of loves)
+            markInvalid($(`#pool-selected [data-love="${id}"]`), '超出范围或不是整数');
+      }
       const row = poolEditor.variants.find((v) => v.gacha_id === c.gacha_id);
       if (c.card_ids.some((id) => !poolCardEligibleFor(cards.get(id), row)))
         problems.push(`${label(c)}有卡牌不符合职业或星级限制`);
@@ -1122,16 +1173,18 @@ function renderPoolPreview(previews) {
   const blocked = [...new Set(list.flatMap((p) => p.blocked_card_ids || []))],
     warnings = [...new Set(list.flatMap((p) => p.warnings || []))];
   poolEditor.preview = { publishable: ready, blocked_card_ids: blocked, config: c, previews };
-  const names = new Map(poolEditor.cards.map((card) => [card.reward_type_id, card.name]));
+  const names = new Map(poolEditor.cards.map((card) => [card.reward_type_id, card.name])),
+    loveMax = new Map(poolEditor.cards.map((card) => [card.reward_type_id, card.love_max || 0]));
   const when = (p) =>
     p.config.start_unix || p.config.end_unix
       ? `${describeTime(p.config.start_unix)} → ${describeTime(p.config.end_unix)}`
       : '不限';
   const contents = (p) => {
-    const fames = Object.keys(p.config.card_fames || {}).length;
+    const fames = Object.keys(p.config.card_fames || {}).length,
+      loves = Object.keys(p.config.card_loves || {}).length;
     const extras = `${p.base.user_select_max ? ` · 玩家自选 ${p.base.user_select_max} 张` : ''}${p.config.random_gifts?.length ? ` · 随机附赠 ${p.config.random_gifts.length} 组` : ''}`;
     return p.config.card_ids?.length
-      ? `${num(p.config.card_ids.length)} 张${p.base.user_select_max ? '候选' : ''}卡牌${fames ? ` · ${fames} 张卡牌自定义名声` : ''}${extras}`
+      ? `${num(p.config.card_ids.length)} 张${p.base.user_select_max ? '候选' : ''}卡牌${fames ? ` · ${fames} 张卡牌自定义名声` : ''}${loves ? ` · ${loves} 张卡牌初始忠诚度` : ''}${extras}`
       : `${num((p.config.steps?.[0]?.reward_pool || p.config.reward_pool || []).length)} 项奖励${p.config.steps?.length ? ` · ${p.config.steps.length} 个阶段` : ''}${extras}`;
   };
   const odds = (p) =>
@@ -1141,7 +1194,7 @@ function renderPoolPreview(previews) {
     )
       .map(
         (stage) =>
-          `<details><summary>${p.base.card_num} 抽 · ${esc(poolProfessionName(p.base.arthur_type))} <code>${p.config.gacha_id}</code> · ${esc(p.config.steps?.length ? stage.name : paymentName(p.base))} · ${stage.draw_count} 抽 · ${(stage.card_ids || stage.rewards || []).length} 项 · 展开概率</summary><div class="table-wrap" style="max-height:280px"><table><thead><tr><th>卡牌／奖励</th><th class="num">单次概率</th></tr></thead><tbody>${(stage.rewards || stage.card_ids || []).map((r, i) => `<tr><td>${esc(typeof r === 'number' ? names.get(r) || r : rewardLabel(r))}${typeof r === 'number' ? '' : ` × ${r.num}`}${typeof r === 'number' && p.config.card_fames?.[r] > 1 ? ` <span class="tag info">名声 ${p.config.card_fames[r]}</span>` : ''}</td><td class="num">${(stage.odds_scaled[i] / p.odds_scale).toFixed(5)}%</td></tr>`).join('')}</tbody></table></div></details>`,
+          `<details><summary>${p.base.card_num} 抽 · ${esc(poolProfessionName(p.base.arthur_type))} <code>${p.config.gacha_id}</code> · ${esc(p.config.steps?.length ? stage.name : paymentName(p.base))} · ${stage.draw_count} 抽 · ${(stage.card_ids || stage.rewards || []).length} 项 · 展开概率</summary><div class="table-wrap" style="max-height:280px"><table><thead><tr><th>卡牌／奖励</th><th class="num">单次概率</th></tr></thead><tbody>${(stage.rewards || stage.card_ids || []).map((r, i) => `<tr><td>${esc(typeof r === 'number' ? names.get(r) || r : rewardLabel(r))}${typeof r === 'number' ? '' : ` × ${r.num}`}${typeof r === 'number' && p.config.card_fames?.[r] > 1 ? ` <span class="tag info">名声 ${p.config.card_fames[r]}</span>` : ''}${typeof r === 'number' && p.config.card_loves?.[r] > 0 ? ` <span class="tag info" title="${num(p.config.card_loves[r])} 点">忠诚度 ${poolLovePercent(p.config.card_loves[r], loveMax.get(r))}%</span>` : ''}</td><td class="num">${(stage.odds_scaled[i] / p.odds_scale).toFixed(5)}%</td></tr>`).join('')}</tbody></table></div></details>`,
       )
       .join('');
   const html =
@@ -1192,7 +1245,7 @@ function renderPoolOddsCount() {
   el.classList.toggle('over', n > 1000);
 }
 $('#pool-odds-msg').addEventListener('input', renderPoolOddsCount);
-['#pool-search', '#pool-rarity', '#pool-ready', '#pool-eligible-only'].forEach(
+['#pool-search', '#pool-rarity', '#pool-eligible-only'].forEach(
   (id) =>
     ($(id).oninput = () => {
       poolEditor.page = 0;
@@ -1306,6 +1359,38 @@ $('#pool-fame-all').onclick = () => {
   setPoolFames(v);
 };
 $('#pool-fame-max').onclick = () => setPoolFames('max');
+async function setPoolLoves(value) {
+  const ids = new Set(poolEditor.cards.filter(poolCardFilter()).map((c) => c.reward_type_id)),
+    cards = new Map(poolEditor.cards.map((c) => [c.reward_type_id, c])),
+    hit = [...poolEditor.selected.keys()].filter((id) => ids.has(id));
+  if (!hit.length) return toast('当前筛选下没有已选卡牌');
+  if (
+    !(await askConfirm(
+      `把当前筛选下 ${hit.length} 张已选卡牌的初始忠诚度设为${value === 'max' ? '各自上限' : ` ${num(value)} 点`}？`,
+      value === 'max' ? '' : '超过卡牌上限的按上限设置；没有忠诚度的卡牌保持 0。',
+      { ok: '应用' },
+    ))
+  )
+    return;
+  for (const id of hit) {
+    const max = cards.get(id)?.love_max || 0,
+      v = value === 'max' ? max : Math.min(value, max);
+    v > 0 ? poolEditor.loves.set(id, v) : poolEditor.loves.delete(id);
+  }
+  poolChanged();
+  renderSelectedCards();
+}
+$('#pool-love-all').onclick = () => {
+  const input = $('#pool-batch-love'),
+    v = Number(input.value);
+  input.classList.remove('invalid');
+  if (input.value.trim() === '' || !Number.isInteger(v) || v < 0) {
+    markInvalid(input);
+    return toast('初始忠诚度须为 0 或正整数', true);
+  }
+  setPoolLoves(v);
+};
+$('#pool-love-max').onclick = () => setPoolLoves('max');
 $('#pool-export').onclick = () => {
   const url = URL.createObjectURL(
     new Blob([JSON.stringify({ group_id: poolEditor.row.base.groupid, configs: poolConfigs() }, null, 2)], {
@@ -1369,23 +1454,49 @@ $('#pool-import').onchange = (event) =>
         )
           throw new Error('抽出名声设置无效');
         if (
+          c.card_loves != null &&
+          (typeof c.card_loves !== 'object' ||
+            Array.isArray(c.card_loves) ||
+            Object.entries(c.card_loves).some(
+              ([id, v]) => !c.card_ids.includes(Number(id)) || !Number.isInteger(v) || v < 0,
+            ))
+        )
+          throw new Error(`分池 ${c.gacha_id} 的初始忠诚度设置无效`);
+        if (
           c.play_count_1day_max != null &&
           (!Number.isInteger(c.play_count_1day_max) || c.play_count_1day_max < 0)
         )
           throw new Error('每日限抽次数无效');
-        if (c.category_num != null && !poolEditor.categories.some(({ id }) => id === c.category_num))
+        if (
+          c.category_num != null &&
+          !poolEditor.categories.some(({ id }) => id === c.category_num) &&
+          c.category_num !== poolEditor.variants.find((v) => v.gacha_id === c.gacha_id).base.category_num
+        )
           throw new Error('扭蛋分类无效');
         if (c.random_gifts != null && !poolGiftsShaped(c.random_gifts))
           throw new Error(`分池 ${c.gacha_id} 的随机附赠格式无效`);
+        if (
+          poolEditor.mixedByID.has(c.gacha_id) &&
+          (!weightedPoolShaped(c.reward_pool) ||
+            (c.steps != null &&
+              (!Array.isArray(c.steps) || c.steps.some((s) => !s || !weightedPoolShaped(s.reward_pool)))))
+        )
+          throw new Error(`分池 ${c.gacha_id} 的混合奖励表或阶段格式无效`);
         localTimeInput(c.start_unix);
         localTimeInput(c.end_unix);
       }
       const first = configs[0];
       if (first.cover_path && !poolCoverPattern.test(first.cover_path)) throw new Error('封面路径无效');
+      const imported = configs.map((c) => ({
+        config: c,
+        contents: poolVariantState(c),
+        gifts: poolGiftState(c.random_gifts),
+        mixed: poolEditor.mixedByID.has(c.gacha_id) ? poolMixedState(c) : null,
+      }));
       if (
         !(await askConfirm(
           `以导入内容替换 ${configs.length} 个分池草稿？`,
-          '卡牌、权重、消耗和随机附赠分别载入；封面、排期、概率页说明、限抽次数和分类使用第一项。',
+          '卡牌、权重、名声、初始忠诚度、消耗和随机附赠分别载入；封面、排期、概率页说明、限抽次数和分类使用第一项。',
           { ok: '替换' },
         ))
       )
@@ -1400,11 +1511,11 @@ $('#pool-import').onchange = (event) =>
       $('#pool-start').value = localTimeInput(first.start_unix);
       $('#pool-end').value = localTimeInput(first.end_unix);
       $('#pool-schedule-note').hidden = true;
-      for (const c of configs) {
+      for (const { config: c, contents, gifts, mixed } of imported) {
         const base = poolEditor.variants.find((v) => v.gacha_id === c.gacha_id).base,
           type = c.pay_type || base.pay_type;
-        poolEditor.contents.set(c.gacha_id, poolVariantState(c));
-        poolEditor.randomGifts.set(c.gacha_id, poolGiftState(c.random_gifts));
+        poolEditor.contents.set(c.gacha_id, contents);
+        poolEditor.randomGifts.set(c.gacha_id, gifts);
         poolEditor.strategies.set(c.gacha_id, {
           open: !c.closed,
           name: c.name,
@@ -1412,8 +1523,7 @@ $('#pool-import').onchange = (event) =>
           pay_typeid: type === 4 ? (c.pay_type ? c.pay_typeid : base.pay_typeid) || 0 : 0,
           price: c.price,
         });
-        if (poolEditor.mixedByID.has(c.gacha_id) && Array.isArray(c.reward_pool))
-          poolEditor.mixedByID.set(c.gacha_id, poolMixedState(c));
+        if (mixed) poolEditor.mixedByID.set(c.gacha_id, mixed);
       }
       selectPoolVariant(poolEditor.activeID, false);
       renderStrategies();
@@ -1466,6 +1576,7 @@ function removeBlockedPoolCards() {
     ids.forEach((id) => {
       state.selected.delete(id);
       state.fames.delete(id);
+      state.loves.delete(id);
     });
   $('#pool-preview-modal').classList.remove('open');
   poolChanged();

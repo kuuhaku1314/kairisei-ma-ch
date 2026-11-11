@@ -113,11 +113,15 @@ func drainAttributeGuardDamage(effects *[]battleEffect, damage int, hp int, suff
 	return -nativeHealDelta(hp, requested, *effects), expired
 }
 
-func resolveDOTAttributeGuards(effects *[]battleEffect, damage int, hp int, dot string) incomingDamageResolution {
+func resolveDOTAttributeGuards(effects *[]battleEffect, storedDamage int, hp int, dot string) incomingDamageResolution {
+	damage, cutExpired := cutAttributeGuardDamage(effects, storedDamage, "DOT", "", "", dot)
+	// JP 6e540 consumes the cut but compares the original stored damage to the
+	// limit. Absorption uses the resulting amount.
+	if storedDamage > dotDamageLimit {
+		damage = dotDamageLimit
+	}
+	damage, drainExpired := drainAttributeGuardDamage(effects, maxInt(1, damage), hp, "DOT", "", "", dot)
 	resolution := incomingDamageResolution{Damage: damage}
-	var cutExpired, drainExpired *battleEffect
-	resolution.Damage, cutExpired = cutAttributeGuardDamage(effects, damage, "DOT", "", "", dot)
-	resolution.Damage, drainExpired = drainAttributeGuardDamage(effects, resolution.Damage, hp, "DOT", "", "", dot)
 	if drainExpired != nil {
 		resolution.Released = append(resolution.Released, *drainExpired)
 	}

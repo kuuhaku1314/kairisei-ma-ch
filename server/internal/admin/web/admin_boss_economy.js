@@ -2,8 +2,8 @@
 // Boss 发布 › 体力与经验: one override per difficulty name, shared by 3D 活动, 2D 活动 and 往期 (own-deck entries
 // follow their difficulty). An empty field means "use the resource defaults"; a difficulty whose bosses
 // differ shows every default value and is never written back from them. The tab shares the page's save bar
-// (#save-policy) with the three publication catalogs; admin_ui.js routes to this file when
-// state.bossCatalog is 'economy'. GET/PUT /api/boss-economy, contract in docs/BOSS_ECONOMY.md.
+// (#save-policy) with the publication catalogs through bossSettingTabs.economy (admin_ui.js).
+// GET/PUT /api/boss-economy, contract in docs/BOSS_ECONOMY.md.
 
 const BE_FIELDS = {
   bp: { key: 'bp_use', label: '单人体力', unit: '体力', min: 'bp_use_min', max: 'bp_use_max' },
@@ -471,3 +471,11 @@ function initBossEconomy() {
 }
 
 initBossEconomy();
+bossSettingTabs.economy = {
+  name: '体力与经验',
+  load: loadBossEconomy,
+  render: renderBossEconomy,
+  save: saveBossEconomy,
+  dirty: bossEconomyDirty,
+  ready: bossEconomyReady,
+};

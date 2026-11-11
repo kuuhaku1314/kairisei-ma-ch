@@ -174,17 +174,18 @@ func validateUserAttackTerminalTailContract(catalog *CombatCatalog) error {
 	}
 	terminalHold.enemies[0] = battleEnemy{BaseAttribute: "NEUTRAL", Attribute: "NEUTRAL", MemberType: 5, HP: 0, MaxHP: 100}
 	terminalHold.players[0].BlessHolds = []battleBlessHold{{
-		AppendIndex: 0, CardType: 21, SourceMember: 1, Skill: CombatSkillDefinition{ID: 9},
+		AppendIndex: 2, CardType: 21, SourceMember: 1, Skill: CombatSkillDefinition{ID: 9},
 		CardLevel: 1, Target: 1, Remaining: 1,
 	}}
 	holdResults, err := terminalHold.executeBlessHolds("USER_ATTACK_END", 21)
 	if err != nil {
 		return err
 	}
-	// 668b4/74d97's terminal output gate hides 316 and 59 while still
-	// removing the one-shot from state (D-385 original API receipt).
-	if len(holdResults) != 0 || len(terminalHold.players[0].BlessHolds) != 0 {
-		return fmt.Errorf("terminal CURSE gate executed or retained a one-shot hold: results=%+v player=%+v", holdResults, terminalHold.players[0])
+	// JP 8.0.7 FUN_00074490 enables the writer for 316 during terminal
+	// cleanup, then disables it again before the 59 delimiter.
+	if len(holdResults) != 1 || holdResults[0].Command != CommandHoldLost ||
+		!equalBattleArgs(holdResults[0].Args, []int64{1, 21, 0, 2}) || len(terminalHold.players[0].BlessHolds) != 0 {
+		return fmt.Errorf("terminal CURSE must emit only hold removal: results=%+v holds=%+v", holdResults, terminalHold.players[0].BlessHolds)
 	}
 
 	deadTrap := &BattleEngine{}

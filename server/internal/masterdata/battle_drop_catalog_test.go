@@ -22,7 +22,12 @@ func TestPastBossDropCatalogUsesObtainableCards(t *testing.T) {
 	transitions := []gamestate.EvolutionTransition{
 		{FromCardID: 11, ToCardID: 12}, // similarly named, wrong family
 		{FromCardID: 21, ToCardID: 22}, {FromCardID: 22, ToCardID: 23},
-		{FromCardID: 21, ToCardID: 99, Type: 1}, // GuaiLi is not normal evolution
+		{FromCardID: 21, ToCardID: 99, Type: 1, Materials: []gamestate.EvolutionMaterial{{CardID: 77, Num: 1}}},
+		{FromCardID: 31, ToCardID: 32, Type: 1, Materials: []gamestate.EvolutionMaterial{{CardID: 21, Num: 1}}},
+		{FromCardID: 31, ToCardID: 33, Type: 1, Materials: []gamestate.EvolutionMaterial{{CardID: 21, Num: 1}}},
+		{FromCardID: 41, ToCardID: 42, Materials: []gamestate.EvolutionMaterial{{CardID: 21, Num: 1}}},
+		{FromCardID: 51, ToCardID: 52, Type: 1, Materials: []gamestate.EvolutionMaterial{{CardID: 11, Num: 1}}},
+		{FromCardID: 61, ToCardID: 62, Type: 1, Materials: []gamestate.EvolutionMaterial{{CardID: 21, Num: 1}}},
 	}
 	before, _ := json.Marshal(profiles)
 	got, err := ProjectPastBossDropCatalog([]json.RawMessage{raw}, profiles, transitions)
@@ -30,9 +35,9 @@ func TestPastBossDropCatalogUsesObtainableCards(t *testing.T) {
 		t.Fatal(err)
 	}
 	var group struct {
-		Cards   []int `json:"7"`
-		Evolved []int `json:"8"`
-		Bosses  []struct {
+		Cards  []int `json:"7"`
+		GuaiLi []int `json:"8"`
+		Bosses []struct {
 			Picture int `json:"9"`
 			Cards   []struct {
 				ID int `json:"0"`
@@ -42,9 +47,9 @@ func TestPastBossDropCatalogUsesObtainableCards(t *testing.T) {
 	if err := json.Unmarshal(got[0], &group); err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(group.Cards, []int{21}) || !slices.Equal(group.Evolved, []int{23}) ||
+	if !slices.Equal(group.Cards, []int{21}) || !slices.Equal(group.GuaiLi, []int{31, 61}) ||
 		len(group.Bosses[0].Cards) != 1 || group.Bosses[0].Cards[0].ID != 21 || group.Bosses[0].Picture != 900 {
-		t.Fatalf("wrong actual reward/normal evolution/portrait: %s", got[0])
+		t.Fatalf("wrong actual reward/GuaiLi material users/portrait: %s", got[0])
 	}
 	after, _ := json.Marshal(profiles)
 	if !slices.Equal(before, after) || string(raw) != `{"0":700400010,"4":"boss","7":[11],"8":[12],"13":[{"0":41,"9":900,"12":[{"0":11,"1":0}]}]}` {
@@ -56,7 +61,11 @@ func TestPastBossDropCatalogUsesObtainableCards(t *testing.T) {
 	}
 	profiles[0].EnemyDrops = nil
 	got, err = ProjectPastBossDropCatalog([]json.RawMessage{raw}, profiles, transitions)
-	if err != nil || json.Unmarshal(got[0], &group) != nil || !slices.Equal(group.Cards, []int{11}) {
-		t.Fatalf("legacy aggregate reward fallback failed: %v", err)
+	if err != nil || json.Unmarshal(got[0], &group) != nil || !slices.Equal(group.Cards, []int{11}) || !slices.Equal(group.GuaiLi, []int{51}) {
+		t.Fatalf("aggregate reward view failed: %v", err)
+	}
+	got, err = ProjectPastBossDropCatalog([]json.RawMessage{raw}, profiles, nil)
+	if err != nil || json.Unmarshal(got[0], &group) != nil || !slices.Equal(group.GuaiLi, []int{0}) {
+		t.Fatalf("archive without material users must leave the GuaiLi filter: %v", err)
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"kairisei.local/server/internal/clientbridge"
+	"kairisei.local/server/internal/gamestate"
 )
 
 // Partner decks have one declared named-card shape across live partners and
@@ -18,10 +19,17 @@ import (
 type partnerDeckParameterView struct {
 	value      any
 	parameters *clientbridge.CardParameterCatalog
+	alchemist  bool
 }
 
 func (a *API) partnerDeckParameterView(value any) partnerDeckParameterView {
 	return partnerDeckParameterView{value: value, parameters: a.cardParameters}
+}
+
+func (a *API) clearDeckParameterView(deck gamestate.BattleClearDeck) partnerDeckParameterView {
+	view := a.partnerDeckParameterView(deck.Deck)
+	view.alchemist = deck.ArthurType == 5
+	return view
 }
 
 func (a *API) partnerDeckParameterViews(values []any) []any {
@@ -33,7 +41,7 @@ func (a *API) partnerDeckParameterViews(values []any) []any {
 }
 
 func (view partnerDeckParameterView) MarshalJSON() ([]byte, error) {
-	if view.parameters == nil {
+	if view.parameters == nil && !view.alchemist {
 		return json.Marshal(view.value)
 	}
 	var source map[string]any
@@ -53,6 +61,13 @@ func (view partnerDeckParameterView) MarshalJSON() ([]byte, error) {
 		return nil, fmt.Errorf("unsupported partner deck view %T", view.value)
 	}
 	result := maps.Clone(source)
+	if view.alchemist {
+		// Older clear snapshots confused the alchemist unlock with a Burst form.
+		result["is_burst"] = 0
+	}
+	if view.parameters == nil {
+		return json.Marshal(result)
+	}
 	for _, field := range []string{"deck", "support_deck"} {
 		if source[field] == nil {
 			continue

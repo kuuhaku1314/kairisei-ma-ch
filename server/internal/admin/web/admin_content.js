@@ -41,6 +41,7 @@ function activityComparable(config) {
   const c = structuredClone(config);
   for (const p of Object.values(c.cups)) {
     p.team_cost_initial = p.team_cost_initial || 3;
+    p.burst_gauge_initial ??= 0;
     p.member_dead_end = !!p.member_dead_end;
     for (const g of p.grades) g.rewards ??= [];
   }
@@ -121,8 +122,8 @@ function renderGradeBars(p) {
 function renderDeadEnd(on) {
   $('#cup-dead-state').textContent = on ? '开启' : '关闭';
   $('#cup-dead-hint').textContent = on
-    ? '任一亚瑟倒下即按当前伤害结算，不可续关'
-    : '单名亚瑟倒下不强制结束；是否允许续关仍按副本规则';
+    ? '任一亚瑟倒下即结算伤害，不可续关'
+    : '亚瑟倒下不强制结束；续关按副本规则';
 }
 // One colour per target, shared by the composition bar and its legend.
 function renderCupEnemyHP(bossID) {
@@ -142,7 +143,12 @@ function renderActivityRewards() {
   $('#cup-turns').value = p?.end_turn ?? '';
   $('#cup-rate').value = p?.rate || '';
   $('#cup-team-cost').value = p ? p.team_cost_initial || 3 : '';
-  $('#cup-turns').disabled = $('#cup-rate').disabled = $('#cup-team-cost').disabled = !p;
+  $('#cup-burst').value = p ? (p.burst_gauge_initial ?? 0) : '';
+  $('#cup-turns').disabled =
+    $('#cup-rate').disabled =
+    $('#cup-team-cost').disabled =
+    $('#cup-burst').disabled =
+      !p;
   $('#cup-member-dead-end').checked = !!p?.member_dead_end;
   $('#cup-member-dead-end').disabled = !p;
   renderDeadEnd(!!p?.member_dead_end);
@@ -249,6 +255,8 @@ function activityProblems(config) {
     if (!intIn(p.rate, 1, 1000)) problems.push({ cup: id, field: 'rate', text: `${at}积分倍率须为1–1000%` });
     if (!intIn(p.team_cost_initial ?? 3, 3, 10))
       problems.push({ cup: id, field: 'team-cost', text: `${at}起始COST须为3–10` });
+    if (!intIn(p.burst_gauge_initial ?? 0, 0, 300))
+      problems.push({ cup: id, field: 'burst', text: `${at}开场圣剑槽须为0–300的整数` });
     let previous = -1;
     (p.grades || []).forEach((g, i) => {
       if (!intIn(g.score, 0, 1e12))
@@ -338,7 +346,11 @@ $('#cup-copy-apply').onclick = async () => {
     targets = $$('#cup-copy-targets input:checked').map((el) => el.value),
     parts = new Set($$('#cup-copy-parts input:checked').map((el) => el.value));
   if (!source || !targets.length || !parts.size) return toast('请选择要复制的内容和目标副本', true);
-  const labels = { score: '九档门槛', rewards: '九档奖励', limits: '回合上限、倒下结束、起始COST与倍率' };
+  const labels = {
+    score: '九档门槛',
+    rewards: '九档奖励',
+    limits: '回合上限、倒下结束、起始COST、开场圣剑槽与倍率',
+  };
   if (
     !(await askConfirm(
       `复制到 ${targets.length} 个圣剑杯草稿？`,
@@ -353,6 +365,7 @@ $('#cup-copy-apply').onclick = async () => {
       t.end_turn = source.end_turn;
       t.rate = source.rate;
       t.team_cost_initial = source.team_cost_initial || 3;
+      t.burst_gauge_initial = source.burst_gauge_initial ?? 0;
       t.member_dead_end = !!source.member_dead_end;
     }
     t.grades.forEach((g, i) => {
@@ -404,6 +417,7 @@ for (const [id, field] of [
   ['#cup-turns', 'end_turn'],
   ['#cup-rate', 'rate'],
   ['#cup-team-cost', 'team_cost_initial'],
+  ['#cup-burst', 'burst_gauge_initial'],
 ])
   $(id).oninput = () => {
     const p = activityEditor.config?.cups[$('#cup-select').value];
@@ -428,6 +442,7 @@ function activityDiff() {
       ['回合上限', a.end_turn, b.end_turn],
       ['倒下结束挑战', a.member_dead_end ? '开启' : '关闭', b.member_dead_end ? '开启' : '关闭'],
       ['起始COST', a.team_cost_initial, b.team_cost_initial],
+      ['开场圣剑槽', a.burst_gauge_initial, b.burst_gauge_initial],
       ['积分倍率（%）', a.rate, b.rate],
     ]);
     b.grades.forEach((g, i) => {
@@ -614,10 +629,11 @@ $('#activity-import').onchange = () =>
             !p ||
             !Array.isArray(p.grades) ||
             p.grades.length !== 9 ||
-            p.grades.some((g) => !g || !Array.isArray(g.rewards)),
+            p.grades.some((g) => !g || (g.rewards != null && !Array.isArray(g.rewards))),
         )
       )
         throw new Error('方案格式不正确：圣剑杯集合、九档结构或探索槽数量与当前配置不同');
+      for (const p of Object.values(value.cups)) for (const g of p.grades) g.rewards ??= [];
       await resolveContentLabels(
         [
           ...Object.values(value.cups).flatMap((p) => p.grades.flatMap((g) => g.rewards)),
@@ -1076,13 +1092,14 @@ $('#drop-import').onchange = () =>
         throw new Error('名声奖励须为数组');
       await resolveContentLabels(config.fame_rewards || []);
       const extras = towerDropImportExtras(config);
-      dropEditor.config = {
+      const next = {
         boss_id: dropEditor.row.boss_id,
         enemy_drops: config.enemy_drops,
         fame_rewards: config.fame_rewards ?? null,
         ...extras,
       };
-      await resolveTowerFirstClearLabels();
+      await resolveTowerFirstClearLabels(next);
+      dropEditor.config = next;
       syncPoolModes();
       changedContent('drops');
       renderDropRows();

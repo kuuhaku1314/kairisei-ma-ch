@@ -1942,6 +1942,10 @@ td details summary {
   height: 100%;
   object-fit: cover;
 }
+/* The game stretches the whole cover into its 934×372 frame, so the preview fills rather than crops. */
+.gacha-art img {
+  object-fit: fill;
+}
 .boss-select,
 .gacha-select {
   position: absolute;
@@ -2280,7 +2284,7 @@ table.grades td:first-child {
 /* Pool editor ---------------------------------------------------------------- */
 .pool-columns {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(340px, 1fr);
+  grid-template-columns: minmax(0, 1.25fr) minmax(340px, 1fr);
   gap: 16px;
   align-items: start;
 }
@@ -2870,7 +2874,7 @@ table.grades td:first-child {
     width: 130px !important;
   }
   .login-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .slot-list {
     grid-template-columns: 1fr;
@@ -2920,10 +2924,27 @@ img[data-retry][data-ok] + span {
   display: none;
 }
 #pool-selected input[type='number'] {
+  width: 80px;
+}
+#pool-selected input[data-weight] {
   width: 92px;
 }
+#pool-selected input[data-fame] {
+  width: 56px;
+}
 #pool-selected td {
-  padding: 6px 10px;
+  padding: 6px 8px;
+}
+.pool-love-note.bad {
+  color: var(--danger);
+  white-space: normal;
+}
+/* A narrow pane wraps the card's ID line instead of scrolling the numbers away. */
+#pool-selected .reward-cell .sub {
+  white-space: normal;
+}
+#pool-selected td:last-child {
+  padding-left: 0;
 }
 .slot-scroll {
   overflow-x: auto;
@@ -4411,7 +4432,7 @@ label.catalog-card.selected::after {
   vertical-align: middle;
 }
 .pool-selected-table td:first-child {
-  min-width: 140px;
+  min-width: 120px;
 }
 .pool-card-name {
   display: block;
@@ -4705,15 +4726,12 @@ label.catalog-card.selected::after {
   width: min(400px, 86vw);
 }
 .cup-rules {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
   margin: 14px 0;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface-2);
 }
 .cup-rules h4 {
-  grid-column: 1/-1;
   display: flex;
   flex-wrap: wrap;
   gap: 4px 8px;
@@ -4728,14 +4746,22 @@ label.catalog-card.selected::after {
   font-weight: 400;
   color: var(--muted);
 }
-.cup-rule {
-  padding: 8px 14px 12px;
+/* One row while it fits; on narrow screens the rules wrap and the row clips the outer
+   half of each divider, so only the lines between rules remain. */
+.cup-rule-row {
+  display: flex;
+  flex-wrap: wrap;
+  overflow: hidden;
 }
-.cup-rule + .cup-rule {
+.cup-rule {
+  flex: 1 1 150px;
+  margin: -1px 0 0 -1px;
+  padding: 8px 14px 12px;
+  border-top: 1px solid var(--line);
   border-left: 1px solid var(--line);
 }
-.cup-rule .input-unit input {
-  width: 88px;
+.cup-rule .input-unit input[type='number'] {
+  width: 72px;
 }
 .cup-rule .switch {
   min-height: 34px;
@@ -4744,26 +4770,6 @@ label.catalog-card.selected::after {
   margin: 0;
   font-size: 11.5px;
   line-height: 1.4;
-}
-@media (max-width: 900px) {
-  .cup-rules {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .cup-rule:nth-of-type(odd) {
-    border-left: 0;
-  }
-  .cup-rule:nth-of-type(n + 3) {
-    border-top: 1px solid var(--line);
-  }
-}
-@media (max-width: 520px) {
-  .cup-rules {
-    grid-template-columns: 1fr;
-  }
-  .cup-rule + .cup-rule {
-    border-left: 0;
-    border-top: 1px solid var(--line);
-  }
 }
 .cup-hp {
   margin-top: 14px;

@@ -39,6 +39,23 @@ func auditCompleteAdminContent(t *testing.T, h http.Handler) {
 	if err := json.Unmarshal(testfixture.CallContentAdmin(t, admin, "GET", "/api/activity-rewards", nil, 200), &activity); err != nil || len(activity.Config.Explore) == 0 {
 		t.Fatal("missing exploration reward configuration", err)
 	}
+
+	var opening struct {
+		Revision int                 `json:"revision"`
+		Bosses   []adminapi.DropBoss `json:"bosses"`
+	}
+	if err := json.Unmarshal(testfixture.CallContentAdmin(t, admin, "GET", "/api/boss-battle-opening", nil, 200), &opening); err != nil || len(opening.Bosses) == 0 {
+		t.Fatal("missing activity/past opening settings", err)
+	}
+	for _, boss := range opening.Bosses {
+		if activity.Config.Cups[boss.BossID] != nil || boss.TowerID != 0 || (boss.Category != "boss" && boss.Category != "past") {
+			t.Fatal("opening settings include cup/tower/material", boss)
+		}
+	}
+	testfixture.CallContentAdmin(t, admin, "PUT", "/api/boss-battle-opening", map[string]any{"expected_revision": opening.Revision, "config": map[string]any{"global": map[string]int{"cost_initial": 7, "burst_gauge_initial": 300}, "bosses": map[string]any{}}}, 200)
+	testfixture.CallContentAdmin(t, admin, "PUT", "/api/boss-battle-opening", map[string]any{"expected_revision": opening.Revision + 1, "config": map[string]any{"global": map[string]any{}, "bosses": map[string]any{"10001303": map[string]int{"cost_initial": 7}}}}, 400)
+	testfixture.CallContentAdmin(t, admin, "PUT", "/api/boss-battle-opening", map[string]any{"expected_revision": opening.Revision + 1, "config": map[string]any{"global": map[string]any{}, "bosses": map[string]any{}}}, 200)
+	t.Logf("boss opening: %d canonical activity/past bosses, cups/towers/materials excluded, main quest rejected", len(opening.Bosses))
 	testfixture.CallContentAdmin(t, admin, "PUT", "/api/activity-rewards", map[string]any{"expected_revision": activity.Revision, "config": activity.Config}, 200)
 	t.Logf("activity rewards: %d cup policies / %d native exploration slots", len(activity.Config.Cups), len(activity.Config.Explore))
 	var rules struct {
@@ -144,7 +161,7 @@ func auditCompleteAdminContent(t *testing.T, h http.Handler) {
 	for _, p := range presets.Presets {
 		baseFound[p.GroupID] = true
 		if want, ok := categories[p.GroupID]; ok && p.Category != want {
-			t.Fatalf("pool %d category = %d %q, want %q", p.GroupID, p.CategoryNum, p.Category, want)
+			t.Fatalf("pool %d category = %q, want %q", p.GroupID, p.Category, want)
 		}
 		for _, id := range p.GachaIDs {
 			if gamestate.IsOnboardingGachaID(id) {

@@ -38,8 +38,24 @@ func TestBuddyHandFilterAndSharedCardProjection(t *testing.T) {
 	if got := playerCardStateResult(player, 1).Args; !reflect.DeepEqual(got, []int64{1, 1, 5, 1}) {
 		t.Fatalf("seal and Buddy state must coexist: %v", got)
 	}
+	plan, err := engine.CardPlayPlanResults(1, cardPlaySubmission{CardTypes: [5]int{1, 2}, Targets: [5]int{5, 5}})
+	wantPlan := []BattleResult{
+		{Command: CommandCardPlayPlan, Args: []int64{1, 1, 5, 0, 0, 0, 5}},
+		{Command: CommandCardPlayPlan, Args: []int64{1, 2, 5, 0, 0, 0, 0}},
+	}
+	if err != nil || !reflect.DeepEqual(plan, wantPlan) {
+		t.Fatalf("team card preview must keep the seal and Buddy state on the matching card: %v, %v", plan, err)
+	}
 	if got := engine.playerCardCostResult(player, 1, 1).Args; !reflect.DeepEqual(got, []int64{1, 1, 0, 2, 0}) {
 		t.Fatalf("discount is not the clamped cost: %v", got)
+	}
+	player.Effects = nil
+	player.CardBurstSkills[1] = []battleCardBurstSkill{{SkillID: 1}}
+	engine.phase = PhaseUser
+	played, err := engine.Submit(1, cardPlaySubmission{CardTypes: [5]int{1}, Targets: [5]int{5}})
+	wantPlayed := BattleResult{Command: CommandCardPlay, Args: []int64{1, 1, 5, 0, 4, 0}}
+	if err != nil || len(played) == 0 || !reflect.DeepEqual(played[0], wantPlayed) {
+		t.Fatalf("committed card must keep the Buddy state: %v, %v", played, err)
 	}
 
 	// Original JP 8.0.7 captures retain all three group selectors and allow

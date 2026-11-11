@@ -147,13 +147,11 @@ func (operations *Operations) nextCustomGachaID() int {
 
 // effectiveGachaConfig is what players currently get: the published document, else the base rules.
 func (operations *Operations) effectiveGachaConfig(id int) (AdminGachaConfig, error) {
-	config := AdminGachaConfigFromProfile(operations.gachaBases[id])
 	live, err := operations.storage.ReadDocument("gacha-live:" + strconv.Itoa(id))
-	if err != nil || live.Revision == 0 {
-		return config, err
+	if err != nil {
+		return AdminGachaConfig{}, err
 	}
-	err = json.Unmarshal(live.Payload, &config)
-	return config, err
+	return gachaConfigFromDocument(operations.gachaBases[id], live)
 }
 
 func (admin *API) createCustomGacha(w http.ResponseWriter, r *http.Request) {
@@ -212,13 +210,12 @@ func (admin *API) createCustomGacha(w http.ResponseWriter, r *http.Request) {
 				WriteAdminError(w, 500, err.Error())
 				return
 			}
-			profile := adminConfiguredGacha(o.gachaBases[id], content).Profile
+			profile := o.projectGacha(o.gachaBases[id], content).Profile
 			rule, err := copiedGachaRule(profile)
 			if err != nil || o.mixedGacha(id) {
 				WriteAdminError(w, 400, "只能复制已有完整卡牌内容的普通或友情点卡池；其他规则请按类型新建")
 				return
 			}
-			content.RandomGifts = nil
 			body.Rules = append(body.Rules, rule)
 			profiles, contents = append(profiles, profile), append(contents, content)
 		}
@@ -264,8 +261,10 @@ func (admin *API) createCustomGacha(w http.ResponseWriter, r *http.Request) {
 	}
 	for i, variant := range variants {
 		rule := body.Rules[variant.index]
-		profile := rule.profile()
+		profile := gamestate.CloneGachas([]gamestate.GachaProfile{profiles[variant.index]})[0]
 		profile.GachaID, profile.GroupID, profile.Name, profile.ArthurType = first+i, first, name, variant.profession
+		profile.PlayCount, profile.GroupPlayCount, profile.DailyGroupPlays = 0, 0, 0
+		profile.DailyFirstAvailable = false
 		profile.PublicationKey = "operator"
 		pool := customGachaPool{GachaProfile: profile, Type: rule.Type}
 		if err := o.registerCustomGacha(pool); err != nil {
@@ -276,8 +275,9 @@ func (admin *API) createCustomGacha(w http.ResponseWriter, r *http.Request) {
 		pools[i] = pool
 		content := contents[variant.index]
 		content.GachaID, content.Name = pool.GachaID, name
-		filtered := o.filterGachaProfession(adminConfiguredGacha(o.gachaBases[pool.GachaID], content).Profile)
+		filtered := o.filterGachaProfession(o.projectGacha(o.gachaBases[pool.GachaID], content).Profile)
 		content.CardIDs, content.Weights, content.CardFames = filtered.CardIDs, filtered.CardWeights, filtered.CardFames
+		content.CardLoves = filtered.CardLoves
 		if i > 0 {
 			lead := drafts[0]
 			content.CoverPath, content.StartUnix, content.EndUnix = lead.CoverPath, lead.StartUnix, lead.EndUnix
@@ -498,11 +498,7 @@ func (admin *API) customGachaPresets() []AdminGachaPreset {
 			result[n-1].GachaIDs = append(result[n-1].GachaIDs, pool.GachaID)
 			continue
 		}
-		preset := AdminGachaPreset{PublicationKey: "operator", GroupID: pool.GroupID, GachaIDs: []int{pool.GachaID}}
-		base := o.gachaBases[pool.GachaID]
-		preset.Name, preset.Price, preset.CardCount = base.Name, base.Price, len(base.CardIDs)
-		preset.CategoryNum = base.CategoryNum
-		result = append(result, preset)
+		result = append(result, AdminGachaPreset{PublicationKey: "operator", GroupID: pool.GroupID, GachaIDs: []int{pool.GachaID}})
 	}
 	return result
 }

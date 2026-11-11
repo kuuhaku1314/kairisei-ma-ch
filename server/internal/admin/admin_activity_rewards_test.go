@@ -38,6 +38,7 @@ func TestActivityRewardsAtomicSaveRestartAndNativeSlots(t *testing.T) {
 	}
 	config.Cups[11].EndTurn, config.Cups[11].Rate = 0, 150
 	config.Cups[11].TeamCostInitial = 6
+	config.Cups[11].BurstGaugeInitial = 300
 	config.Cups[11].MemberDeadEnd = false
 	config.Explore[0].Rewards[0].Num = 200
 	config.Explore[0].Chances = []int{250000}
@@ -52,6 +53,11 @@ func TestActivityRewardsAtomicSaveRestartAndNativeSlots(t *testing.T) {
 		call(1, 400)
 	}
 	config.Cups[11].TeamCostInitial = 6
+	for _, gauge := range []int{-1, 301} {
+		config.Cups[11].BurstGaugeInitial = gauge
+		call(1, 400)
+	}
+	config.Cups[11].BurstGaugeInitial = 300
 	config.Cups[11].Grades[2].Score = 0
 	call(1, 400)
 	config.Cups[11].Grades[2].Score = 300
@@ -70,6 +76,9 @@ func TestActivityRewardsAtomicSaveRestartAndNativeSlots(t *testing.T) {
 	s := restarted.content.configuration.State
 	if restarted.content.activityRevision != 1 || s.TeamBattleReplays[0].EndTurn != 0 || s.TeamBattleReplays[1].EndTurn != 0 || s.TeamBattleRewards[1].ScorePolicy.Rate != 150 || s.TeamBattleRewards[1].ScorePolicy.MemberDeadEnd {
 		t.Fatal("accepted rules did not survive restart or reach both entry modes")
+	}
+	if s.TeamBattleRewards[0].ScorePolicy.BurstGaugeInitial != 300 || s.TeamBattleReplays[0].BurstGaugeInitial != 300 || s.TeamBattleReplays[1].BurstGaugeInitial != 300 || p.BurstGaugeInitial != 0 {
+		t.Fatal("cup opening gauge was not isolated, persisted and projected")
 	}
 	if s.TeamBattleRewards[0].ScorePolicy.TeamCostInitial != 6 || s.TeamBattleReplays[0].CostInitial != 3 || s.TeamBattleReplays[1].CostInitial != 3 || p.TeamCostInitial != 0 {
 		t.Fatal("multiplayer starting COST was lost or changed the solo/base replay")

@@ -10,6 +10,7 @@ import (
 	"sort"
 
 	"kairisei.local/server/internal/game"
+	"kairisei.local/server/internal/gamestate"
 )
 
 const maxPVPMasterBytes = 1024 * 1024
@@ -25,7 +26,7 @@ func LoadPVPRuntimeMaster(masterPath string) (game.PVPConfig, error) {
 	if len(content) == 0 || len(content) > maxPVPMasterBytes {
 		return game.PVPConfig{}, errors.New("CN PVP runtime config must be non-empty and at most one MiB")
 	}
-	var config game.PVPConfig
+	config := game.PVPConfig{BurstGaugeInitial: gamestate.BattleOpeningBurstGaugeReady}
 	decoder := json.NewDecoder(bytes.NewReader(content))
 	if err := decoder.Decode(&config); err != nil {
 		return game.PVPConfig{}, fmt.Errorf("decode CN PVP runtime config: %w", err)
@@ -38,6 +39,7 @@ func LoadPVPRuntimeMaster(masterPath string) (game.PVPConfig, error) {
 		return game.PVPConfig{}, fmt.Errorf("decode trailing CN PVP runtime config: %w", err)
 	}
 	if config.ChallengeMax != 5 || config.CostInitial <= 0 || config.TurnMax <= 0 || config.HoldMax <= 0 ||
+		config.BurstGaugeInitial < 0 || config.BurstGaugeInitial > gamestate.BattleOpeningBurstGaugeMax ||
 		config.RankWinPoint <= 0 || config.RankLosePoint > 0 || config.ReplayResult < 0 || config.ReplayResult > 1 {
 		return game.PVPConfig{}, errors.New("CN PVP runtime rules are invalid")
 	}

@@ -441,8 +441,8 @@ function adminPolicyDirty(name) {
   if (name === 'settings') return runtimeSettingsDirty();
   if (name === 'shop') return itemShopDirty();
   const normalized = (values) => JSON.stringify([...values].sort((a, b) => a - b));
-  if (name === 'bosses' && state.bossCatalog === 'economy')
-    return typeof bossEconomyDirty === 'function' && bossEconomyDirty();
+  if (name === 'bosses' && bossSettingTabs[state.bossCatalog])
+    return bossSettingTabs[state.bossCatalog].dirty();
   if (name === 'bosses' && state.policy)
     return (
       state.mode !== state.policy.mode ||

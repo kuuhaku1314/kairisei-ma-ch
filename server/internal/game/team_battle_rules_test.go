@@ -63,9 +63,10 @@ func TestSoloEntryFreezesContinueRuleWithDebit(t *testing.T) {
 	helper := &s.playerProgression.Friends.HelperReward
 	helper.OtherPerPartner, helper.FriendPerPartner = 5, 10
 	profiles := []gamestate.TeamBattleRewardProfile{{BossID: boss, ResultRewards: []gamestate.Reward{{Type: 4, Num: 10}}}}
+	opening := &gamestate.TeamBattleOpening{CostInitial: 7, BurstGaugeInitial: 300}
 	startID := "solo:offline"
 	start := func() error {
-		_, _, _, err := s.BeginTeamBattle(TeamBattleEntry{BossID: boss, EnemyTypes: []int8{0}, Profiles: profiles, FameSeed: startID, FameSources: []TeamBattleFameSource{{MemberType: 1, LeaderFame: 1}}})
+		_, _, _, err := s.BeginTeamBattle(TeamBattleEntry{Opening: opening, BossID: boss, EnemyTypes: []int8{0}, Profiles: profiles, FameSeed: startID, FameSources: []TeamBattleFameSource{{MemberType: 1, LeaderFame: 1}}})
 		return err
 	}
 	if err := start(); err == nil || s.bp != 30 || s.activeBattle != nil {
@@ -79,6 +80,10 @@ func TestSoloEntryFreezesContinueRuleWithDebit(t *testing.T) {
 	s.disabledTeamBattleBossIDs = nil
 	if err := start(); err != nil || s.bp != 15 || !s.activeBattle.ContinueAllowed {
 		t.Fatalf("solo entry failed to freeze the accepted rule: %v", err)
+	}
+	opening.CostInitial, opening.BurstGaugeInitial = 3, 0
+	if s.activeBattle.Opening == nil || s.activeBattle.Opening.CostInitial != 7 || s.activeBattle.Opening.BurstGaugeInitial != 300 {
+		t.Fatal("accepted opening aliases the caller")
 	}
 	firstSeed := s.activeBattle.Seed
 	if firstSeed <= 0 || firstSeed > 2147483647 {
@@ -104,6 +109,9 @@ func TestSoloEntryFreezesContinueRuleWithDebit(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.activeBattle = teamBattleContextFromRelease(&active)
+	if s.activeBattle.Opening == nil || s.activeBattle.Opening.CostInitial != 7 || s.activeBattle.Opening.BurstGaugeInitial != 300 {
+		t.Fatal("opening changed after retry or context round trip")
+	}
 	if s.activeBattle.Seed != firstSeed {
 		t.Fatal("account handler reload lost the active battle seed")
 	}

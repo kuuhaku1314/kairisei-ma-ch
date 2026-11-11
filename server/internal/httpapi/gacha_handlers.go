@@ -75,7 +75,7 @@ func (a *API) gachaPlay(writer http.ResponseWriter, request *http.Request) {
 			uniqueIDs = []int64{0}
 		}
 		rewards[index] = map[string]any{
-			"reward":           received.Reward,
+			"reward":           a.account.GachaPrizeForClient(received.Reward),
 			"uniqid":           uniqueIDs,
 			"is_new":           received.IsNew,
 			"auto_fusion_used": 0,
@@ -191,7 +191,7 @@ func (a *API) gachaLineupShow(writer http.ResponseWriter, request *http.Request)
 				isNew = game.CardNewFlag(ownedCardIDs, reward.RewardTypeID)
 			}
 			cards[index] = map[string]any{
-				"prize":  reward,
+				"prize":  a.account.GachaPrizeForClient(reward),
 				"is_new": isNew,
 			}
 		}
@@ -298,7 +298,8 @@ func (a *API) gachaOddsShow(writer http.ResponseWriter, request *http.Request) {
 	for _, stage := range stages {
 		prizes := make([]any, len(stage.CardIDs))
 		for i, id := range stage.CardIDs {
-			prizes[i] = map[string]any{"prize": game.GachaCardReward(id), "is_new": game.CardNewFlag(ownedCardIDs, id), "odds": stage.Odds[i]}
+			prize := a.account.GachaPrizeForClient(game.GachaPoolCardReward(selected, id))
+			prizes[i] = map[string]any{"prize": prize, "is_new": game.CardNewFlag(ownedCardIDs, id), "odds": stage.Odds[i]}
 		}
 		if len(stage.Rewards) > 0 {
 			prizes = make([]any, len(stage.Rewards))
@@ -307,7 +308,7 @@ func (a *API) gachaOddsShow(writer http.ResponseWriter, request *http.Request) {
 				if reward.Type == 6 {
 					isNew = game.CardNewFlag(ownedCardIDs, reward.RewardTypeID)
 				}
-				prizes[i] = map[string]any{"prize": reward, "is_new": isNew, "odds": stage.Odds[i]}
+				prizes[i] = map[string]any{"prize": a.account.GachaPrizeForClient(reward), "is_new": isNew, "odds": stage.Odds[i]}
 			}
 		}
 		lineups = append(lineups, map[string]any{"lineup_name": stage.Name, "select_num": stage.DrawCount, "prize_list": prizes})

@@ -2,6 +2,8 @@ package battlecore
 
 import "strings"
 
+const dotDamageLimit = 1_000_000_000
+
 func dotValueUpValues(role CombatSkillRole, level int, chainCount int) (int, int, int) {
 	turnAdd := combatParameterInt(role.Parameters[0])
 	chainRate := 100
@@ -125,17 +127,6 @@ func (engine *BattleEngine) dotEffectForEnemyWithChain(effect battleEffect, enem
 	return effect
 }
 
-func nativeDOTDamage(value int, reductionPercent int) int {
-	value = registeredDOTValue(value, 100, reductionPercent)
-	return minInt(20000000, maxInt(1, value))
-}
-
-func enemyDOTDamage(effect battleEffect) int {
-	// Enemy attribute rate and DOT reduction are frozen into effect.Value when
-	// the debuff is registered. Ticks only apply the native 20,000,000 cap.
-	return nativeDOTDamage(effect.Value, 0)
-}
-
 func dotValueUpResult(memberType int, role CombatSkillRole, effect battleEffect, turnAdd int, primary int, secondary int) BattleResult {
 	buffMask := 0
 	debuffMask := 0
@@ -159,11 +150,10 @@ func applyDOTValueUp(effects []battleEffect, memberType int, role CombatSkillRol
 		if strings.ToUpper(effects[index].Function) != wanted || effects[index].Remaining <= 0 || effects[index].Value <= 0 {
 			continue
 		}
-		// 86210 adds the producer's fixed segment after scaling the stored
-		// damage, clamps to 1..20,000,000 and reports positive-change flags.
+		// JP 976a0 scales the stored damage before adding the fixed segment.
 		effects[index].Remaining = maxInt(0, effects[index].Remaining+turnAdd)
 		value := int64(effects[index].Value)*int64(100+rate)/100 + int64(fixed)
-		effects[index].Value = int(max(int64(1), min(int64(20000000), value)))
+		effects[index].Value = int(max(int64(1), min(int64(dotDamageLimit), value)))
 		results = append(results, dotValueUpResult(memberType, role, effects[index], turnAdd, rate, fixed))
 	}
 	if len(results) == 0 {
@@ -1042,9 +1032,8 @@ func (engine *BattleEngine) tickEnemyDOTEffects() ([]BattleResult, error) {
 			if !exists {
 				continue
 			}
-			damage := enemyDOTDamage(effect)
-			resolution := resolveDOTAttributeGuards(&enemy.Effects, damage, enemy.HP, function)
-			damage = resolution.Damage
+			resolution := resolveDOTAttributeGuards(&enemy.Effects, effect.Value, enemy.HP, function)
+			damage := resolution.Damage
 			enemy.HP = nativeHPCommit(enemy.HP, enemy.MaxHP, -damage, enemy.Effects)
 			recordEnemyDamage(enemy, damage, "")
 			enemy.Trance.OtherDamage += int64(maxInt(0, damage))
@@ -1112,9 +1101,8 @@ func (engine *BattleEngine) tickPlayerDOTEffects() []BattleResult {
 			if !exists {
 				continue
 			}
-			damage := nativeDOTDamage(effect.Value, 0)
-			resolution := resolveDOTAttributeGuards(&player.Effects, damage, player.HP, function)
-			damage = resolution.Damage
+			resolution := resolveDOTAttributeGuards(&player.Effects, effect.Value, player.HP, function)
+			damage := resolution.Damage
 			player.HP = engine.playerHPAfterDamage(player, damage)
 			recordPlayerDamage(player, damage)
 			results = append(results,

@@ -16,6 +16,7 @@ import (
 )
 
 type TeamBattleContext struct {
+	Opening                   *gamestate.TeamBattleOpening
 	ScoreBossID               int
 	MissionPlayers            int
 	MissionArthur             int8
@@ -82,6 +83,7 @@ func teamBattleContextFromRelease(source *gamestate.TeamBattleActiveState) *Team
 		return nil
 	}
 	result := &TeamBattleContext{
+		Opening:                   gamestate.CloneTeamBattleOpening(source.Opening),
 		ScoreBossID:               source.ScoreBossID,
 		StageType:                 source.StageType,
 		EntryRole:                 source.EntryRole,
@@ -144,6 +146,7 @@ func snapshotTeamBattleContext(source *TeamBattleContext) *gamestate.TeamBattleA
 		return nil
 	}
 	result := &gamestate.TeamBattleActiveState{
+		Opening:                   gamestate.CloneTeamBattleOpening(source.Opening),
 		ScoreBossID:               source.ScoreBossID,
 		StageType:                 source.StageType,
 		EntryRole:                 source.EntryRole,

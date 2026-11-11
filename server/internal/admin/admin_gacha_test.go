@@ -33,12 +33,18 @@ func TestOperatorGachaCardEligibility(t *testing.T) {
 
 func TestAdminGachaDraftPublicationAndRestart(t *testing.T) {
 	accounts := testfixture.NewFriendCapacityTestAccounts(t)
+	catalog, err := accounts.Database().CatalogState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog.ItemDefinitions = append(catalog.ItemDefinitions, gamestate.ItemDefinition{ItemID: 4000, Name: "大硬币", MaxOwned: 9999})
+	accounts.Database().SetCatalog(catalog)
 	base := gamestate.GachaProfile{GachaID: 60200301, Name: "local", Price: 10, CardNum: 2, CardNumMax: 2, GroupID: 60200301, PublicationKey: "water_coin", CardIDs: []int{1, 2}, CardWeights: []int{1, 1}, GuaranteedCount: 1, GuaranteedRarityRank: 6, RemainderRarityRank: 5}
 	operations, err := NewOperations(accounts.Database(), []gamestate.GachaProfile{base, {GachaID: gamestate.OnboardingMultiGachaID}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	admin := &API{operations: operations, catalogByKey: map[string]AdminCatalogEntry{"6:1": {GachaEligible: true, Rarity: 6, ResourceState: "ready"}, "6:2": {GachaEligible: true, Rarity: 5, ResourceState: "ready"}, "6:3": {GachaEligible: true, Rarity: 6, ResourceState: "unavailable"}}}
+	admin := &API{operations: operations, catalogByKey: map[string]AdminCatalogEntry{"6:1": {GachaEligible: true, Rarity: 6, ResourceState: "ready", LoveMax: 10000}, "6:2": {GachaEligible: true, Rarity: 5, ResourceState: "ready"}, "6:3": {GachaEligible: true, Rarity: 6, ResourceState: "unavailable"}}}
 	router := chi.NewRouter()
 	router.Post("/{action}", admin.gachaEditorAction)
 	call := func(action string, body any) *httptest.ResponseRecorder {
@@ -54,6 +60,7 @@ func TestAdminGachaDraftPublicationAndRestart(t *testing.T) {
 	config := AdminGachaConfigFromProfile(base)
 	config.Price = 25
 	config.Weights = []int{1, 9}
+	config.CardLoves = map[int]int{1: 3501}
 	config.OddsMessage = "整池概率说明\n<文字> & 不影响权重"
 	config.PayType, config.PayTypeID = 4, 4000
 	admin.catalogByKey["8:4000"] = AdminCatalogEntry{Kind: "item", Name: "大硬币", ResourceState: "ready"}
@@ -72,6 +79,13 @@ func TestAdminGachaDraftPublicationAndRestart(t *testing.T) {
 	invalidPayment.PayTypeID = 9999
 	if _, err := admin.validateGachaConfig(invalidPayment); err == nil {
 		t.Fatal("unknown payment item accepted")
+	}
+	for _, loves := range []map[int]int{{1: -1}, {1: 10001}, {2: 1}, {99: 0}} {
+		invalid := config
+		invalid.CardLoves = loves
+		if response := call("draft", map[string]any{"config": invalid, "expected_revision": 0}); response.Code != 400 {
+			t.Fatalf("invalid loyalty %v: %d %s", loves, response.Code, response.Body.String())
+		}
 	}
 	result := call("draft", map[string]any{"config": config, "expected_revision": 0})
 	if result.Code != 200 {
@@ -92,8 +106,8 @@ func TestAdminGachaDraftPublicationAndRestart(t *testing.T) {
 	if len(saved.Preview.Stages) != 2 || saved.Preview.Stages[0].Odds[0] != 10000000 || saved.Preview.Stages[1].Odds[0] != 10000000 {
 		t.Fatalf("guaranteed draws preview wrong distribution: %s", result.Body.String())
 	}
-	if saved.Preview.Base.OddsMessage != config.OddsMessage || saved.Preview.Base.PayType != 4 || saved.Preview.Base.PayTypeID != 4000 || saved.Preview.Base.Price != 25 {
-		t.Fatal("preview does not describe the configured payment")
+	if saved.Preview.Base.OddsMessage != config.OddsMessage || saved.Preview.Base.PayType != 4 || saved.Preview.Base.PayTypeID != 4000 || saved.Preview.Base.Price != 25 || saved.Preview.Base.CardLoves[1] != 3501 {
+		t.Fatal("preview lost configured payment or loyalty")
 	}
 	if operations.gachaRevision != 0 {
 		t.Fatal("saving a draft changed the active pool")
@@ -116,10 +130,14 @@ func TestAdminGachaDraftPublicationAndRestart(t *testing.T) {
 	if len(restarted.gachaBases) != 1 || len(restarted.gachaConfigurations) != 1 || restarted.gachaConfigurations[0].Profile.Price != 25 {
 		t.Fatal("publication did not survive restart or exposed onboarding pool")
 	}
-	if p := restarted.gachaConfigurations[0].Profile; p.OddsMessage != config.OddsMessage || p.PayType != 4 || p.PayTypeID != 4000 {
-		t.Fatal("payment item was lost on restart")
+	if p := restarted.gachaConfigurations[0].Profile; p.OddsMessage != config.OddsMessage || p.PayType != 4 || p.PayTypeID != 4000 || p.CardLoves[1] != 3501 {
+		t.Fatal("payment item or loyalty was lost on restart")
+	}
+	if got := restarted.gachaConfigurations[0].Profile.BuyMessage; got != "消耗 25 大硬币 抽取 2 张卡牌吗？" {
+		t.Fatalf("published confirmation should name the configured item, got %q", got)
 	}
 	config.CardIDs = []int{3, 2}
+	config.CardLoves = nil
 	result = call("draft", map[string]any{"config": config, "expected_revision": cleared.Revision})
 	if result.Code != 200 {
 		t.Fatal(result.Body.String())
@@ -167,7 +185,7 @@ func TestAdminGachaDraftPublicationAndRestart(t *testing.T) {
 		if _, err := admin.validateGachaConfig(withFame); (err == nil) != ok {
 			t.Fatalf("card fame %v accepted=%v: %v", *fames, err == nil, err)
 		}
-		if ok && adminConfiguredGacha(operations.gachaBases[config.GachaID], withFame).Profile.CardFame(1) != 90 {
+		if ok && operations.projectGacha(operations.gachaBases[config.GachaID], withFame).Profile.CardFame(1) != 90 {
 			t.Fatal("configured fame not carried into the game profile")
 		}
 	}

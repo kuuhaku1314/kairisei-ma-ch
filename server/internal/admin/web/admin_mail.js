@@ -166,7 +166,7 @@ function renderCatalog() {
   if (card && $('#catalog-rarity').value !== '0')
     filters.push($('#catalog-rarity').selectedOptions[0].textContent);
   if (card)
-    for (const key of ['attribute', 'cost', 'resource']) {
+    for (const key of ['attribute', 'cost']) {
       const el = $(`#catalog-${key}`);
       if (el?.value) filters.push(el.selectedOptions[0].textContent);
     }

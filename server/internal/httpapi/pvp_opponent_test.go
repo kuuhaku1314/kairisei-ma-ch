@@ -61,11 +61,14 @@ func TestPVPStartSkipsUnusableDefenseBeforeCharging(t *testing.T) {
 		states    pvpOpponentStates
 		challenge int
 		started   bool
+		mode      int
+		code      int
 	}{
-		{"skip stale defense", pvpOpponentStates{stale, valid}, 2, true},
-		{"none usable", pvpOpponentStates{stale}, 2, false},
-		{"no other accounts", pvpOpponentStates{}, 2, false},
-		{"ranked allowance exhausted", pvpOpponentStates{valid}, 0, false},
+		{"skip stale defense", pvpOpponentStates{stale, valid}, 2, true, 1, 0},
+		{"none usable", pvpOpponentStates{stale}, 2, false, 1, pvpOpponentNotFound},
+		{"no other accounts", pvpOpponentStates{}, 2, false, 1, pvpOpponentNotFound},
+		{"ranked allowance exhausted", pvpOpponentStates{valid}, 0, false, 1, pvpNotEnoughPP},
+		{"free battle after ranked allowance exhausted", pvpOpponentStates{valid}, 0, true, 0, 0},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			ownDecks := make([]gamestate.PVPDeckSelection, 4)
@@ -81,17 +84,25 @@ func TestPVPStartSkipsUnusableDefenseBeforeCharging(t *testing.T) {
 			})
 			before := game.ClonePVPState(s.Snapshot(gamestate.State{}).PVP)
 			api := &API{account: s, initialState: gamestate.State{}, pvpAccounts: scenario.states,
-				pvpConfig: game.PVPConfig{ChallengeMax: 5, Fields: []game.PVPFieldConfig{{FieldID: 1}}, ReplayResult: 1, RankWinPoint: 10},
+				pvpConfig: game.PVPConfig{ChallengeMax: 5, BurstGaugeInitial: 100, Fields: []game.PVPFieldConfig{{FieldID: 1}}, ReplayResult: 1, RankWinPoint: 10},
 			}
-			body, err := json.Marshal(map[string]any{"type": 1, "select_arthur_type": 1, "pvp_my_deck": ownDecks})
+			body, err := json.Marshal(map[string]any{"type": scenario.mode, "select_arthur_type": 1, "pvp_my_deck": ownDecks})
 			if err != nil {
 				t.Fatal(err)
 			}
 			response := httptest.NewRecorder()
 			api.pvpStart(response, httptest.NewRequest(http.MethodPost, "/PvpStart2", bytes.NewReader(body)))
 			if scenario.started {
-				if response.Code != http.StatusOK || s.Snapshot(gamestate.State{}).PVP.Challenge != 1 || len(s.Snapshot(gamestate.State{}).PVP.History) != 1 || s.Snapshot(gamestate.State{}).PVP.History[0].OpponentUserID != 3 {
+				if response.Code != http.StatusOK || s.Snapshot(gamestate.State{}).PVP.Challenge != scenario.challenge-scenario.mode || len(s.Snapshot(gamestate.State{}).PVP.History) != 1 || s.Snapshot(gamestate.State{}).PVP.History[0].OpponentUserID != 3 {
 					t.Fatalf("usable opponent blocked or charged incorrectly: status=%d challenge=%d history=%+v body=%s", response.Code, s.Snapshot(gamestate.State{}).PVP.Challenge, s.Snapshot(gamestate.State{}).PVP.History, response.Body.String())
+				}
+				var opened pvpStartResponse
+				lines := bytes.SplitN(response.Body.Bytes(), []byte{'\n'}, 3)
+				if len(lines) < 2 {
+					t.Fatalf("missing arena start response: %s", response.Body.String())
+				}
+				if err := json.Unmarshal(lines[1], &opened); err != nil || opened.BurstGaugeInitial != 100 {
+					t.Fatalf("arena opening gauge = %d, want 100: %v", opened.BurstGaugeInitial, err)
 				}
 			} else {
 				var common struct {
@@ -101,7 +112,7 @@ func TestPVPStartSkipsUnusableDefenseBeforeCharging(t *testing.T) {
 				if err := json.Unmarshal(bytes.Split(response.Body.Bytes(), []byte{'\n'})[0], &common); err != nil {
 					t.Fatal(err)
 				}
-				if response.Code != http.StatusOK || common.Code != -1200 || common.Text == "" {
+				if response.Code != http.StatusOK || common.Code != scenario.code || common.Text == "" {
 					t.Fatalf("expected stock arena error callback: status=%d body=%s", response.Code, response.Body.String())
 				}
 				if !reflect.DeepEqual(s.Snapshot(gamestate.State{}).PVP, before) || s.Snapshot(gamestate.State{}).User.PVPPoint != 0 {

@@ -82,7 +82,7 @@ func auditCompleteRuntimeDropCatalog(t *testing.T, state gamestate.State, cards 
 			}
 		}
 	}
-	changedGroups, archiveBosses := 0, 0
+	changedGroups, archiveBosses, guailiGroups, guailiEntries := 0, 0, 0, 0
 	for i, raw := range state.TeamBattlePastBossGroups {
 		var before, after masterdata.BattlePastBossGroupIdentity
 		if json.Unmarshal(master.PastBossGroups[i], &before) != nil || json.Unmarshal(raw, &after) != nil {
@@ -112,8 +112,37 @@ func auditCompleteRuntimeDropCatalog(t *testing.T, state gamestate.State, cards 
 		if !slices.Equal(slices.Compact(union), after.Cards) {
 			t.Fatalf("archive %d shows cards that do not drop", after.GroupID)
 		}
+		users := map[int]bool{}
+		for _, transition := range cards.EvolutionTransitions {
+			if transition.Type != 1 {
+				continue
+			}
+			for _, material := range transition.Materials {
+				if slices.Contains(after.Cards, material.CardID) {
+					users[transition.FromCardID] = true
+				}
+			}
+		}
+		if len(users) == 0 {
+			if !slices.Equal(after.EvolvedCards, []int{0}) {
+				t.Fatalf("archive %d advertises GuaiLi without material users: %v", after.GroupID, after.EvolvedCards)
+			}
+			continue
+		}
+		if len(after.EvolvedCards) != len(users) || !slices.IsSorted(after.EvolvedCards) {
+			t.Fatalf("archive %d has an incomplete or unstable GuaiLi list: %v", after.GroupID, after.EvolvedCards)
+		}
+		for _, id := range after.EvolvedCards {
+			if !users[id] {
+				t.Fatalf("archive %d lists %d without a GOD recipe consuming its drops", after.GroupID, id)
+			}
+			delete(users, id)
+		}
+		guailiGroups++
+		guailiEntries += len(after.EvolvedCards)
 	}
 	t.Logf("drop audit: %d reward profiles (normal/event/key/tower/own-deck), %d archive groups, %d archive difficulties; %d group portraits corrected; all actual card IDs agree", len(state.TeamBattleRewards), len(state.TeamBattlePastBossGroups), archiveBosses, changedGroups)
+	t.Logf("GuaiLi material view: %d archive groups, %d distinct per-group base cards; all recipe references agree", guailiGroups, guailiEntries)
 }
 
 // Compare the former full refresh with account preparation from the current

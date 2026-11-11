@@ -14,6 +14,12 @@ import (
 	"kairisei.local/server/internal/gamestate"
 )
 
+const (
+	pvpNotEnoughPP      = -3801
+	pvpGeneral          = -3805
+	pvpOpponentNotFound = -3806
+)
+
 type pvpShowResponse struct {
 	Result    int `json:"result"`
 	PVPPoint  int `json:"pvp_point"`
@@ -59,23 +65,24 @@ type pvpEnemyDeckInfo struct {
 }
 
 type pvpStartResponse struct {
-	BattleID       int                     `json:"btluid"`
-	FieldID        int                     `json:"fieldid"`
-	GimmickID      int                     `json:"gimmickid"`
-	CostInitial    int                     `json:"cost_initial"`
-	TurnMax        int                     `json:"turn_max"`
-	Seed           int                     `json:"seed"`
-	EnemyInfo      map[string]any          `json:"enemy_info"`
-	EnemyDecks     []pvpEnemyDeckInfo      `json:"pvp_enemy_deck"`
-	MyCostumeIDs   []int                   `json:"pvp_my_costumeid"`
-	HoldMax        int                     `json:"hold_max"`
-	ResultCommands []game.PVPResultCommand `json:"result_cmds"`
-	DeckHonorIDs   []int                   `json:"deck_honorids"`
-	EnemyHonorIDs  []int                   `json:"enemy_deck_honorids"`
-	Result         int                     `json:"result"`
-	PointBefore    int                     `json:"bf_pvp_point"`
-	PointAfter     int                     `json:"af_pvp_point"`
-	Challenge      int                     `json:"challenge"`
+	BattleID          int                     `json:"btluid"`
+	FieldID           int                     `json:"fieldid"`
+	GimmickID         int                     `json:"gimmickid"`
+	CostInitial       int                     `json:"cost_initial"`
+	BurstGaugeInitial int                     `json:"burst_gauge_initial"`
+	TurnMax           int                     `json:"turn_max"`
+	Seed              int                     `json:"seed"`
+	EnemyInfo         map[string]any          `json:"enemy_info"`
+	EnemyDecks        []pvpEnemyDeckInfo      `json:"pvp_enemy_deck"`
+	MyCostumeIDs      []int                   `json:"pvp_my_costumeid"`
+	HoldMax           int                     `json:"hold_max"`
+	ResultCommands    []game.PVPResultCommand `json:"result_cmds"`
+	DeckHonorIDs      []int                   `json:"deck_honorids"`
+	EnemyHonorIDs     []int                   `json:"enemy_deck_honorids"`
+	Result            int                     `json:"result"`
+	PointBefore       int                     `json:"bf_pvp_point"`
+	PointAfter        int                     `json:"af_pvp_point"`
+	Challenge         int                     `json:"challenge"`
 }
 
 func (a *API) refreshPVPChallenges(writer http.ResponseWriter, now time.Time) bool {
@@ -137,7 +144,7 @@ func (a *API) pvpStart(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	if len(opponents) == 0 {
-		a.writeProtocolResult(writer, nil, -1200, "暂无可用的本地竞技场对手，请在其他玩家建立卡组后重试。")
+		a.writeProtocolResult(writer, nil, pvpOpponentNotFound, "暂无可用的本地竞技场对手，请在其他玩家建立卡组后重试。")
 		return
 	}
 	point, _, nextBattleID := a.account.PvpStatusWithBattleID()
@@ -163,17 +170,17 @@ func (a *API) pvpStart(writer http.ResponseWriter, request *http.Request) {
 		break
 	}
 	if len(enemyDecks) == 0 {
-		a.writeProtocolResult(writer, nil, -1200, "暂无可用的竞技场防守卡组，请稍后重试。")
+		a.writeProtocolResult(writer, nil, pvpOpponentNotFound, "暂无可用的竞技场防守卡组，请稍后重试。")
 		return
 	}
 	match, challenge, err := a.account.BeginPVP(payload.BattleType, opponent.User.UserID, payload.MyDecks, a.pvpConfig, time.Now())
 	if err != nil {
 		if errors.Is(err, game.ErrInvalidPVPDeck) {
 			a.writeStoreError(writer, err)
+		} else if errors.Is(err, game.ErrPVPChallengesExhausted) {
+			a.writeProtocolResult(writer, nil, pvpNotEnoughPP, err.Error())
 		} else {
-			// Stock PvPSt.checkProtoStartError handles -1200 by closing the
-			// dialog and returning to the arena selection, without logging out.
-			a.writeProtocolResult(writer, nil, -1200, err.Error())
+			a.writeProtocolResult(writer, nil, pvpGeneral, err.Error())
 		}
 		return
 	}
@@ -198,12 +205,13 @@ func (a *API) pvpStart(writer http.ResponseWriter, request *http.Request) {
 		resultCommands = append(resultCommands, game.PVPResultCommand{InputAPI: 0, ResultCmd: ""})
 	}
 	a.writeProtocol(writer, pvpStartResponse{
-		BattleID:    match.BattleID,
-		FieldID:     field.FieldID,
-		GimmickID:   a.pvpConfig.GimmickID,
-		CostInitial: a.pvpConfig.CostInitial,
-		TurnMax:     a.pvpConfig.TurnMax,
-		Seed:        match.BattleID,
+		BattleID:          match.BattleID,
+		FieldID:           field.FieldID,
+		GimmickID:         a.pvpConfig.GimmickID,
+		CostInitial:       a.pvpConfig.CostInitial,
+		BurstGaugeInitial: a.pvpConfig.BurstGaugeInitial,
+		TurnMax:           a.pvpConfig.TurnMax,
+		Seed:              match.BattleID,
 		EnemyInfo: map[string]any{
 			"userid": opponent.User.UserID, "name": opponent.User.Name,
 			"pvp_point": opponent.User.PVPPoint, "state": 0,

@@ -11,6 +11,7 @@ import (
 // SoloBattleEntry describes a validated party. Its request key identifies a
 // repeated start while that run remains active; settlement or Home ends it.
 type SoloBattleEntry struct {
+	Opening                  *gamestate.TeamBattleOpening
 	ScoreBossID              int
 	DeckArthurType           int8
 	UserID                   int
@@ -51,8 +52,8 @@ func (s *Account) BeginSoloBattle(entry SoloBattleEntry) (TeamBattleContext, Bat
 		rentalKey = fmt.Sprintf("solo-rental:user=%d:boss=%d:start=%d", entry.UserID, entry.BossID, identity)
 	}
 	context, points, started, err := s.beginTeamBattleLocked(TeamBattleEntry{
-		ScoreBossID: entry.ScoreBossID,
-		BossID:      entry.BossID, StageType: rules.StageType, EntryRole: gamestate.BattleEntrySolo,
+		ScoreBossID: entry.ScoreBossID, Opening: entry.Opening,
+		BossID: entry.BossID, StageType: rules.StageType, EntryRole: gamestate.BattleEntrySolo,
 		EnemyTypes: entry.EnemyTypes, Profiles: entry.Profiles,
 		FameSeed: fameSeed, FameSources: entry.FameSources,
 		FriendPointPartners: entry.FriendPointPartners, FriendPointReward: entry.FriendPointReward,

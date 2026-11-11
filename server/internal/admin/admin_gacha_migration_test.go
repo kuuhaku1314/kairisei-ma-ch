@@ -120,8 +120,8 @@ func TestCustomGachaOwnedMigrationPreservesProfilesAndClaims(t *testing.T) {
 	if !o.customGachas[60300015].Deleted || o.nextCustomGachaID() != nextID {
 		t.Fatal("migration changed deletion state or allocation cursor")
 	}
-	configured := adminConfiguredGacha(o.gachaBases[60300012], live).Profile
-	expected := adminConfiguredGacha(want[60300012], live).Profile
+	configured := o.projectGacha(o.gachaBases[60300012], live).Profile
+	expected := o.projectGacha(want[60300012], live).Profile
 	for _, plays := range []int{0, 1, 2, 8} {
 		configured.PlayCount, expected.PlayCount = plays, plays
 		if !reflect.DeepEqual(configured.CurrentStep(), expected.CurrentStep()) || !reflect.DeepEqual(configured.CurrentGifts(), expected.CurrentGifts()) {

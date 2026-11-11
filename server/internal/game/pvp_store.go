@@ -9,6 +9,8 @@ import (
 	"kairisei.local/server/internal/gamestate"
 )
 
+var ErrPVPChallengesExhausted = errors.New("排位战挑战次数已用完，可选择自由战。")
+
 // Original str_table 240/20/1 specifies a daily midnight refill. The local
 // CN service uses UTC+8, independently of the server machine's timezone.
 func pvpChallengeDay(now time.Time) int64 { return (now.Unix() + 8*3600) / 86400 }
@@ -111,7 +113,7 @@ func (s *Account) BeginPVP(battleType int, opponentUserID int, decks []gamestate
 	}
 	if battleType == 1 {
 		if s.pvp.Challenge <= 0 {
-			return gamestate.PVPMatch{}, 0, errors.New("排位战挑战次数已用完，可选择自由战。")
+			return gamestate.PVPMatch{}, 0, ErrPVPChallengesExhausted
 		}
 		s.pvp.Challenge--
 	}

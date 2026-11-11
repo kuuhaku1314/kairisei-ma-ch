@@ -980,6 +980,9 @@ func New(state gamestate.State, options ...AccountOption) (*Account, error) {
 			if _, exists := result.cardTemplates[cardID]; !exists {
 				return nil, fmt.Errorf("gacha %d references unknown card %d", gacha.GachaID, cardID)
 			}
+			if love, set := gacha.CardLoves[cardID]; set && (love < 0 || love > result.cardDefinitions[cardID].LoveMax) {
+				return nil, fmt.Errorf("gacha %d card %d has invalid initial loyalty", gacha.GachaID, cardID)
+			}
 		}
 	}
 	for itemID, profile := range result.itemGachaProfiles {

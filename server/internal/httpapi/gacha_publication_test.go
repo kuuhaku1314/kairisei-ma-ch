@@ -45,8 +45,14 @@ func TestGachaOddsMessageUsesPublishedTextWithoutChangingOdds(t *testing.T) {
 	for _, selectMax := range []int{0, 1} {
 		for _, message := range []string{"", "整池概率说明\n<文字> & 自选池"} {
 			a := &API{account: testAccount(t, func(state *gamestate.State) {
+				for i := range state.CardTemplates {
+					if state.CardTemplates[i].CardID == 11000045 {
+						state.CardTemplates[i].LoveMax = 10000
+					}
+				}
 				state.Gachas = []gamestate.GachaProfile{{GachaID: 202, GroupID: 2, PayType: 3, Price: 1, CardNum: 1, CardNumMax: 1,
-					CardIDs: []int{11000045, 11000047}, CardWeights: []int{1, 3}, UserSelectMax: selectMax, OddsMessage: message}}
+					CardIDs: []int{11000045, 11000047}, CardWeights: []int{1, 3}, UserSelectMax: selectMax, OddsMessage: message,
+					CardLoves: map[int]int{11000045: 3501}, CardFames: map[int]int{11000045: 25}}}
 				state.GachaSelections = nil
 			})}
 			request := WithGachaPublication(httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(`{"gachaid":202,"popupid":0}`)), func(id int) bool { return id == 202 })
@@ -56,7 +62,8 @@ func TestGachaOddsMessageUsesPublishedTextWithoutChangingOdds(t *testing.T) {
 				Message string `json:"odds_msg"`
 				Lineups []struct {
 					Prizes []struct {
-						Odds int `json:"odds"`
+						Odds  int              `json:"odds"`
+						Prize gamestate.Reward `json:"prize"`
 					} `json:"prize_list"`
 				} `json:"lineup_infos"`
 			}
@@ -66,6 +73,10 @@ func TestGachaOddsMessageUsesPublishedTextWithoutChangingOdds(t *testing.T) {
 			}
 			if body.Message != message || len(body.Lineups) != 1 || len(body.Lineups[0].Prizes) != 2 || body.Lineups[0].Prizes[0].Odds != 2500000 || body.Lineups[0].Prizes[1].Odds != 7500000 {
 				t.Fatalf("message or weighted odds changed: select=%d body=%s", selectMax, response.Body.String())
+			}
+			prizes := body.Lineups[0].Prizes
+			if prizes[0].Prize.CardLove != 35 || prizes[0].Prize.CardFame != 25 || prizes[1].Prize.CardLove != 0 || prizes[1].Prize.CardFame != 1 {
+				t.Fatalf("incorrect odds prize loyalty or fame: %+v", prizes)
 			}
 		}
 	}

@@ -9,9 +9,13 @@ func (engine *BattleEngine) playerCardCostResult(player *battlePlayer, cardType,
 	return BattleResult{Command: CommandCardCost, Args: args}
 }
 
-// 4a48c: seal, trap and registered Buddy card modifier are independent bits.
 func playerCardStateResult(player *battlePlayer, cardType int) BattleResult {
-	state, remaining := 0, 0
+	state, remaining := playerCardState(player, cardType)
+	return BattleResult{Command: CommandCardState, Args: []int64{int64(player.MemberType), int64(cardType), int64(state), int64(remaining)}}
+}
+
+// 4a48c: seal, trap and registered Buddy card modifier are independent bits.
+func playerCardState(player *battlePlayer, cardType int) (state, remaining int) {
 	if effect, sealed := playerCardSealEffect(player, cardType); sealed {
 		state |= 1
 		remaining = effect.Remaining
@@ -25,7 +29,7 @@ func playerCardStateResult(player *battlePlayer, cardType int) BattleResult {
 	if cardType > 0 && cardType < len(player.CardBurstSkills) && len(player.CardBurstSkills[cardType]) > 0 {
 		state |= 4
 	}
-	return BattleResult{Command: CommandCardState, Args: []int64{int64(player.MemberType), int64(cardType), int64(state), int64(remaining)}}
+	return state, remaining
 }
 
 // cardDisplayState resolves the same base/extend family used for execution,

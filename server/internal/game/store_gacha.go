@@ -319,6 +319,28 @@ func GachaCardReward(cardID int) gamestate.Reward {
 	}
 }
 
+// GachaPoolCardReward uses the draw method's progression, in inventory points.
+func GachaPoolCardReward(profile *gamestate.GachaProfile, cardID int) gamestate.Reward {
+	reward := GachaCardReward(cardID)
+	reward.CardFame = int16(profile.CardFame(cardID))
+	reward.CardLove = profile.CardLoves[cardID]
+	return reward
+}
+
+// GachaPrizeForClient projects a RewardInfo copy. Its card_love is an integer
+// percentage. The card instance and the stored reward retain their points.
+func (s *Account) GachaPrizeForClient(reward gamestate.Reward) gamestate.Reward {
+	if reward.Type == 6 && reward.CardLove > 0 {
+		maximum := s.cardDefinitions[reward.RewardTypeID].LoveMax // Shared immutable card catalog.
+		if maximum > 0 {
+			reward.CardLove = int(int64(min(reward.CardLove, maximum)) * 100 / int64(maximum))
+		} else {
+			reward.CardLove = 0
+		}
+	}
+	return reward
+}
+
 func validateGachaSelection(gacha gamestate.GachaProfile, rewards []gamestate.Reward) error {
 	if gacha.UserSelectMax < 0 || gacha.UserSelectMax > len(gacha.CardIDs) {
 		return errors.New("gacha user-select configuration is invalid")
@@ -575,8 +597,7 @@ func (s *Account) PlayGacha(
 		if err != nil {
 			return gachaPlayResult{}, err
 		}
-		rewards[draw] = GachaCardReward(cardID)
-		rewards[draw].CardFame = int16(gacha.CardFame(cardID))
+		rewards[draw] = GachaPoolCardReward(gacha, cardID)
 		if err := s.validateRewardLocked(rewards[draw]); err != nil {
 			return gachaPlayResult{}, err
 		}

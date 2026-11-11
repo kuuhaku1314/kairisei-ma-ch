@@ -683,7 +683,7 @@ function poolCreateCopyHTML() {
   return html`
     <div class="create-about">
       <h3>复制现有卡池</h3>
-      <p>复制来源已生效的卡牌、权重、价格和抽法，新池保存自己的规则；之后修改或删除来源不会影响新池。不复制每日免费和赠礼。</p>
+      <p>复制来源已生效的卡牌、权重、价格、抽法、每日首抽免费和赠礼配置，新池保存自己的完整规则；之后修改或删除来源不会影响新池。新池从未发布的草稿开始，玩家抽取次数和免费领取记录重新计算。</p>
     </div>
     <div class="ws-form">
       <label class="field span-2">

@@ -13,6 +13,7 @@ const teamBattleMaxPartners = 3
 // TeamBattleEntry contains caller-owned admission facts. Begin resolves the
 // accepted cost and content plan into a separate immutable battle context.
 type TeamBattleEntry struct {
+	Opening                   *gamestate.TeamBattleOpening
 	ScoreBossID               int
 	BossID                    int
 	StageType                 gamestate.BattleStageType
@@ -149,7 +150,7 @@ func (s *Account) beginTeamBattleLocked(entry TeamBattleEntry, entryCatalog *bat
 		selectedPartnerCopies[index] = partner
 	}
 	context := TeamBattleContext{
-		Seed:   NewBattleSeed(),
+		Seed: NewBattleSeed(), Opening: gamestate.CloneTeamBattleOpening(entry.Opening),
 		BossID: entry.BossID, BattleEnemyTypes: append([]int8(nil), entry.EnemyTypes...),
 		StageType: entry.StageType, EntryRole: entry.EntryRole,
 		FameSeed: entry.FameSeed, FameSources: append([]TeamBattleFameSource(nil), entry.FameSources...),

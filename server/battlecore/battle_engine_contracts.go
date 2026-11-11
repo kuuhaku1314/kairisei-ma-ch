@@ -2894,16 +2894,13 @@ func ValidateCoreContracts(catalog *CombatCatalog, codec ContractResultCodec) er
 	if magic.Damage != 2000 || magic.Reflected != 100 || reflectionEffects[0].Remaining != 3 {
 		return fmt.Errorf("reflection resolution is damage=%d reflected=%d duration=%d", magic.Damage, magic.Reflected, reflectionEffects[0].Remaining)
 	}
-	if damage := nativeDOTDamage(30000000, 0); damage != 20000000 {
-		return fmt.Errorf("native DOT cap is %d, want 20000000", damage)
-	}
-	if damage := nativeDOTDamage(1000, 25); damage != 750 {
+	if damage := registeredDOTValue(1000, 100, 25); damage != 750 {
 		return fmt.Errorf("native DOT reduction is %d, want 750", damage)
 	}
-	if damage := nativeDOTDamage(1000, -50); damage != 1500 {
+	if damage := registeredDOTValue(1000, 100, -50); damage != 1500 {
 		return fmt.Errorf("native DOT vulnerability is %d, want 1500", damage)
 	}
-	if damage := nativeDOTDamage(1, 100); damage != 1 {
+	if damage := registeredDOTValue(1, 100, 100); damage != 1 {
 		return fmt.Errorf("native DOT minimum is %d, want 1", damage)
 	}
 	// a077a's preview contains unchained fixed+source. Actual 8bb40

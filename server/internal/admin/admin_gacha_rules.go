@@ -113,6 +113,7 @@ func copiedGachaRule(p gamestate.GachaProfile) (gachaPoolRule, error) {
 	r := gachaPoolRule{Type: "standard", DrawCount: p.CardNum}
 	if p.PayType == 2 {
 		r.Type, r.MaxDrawCount = "friend", p.CardNumMax
+		r.DailyFirstFree = p.DailyFirstFree
 	} else if p.GuaranteedCount > 0 {
 		r.Type, r.GuaranteedCount = "guaranteed", p.GuaranteedCount
 		r.GuaranteedRarity, r.RemainderRarity = p.GuaranteedRarityRank, p.RemainderRarityRank
@@ -140,6 +141,7 @@ func (o *Operations) filterGachaProfession(p gamestate.GachaProfile) gamestate.G
 	}
 	ids, weights := []int{}, []int{}
 	fames := map[int]int{}
+	var loves map[int]int
 	for i, id := range p.CardIDs {
 		job, known := o.gachaCardJobs[id]
 		if known && (job == 0 || job == p.ArthurType) {
@@ -147,9 +149,15 @@ func (o *Operations) filterGachaProfession(p gamestate.GachaProfile) gamestate.G
 			if fame := p.CardFames[id]; fame > 1 {
 				fames[id] = fame
 			}
+			if love, set := p.CardLoves[id]; set {
+				if loves == nil {
+					loves = make(map[int]int)
+				}
+				loves[id] = love
+			}
 		}
 	}
-	p.CardIDs, p.CardWeights, p.CardFames = ids, weights, fames
+	p.CardIDs, p.CardWeights, p.CardFames, p.CardLoves = ids, weights, fames, loves
 	return p
 }
 

@@ -302,6 +302,33 @@ func TestOperatorGachaPoolLifecycle(t *testing.T) {
 			t.Fatalf("variant %d published with the wrong cover, open state, or category", config.Profile.GachaID)
 		}
 	}
+	// 扭蛋发布 lists each draw method of a published pool as players get it; a never-published pool says so.
+	listing := httptest.NewRecorder()
+	admin.gachaPresetList(listing, httptest.NewRequest(http.MethodGet, "/api/gacha-presets", nil))
+	var listed struct {
+		Presets []AdminGachaPreset `json:"presets"`
+	}
+	if err := json.Unmarshal(listing.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	for _, preset := range listed.Presets {
+		if preset.GroupID == 60300001 && !preset.Unpublished {
+			t.Fatal("never-published pool listed as live")
+		}
+		if preset.GroupID != 60300002 {
+			continue
+		}
+		if preset.Unpublished || len(preset.Methods) != 3 || preset.ImageURL != "/"+coverPath {
+			t.Fatalf("published pool listing: %+v", preset)
+		}
+		for _, method := range preset.Methods {
+			for _, config := range operations.gachaConfigurations {
+				if config.Profile.GachaID == method.GachaID && (method.DrawCount != config.Profile.CardNum || method.Price != config.Profile.Price || method.Payment == "" || method.Closed != config.Disabled) {
+					t.Fatalf("method %d listed as %+v", method.GachaID, method)
+				}
+			}
+		}
+	}
 	// Accounts append operator pools (game tests); a saved account keeps their play counts and passes save
 	// validation although the catalog lacks them.
 	userID := testfixture.CreateNamedFriendCapacityAccount(t, accounts, 1)
@@ -763,7 +790,7 @@ func TestRuleTypesCreatePublishReloadAndKeepDailyClaim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	profile := adminConfiguredGacha(restarted.gachaBases[id], content).Profile
+	profile := restarted.projectGacha(restarted.gachaBases[id], content).Profile
 	configs := []game.GachaConfiguration{{Operator: true, Profile: profile}}
 	account.ApplyGachaConfiguration(1, configs)
 	if _, err := account.PlayGacha(id, 2, nil); err != nil {
@@ -786,7 +813,7 @@ func TestRuleTypesCreatePublishReloadAndKeepDailyClaim(t *testing.T) {
 	}
 	pay := AdminGachaConfigFromProfile(profile)
 	pay.PayType = 3
-	paid := adminConfiguredGacha(profile, pay)
+	paid := restarted.projectGacha(profile, pay)
 	paid.Operator = true
 	account.ApplyGachaConfiguration(3, []game.GachaConfiguration{paid})
 	if err := accounts.PersistState(uid, account.Snapshot(state)); err != nil {

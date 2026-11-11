@@ -8,11 +8,9 @@ import (
 	"kairisei.local/server/internal/gamestate"
 )
 
-// Archive card portraits are a view of the effective drop table, not a second
-// reward catalog. Older generated masters guessed cards/evo_cards from boss
-// names and artwork, independently of the actual reward assignment. Rebuild
-// that view whenever the complete runtime catalog is assembled, including for
-// existing accounts. Never change rewards to match an inferred portrait.
+// Archive portraits show effective drops. The GuaiLi list shows base cards
+// whose GOD recipes consume those drops, not the drops' own evolved forms.
+// Rebuild both views at catalog assembly and when operator drops change.
 func ProjectPastBossDropCatalog(groups []json.RawMessage, profiles []gamestate.TeamBattleRewardProfile,
 	transitions []gamestate.EvolutionTransition,
 ) ([]json.RawMessage, error) {
@@ -41,12 +39,13 @@ func ProjectPastBossDropCatalog(groups []json.RawMessage, profiles []gamestate.T
 		slices.Sort(cards)
 		dropsByBoss[profile.BossID] = slices.Compact(cards)
 	}
-	// Only ordinary evolution belongs here; same-name variants and reversible
-	// GuaiLi transformations must not select a different collectible card.
-	next := make(map[int][]int)
+	guailiByMaterial := make(map[int][]int)
 	for _, transition := range transitions {
-		if transition.Type == 0 && transition.FromCardID != transition.ToCardID {
-			next[transition.FromCardID] = append(next[transition.FromCardID], transition.ToCardID)
+		if transition.Type != 1 { // GOD / GuaiLi evolution
+			continue
+		}
+		for _, material := range transition.Materials {
+			guailiByMaterial[material.CardID] = append(guailiByMaterial[material.CardID], transition.FromCardID)
 		}
 	}
 	projected := make([]json.RawMessage, 0, len(groups))
@@ -81,32 +80,18 @@ func ProjectPastBossDropCatalog(groups []json.RawMessage, profiles []gamestate.T
 		if len(cards) == 0 {
 			return nil, fmt.Errorf("past-boss group %s has no difficulties", group["0"])
 		}
-		evolved := make([]int, 0, len(cards))
+		guailiCards := make([]int, 0)
 		for _, id := range cards {
-			seen := map[int]bool{id: true}
-			queue := []int{id}
-			leaves := []int{}
-			for i := 0; i < len(queue); i++ {
-				current := queue[i]
-				if len(next[current]) == 0 {
-					leaves = append(leaves, current)
-				}
-				for _, target := range next[current] {
-					if !seen[target] {
-						seen[target] = true
-						queue = append(queue, target)
-					}
-				}
-			}
-			if len(leaves) == 0 {
-				return nil, fmt.Errorf("ordinary evolution cycle for past-boss reward %d", id)
-			}
-			evolved = append(evolved, leaves...)
+			guailiCards = append(guailiCards, guailiByMaterial[id]...)
 		}
-		slices.Sort(evolved)
-		evolved = slices.Compact(evolved)
+		slices.Sort(guailiCards)
+		guailiCards = slices.Compact(guailiCards)
+		if len(guailiCards) == 0 {
+			// TeamBtMgr reads evo_cards[0]; zero means no GuaiLi-material entry.
+			guailiCards = []int{0}
+		}
 		group["7"], _ = json.Marshal(cards)
-		group["8"], _ = json.Marshal(evolved)
+		group["8"], _ = json.Marshal(guailiCards)
 		group["13"], _ = json.Marshal(bosses)
 		encoded, err := json.Marshal(group)
 		if err != nil {

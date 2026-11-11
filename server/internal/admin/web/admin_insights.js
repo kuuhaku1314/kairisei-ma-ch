@@ -69,7 +69,7 @@ function installCardFilters(prefix, anchor, change) {
   const row = document.createElement('div');
   row.className = 'toolbar';
   row.id = prefix + '-advanced';
-  row.innerHTML = `<select id="${prefix}-attribute" aria-label="属性">${attributeOptions}</select><select id="${prefix}-cost" aria-label="费用" autocomplete="off"><option value="" selected>全部 COST</option>${Array.from({ length: 11 }, (_, i) => `<option value="${i}">${i} COST</option>`).join('')}</select><select id="${prefix}-resource" aria-label="资源状态"><option value="">全部资源状态</option><option value="available">资源可用</option><option value="unavailable">资源缺失</option></select>`;
+  row.innerHTML = `<select id="${prefix}-attribute" aria-label="属性">${attributeOptions}</select><select id="${prefix}-cost" aria-label="费用" autocomplete="off"><option value="" selected>全部 COST</option>${Array.from({ length: 11 }, (_, i) => `<option value="${i}">${i} COST</option>`).join('')}</select>`;
   $(anchor).after(row);
   row.querySelectorAll('select').forEach((el) => {
     el.value = '';
@@ -78,13 +78,12 @@ function installCardFilters(prefix, anchor, change) {
 }
 function cardFilterQuery(prefix, isCard) {
   const result = cardRarityQuery(isCard ? $(`#${prefix}-rarity`).value : '0');
-  for (const key of ['attribute', 'cost', 'resource'])
-    result[key] = isCard ? $(`#${prefix}-${key}`).value : '';
+  for (const key of ['attribute', 'cost']) result[key] = isCard ? $(`#${prefix}-${key}`).value : '';
   $(`#${prefix}-advanced`).hidden = !isCard;
   return result;
 }
 function resetCardFilters(prefix) {
-  for (const key of ['attribute', 'cost', 'resource']) $(`#${prefix}-${key}`).value = '';
+  for (const key of ['attribute', 'cost']) $(`#${prefix}-${key}`).value = '';
 }
 function matchesCardFilters(card, prefix) {
   return matchesCardQuery(card, cardFilterQuery(prefix, true));
@@ -93,11 +92,7 @@ function matchesCardQuery(card, f) {
   return (
     (!f.rarity || (card.rarity === f.rarity && cardLimitCount(card) === Number(f.limit_count))) &&
     (!f.attribute || (card.combat?.attribute || '').split('_').includes(f.attribute)) &&
-    (f.cost === '' || card.combat?.cost === Number(f.cost)) &&
-    (!f.resource ||
-      (f.resource === 'available'
-        ? card.resource_state !== 'unavailable'
-        : card.resource_state === 'unavailable'))
+    (f.cost === '' || card.combat?.cost === Number(f.cost))
   );
 }
 installCardFilters('catalog', '#catalog-rarity', () => {
@@ -679,7 +674,7 @@ function filteredGachas() {
   return (state.gachaPresets || []).filter(
     (g) =>
       matchesWords(
-        `${g.name} ${g.group_id} ${g.gacha_ids.join(' ')} ${g.payment_item || ''} ${g.payment_item_id} ${g.category || ''}`,
+        `${g.name} ${g.group_id} ${g.gacha_ids.join(' ')} ${g.methods.map((m) => m.payment).join(' ')} ${g.category || ''}`,
         $('#gacha-search').value,
       ) &&
       (!category || g.category === category) &&

@@ -9,8 +9,8 @@ const CardCapacityLimit = 10000
 
 // LOCAL_POLICY: inventory capacity advertised to the original client.
 const CardContainerCapacityDefault = 3000
-const SphereCapacityDefault = 500
-const BuddyCapacityDefault = 500
+const SphereCapacityDefault = 1000
+const BuddyCapacityDefault = 1000
 
 // Retain CN tutorial bits 0-25; the added main-quest route guide owns bit 26.
 const TutorialFlagCount = 27
@@ -942,6 +942,7 @@ type GachaProfile struct {
 	// CardFames optionally sets the fame of a drawn card (card ID → fame, LOCAL_POLICY); missing means fame 1.
 	// It is server-side only: client gacha DTOs are built field by field.
 	CardFames map[int]int `json:"card_fames,omitempty"`
+	CardLoves map[int]int `json:"card_loves,omitempty"` // Initial loyalty points by card ID; missing means zero.
 
 	RandomGifts []GachaRandomGiftRule `json:"random_gifts,omitempty"`
 }
@@ -1324,6 +1325,7 @@ type TeamBattleStartReceipt struct {
 // TeamBattleActiveState is an in-memory unsettled session. Account reloads in
 // this process may restore it; it is not included in SQLite account metadata.
 type TeamBattleActiveState struct {
+	Opening                   *TeamBattleOpening             `json:"opening,omitempty"`
 	ScoreBossID               int                            `json:"score_boss_id,omitempty"`
 	StageType                 BattleStageType                `json:"stage_type"`
 	EntryRole                 BattleEntryRole                `json:"entry_role"`

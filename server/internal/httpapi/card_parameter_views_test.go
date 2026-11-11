@@ -51,6 +51,13 @@ func TestCardParameterViewsPreserveOwnedAndStoredPartnerState(t *testing.T) {
 	if string(rawBefore) != string(rawAfter) {
 		t.Fatal("rendering a partner view mutated the stored deck")
 	}
+	deck["arthur_type"], deck["is_burst"] = 5, 1
+	stale, _ := json.Marshal(deck)
+	raw, err := json.Marshal(a.clearDeckParameterView(gamestate.BattleClearDeck{ArthurType: 5, Deck: stale}))
+	var shown map[string]json.RawMessage
+	if err != nil || json.Unmarshal(raw, &shown) != nil || string(shown["arthur_type"]) != "5" || string(shown["is_burst"]) != "0" {
+		t.Fatalf("historical alchemist deck selected a Burst badge: %s %v", raw, err)
+	}
 	if _, err := json.Marshal(a.partnerDeckParameterView(json.RawMessage(append(rawBefore, []byte("{}")...)))); err == nil {
 		t.Fatal("projection accepted trailing data that raw JSON serialization rejects")
 	}

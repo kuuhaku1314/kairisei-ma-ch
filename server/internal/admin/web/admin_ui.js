@@ -79,7 +79,7 @@ const viewMeta = {
   mail: ['玩家', '选择收件人与奖励，预览后按批次发放；中断后可从批次继续'],
   bosses: [
     '战斗与活动',
-    '活动／素材、往期 BOSS 与炼金塔各自的开放名单和开放时间，各难度入口规则，以及体力与经验',
+    '活动／素材、往期 BOSS 与炼金塔各自的开放名单和开放时间，各难度入口规则，以及体力经验与开场设置',
   ],
   drops: ['战斗与活动', '按难度配置怪物／部位掉落与名声奖励，新开战生效'],
   'activity-rewards': ['战斗与活动', '圣剑杯九档固定奖励、回合与倍率，探索逐项概率奖励'],
@@ -965,17 +965,20 @@ function renderPager(key, page, total, size, onPage) {
 }
 // 活动／素材, 往期 BOSS and 炼金塔 are three publication catalogs, each its own document with its own mode, list
 // and open window. The tower catalog lists whole towers (policy.towers); its group_ids are tower IDs.
-// The fourth tab, 体力与经验 ('economy', admin_boss_economy.js), is no catalog: it shares only the save bar.
+// The settings tabs after them (体力与经验, 开场设置) are no catalogs: each module registers itself here as
+// { name, load, render, save, dirty, ready } and shares only the save bar.
+const bossSettingTabs = {};
 const bossCatalogName = (catalog) =>
-  ({ activity: '活动／素材副本', past: '往期 BOSS', tower: '炼金塔', economy: '体力与经验' })[catalog];
+  ({ activity: '活动／素材副本', past: '往期 BOSS', tower: '炼金塔' })[catalog] ||
+  bossSettingTabs[catalog]?.name;
 function bossSaveReady() {
-  return state.bossCatalog === 'economy'
-    ? typeof bossEconomyReady === 'function' && bossEconomyReady()
-    : !!state.policy;
+  const tab = bossSettingTabs[state.bossCatalog];
+  return tab ? tab.ready() : !!state.policy;
 }
 async function loadBossPublication(catalog) {
-  if (catalog === 'economy') {
-    await loadBossEconomy();
+  const tab = bossSettingTabs[catalog];
+  if (tab) {
+    await tab.load();
     state.bossCatalog = catalog;
     renderBosses();
     return;
@@ -1072,13 +1075,13 @@ function renderBosses() {
   $$('#boss-catalogs button').forEach((b) =>
     b.classList.toggle('active', b.dataset.catalog === state.bossCatalog),
   );
-  const economy = state.bossCatalog === 'economy';
-  $('#boss-economy-panel').hidden = !economy;
-  $('#boss-publish-panel').hidden = economy;
-  $('#save-policy').textContent = economy ? '保存设置' : '发布策略';
-  if (economy) {
+  const tab = bossSettingTabs[state.bossCatalog];
+  $$('#bosses [data-setting-tab]').forEach((p) => (p.hidden = p.dataset.settingTab !== state.bossCatalog));
+  $('#boss-publish-panel').hidden = !!tab;
+  $('#save-policy').textContent = tab ? '保存设置' : '发布策略';
+  if (tab) {
     $('#boss-tower-panel').hidden = $('#boss-groups-panel').hidden = true;
-    renderBossEconomy();
+    tab.render();
     updateBossDraftState();
     return;
   }
@@ -1178,6 +1181,38 @@ function renderGachaCategoryFilter() {
     [...counts].map(([name, n]) => `<option value="${esc(name)}">${esc(name)}（${n}）</option>`).join('');
   el.value = counts.has(value) ? value : '';
 }
+// One line per draw count, as the game shows one button per count: payments sharing it are alternatives,
+// profession variants collapse into a count, and a closed method stays listed but struck through.
+function gachaMethods(g) {
+  if (g.unpublished)
+    return '<span class="sub warn-text">尚未发布：到「卡池配置」发布后，开放才对玩家生效</span>';
+  const lines = new Map();
+  for (const m of [...g.methods].sort((a, b) => a.draw_count - b.draw_count)) {
+    const friend = m.max_draw_count > m.draw_count,
+      draws = friend ? `${m.draw_count}–${m.max_draw_count} 抽` : `${m.draw_count} 抽`,
+      cost = `${m.payment} ×${num(m.price)}${friend ? '／抽' : ''}${m.stages ? ` · ${m.stages} 阶段` : ''}${m.daily_first_free ? ' · 每日首抽免费' : ''}`;
+    if (!lines.has(draws)) lines.set(draws, new Map());
+    const costs = lines.get(draws);
+    if (!costs.has(cost)) costs.set(cost, []);
+    costs.get(cost).push(m);
+  }
+  const option = ([cost, list]) => {
+    const open = list.filter((m) => !m.closed),
+      professions = new Set((open.length ? open : list).map((m) => m.profession)).size,
+      title = list.map(
+        (m) =>
+          `Gacha ${m.gacha_id}${m.profession ? ` · ${poolProfessionName(m.profession)}` : ''}${m.closed ? ' · 已关闭' : ''}`,
+      );
+    if (list[0].stages) title.push('价格为第 1 阶段；每次成功抽取进入下一阶段，最后阶段重复');
+    return `<span class="${open.length ? '' : 'off'}" title="${esc(title.join('\n'))}">${esc(cost)}${professions > 1 ? ` · ${professions} 个职业` : ''}</span>`;
+  };
+  return `<div class="gacha-methods">${[...lines]
+    .map(([draws, costs]) => {
+      const off = [...costs.values()].flat().every((m) => m.closed);
+      return `<b class="${off ? 'off' : ''}">${draws}</b><span>${[...costs].map(option).join('<i>／</i>')}</span>`;
+    })
+    .join('')}</div>`;
+}
 function renderGachas() {
   renderGachaCategoryFilter();
   const rows = filteredGachas(),
@@ -1199,7 +1234,7 @@ function renderGachas() {
           on = state.gachaSelected.has(g.group_id);
         return `<div class="gacha-card is-${s.key}">
       <div class="gacha-art">${image(g.image_url, g.name)}<span class="gacha-badge ${s.key}"><i aria-hidden="true"></i>${s.text}</span></div>
-      <div class="gacha-copy"><span class="name" title="${esc(g.name)}">${esc(g.name)}${g.publication_key === 'operator' ? ' <span class="tag info">后台新建</span>' : ''}</span>${g.category ? `<span class="gacha-entry" title="游戏扭蛋列表中的入口">${esc(g.category)}</span>` : ''}<span class="sub">${esc(g.payment_item || `物品 ${g.payment_item_id}`)} × ${num(g.price)} · 每次 ${g.draw_count} 抽 · 卡池 ${g.card_count} 张</span><span class="sub"><code>Group ${g.group_id}</code> Gacha ${esc(g.gacha_ids.join(', '))}</span></div>
+      <div class="gacha-copy"><span class="name" title="${esc(g.name)}">${esc(g.name)}${g.publication_key === 'operator' ? ' <span class="tag info">后台新建</span>' : ''}</span>${g.category ? `<span class="gacha-entry" title="游戏扭蛋列表中的入口">${esc(g.category)}</span>` : ''}${gachaMethods(g)}<span class="sub">卡池 ${num(g.card_count)} 张 · <code>Group ${g.group_id}</code></span></div>
       <label class="gacha-toggle"><span class="gacha-toggle-text"><b>对玩家开放</b><small>${s.note}</small></span><span class="switch"><input class="gacha-check" type="checkbox" role="switch" data-id="${g.group_id}" aria-label="对玩家开放 ${esc(g.name)}" ${on ? 'checked' : ''}></span></label>
     </div>`;
       })
@@ -1215,9 +1250,9 @@ $('#gacha-rows').addEventListener('change', (event) => {
 });
 // 炼金塔: the tower catalog opens whole towers by tower ID (its group_ids), never as Boss groups.
 function updateBossDraftState() {
-  const economy = state.bossCatalog === 'economy',
+  const setting = !!bossSettingTabs[state.bossCatalog],
     dirty = bossSaveReady() && adminPolicyDirty('bosses');
-  const [pending, clean] = economy
+  const [pending, clean] = setting
     ? ['有未保存的修改', '与已保存设置一致']
     : ['有未发布的修改', '与已发布设置一致'];
   setSaveState('#boss-draft-state', dirty ? pending : clean, dirty ? 'dirty' : 'ok');
@@ -1488,7 +1523,7 @@ function updatePolicyControls() {
   if (typeof updateDraftIndicators === 'function') updateDraftIndicators();
 }
 $('#save-policy').onclick = async () => {
-  if (state.bossCatalog === 'economy') return saveBossEconomy();
+  if (bossSettingTabs[state.bossCatalog]) return bossSettingTabs[state.bossCatalog].save();
   if (policyBusy('bosses') || !state.policy) return;
   const start = unixInput('#boss-start'),
     end = unixInput('#boss-end');

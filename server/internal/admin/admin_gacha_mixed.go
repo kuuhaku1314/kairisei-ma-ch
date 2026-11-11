@@ -9,7 +9,8 @@ import (
 	"kairisei.local/server/internal/gamestate"
 )
 
-func validateMixedGachaConfig(catalog map[string]AdminCatalogEntry, base gamestate.GachaProfile, config AdminGachaConfig, editable bool) (map[string]any, error) {
+func (admin *API) validateMixedGachaConfig(base gamestate.GachaProfile, config AdminGachaConfig, editable bool) (map[string]any, error) {
+	catalog := admin.catalogByKey
 	if err := validateAdminGachaPayment(catalog, config); err != nil {
 		return nil, err
 	}
@@ -19,7 +20,7 @@ func validateMixedGachaConfig(catalog map[string]AdminCatalogEntry, base gamesta
 	if len(config.RewardPool) == 0 {
 		return nil, errors.New("混合池至少需要一项奖励")
 	}
-	configured := adminConfiguredGacha(base, config).Profile
+	configured := admin.operations.projectGacha(base, config).Profile
 	if err := gamestate.ValidateGachaRules(configured); err != nil {
 		return nil, err
 	}
@@ -87,16 +88,14 @@ func validateMixedGachaConfig(catalog map[string]AdminCatalogEntry, base gamesta
 		}
 	} else {
 		for i := range config.Steps {
-			configured.PlayCount = i
-			rows, err := game.PreviewGachaStages(configured, nil)
+			stage := configured
+			stage.PlayCount = i
+			rows, err := game.PreviewGachaStages(stage, nil)
 			if err != nil {
 				return nil, err
 			}
-			current := configured.CurrentStep()
-			payment := map[int]string{3: "水晶", 6: "付费水晶"}[current.PayType]
-			if current.PayType == 4 {
-				payment = catalog[adminCatalogKey(8, current.PayTypeID)].Name
-			}
+			current := stage.CurrentStep()
+			payment := gachaPaymentName(catalog, current.PayType, current.PayTypeID)
 			rows[0].Name = fmt.Sprintf("第%d阶段 · %s × %d", i+1, payment, config.Steps[i].Price)
 			stages = append(stages, rows...)
 		}
@@ -108,5 +107,5 @@ func validateMixedGachaConfig(catalog map[string]AdminCatalogEntry, base gamesta
 	if len(config.Steps) > 0 {
 		warning += "成功抽取后推进阶段，最后阶段重复；重新发布不重置玩家进度。"
 	}
-	return map[string]any{"config": config, "base": adminConfiguredGacha(base, config).Profile, "odds_scaled": []int{}, "odds_scale": 100000, "rarities": map[int]int{}, "blocked_card_ids": blocked, "publishable": len(blocked) == 0, "warnings": []string{warning}, "stages": stages, "reward_names": names}, nil
+	return map[string]any{"config": config, "base": configured, "odds_scaled": []int{}, "odds_scale": 100000, "rarities": map[int]int{}, "blocked_card_ids": blocked, "publishable": len(blocked) == 0, "warnings": []string{warning}, "stages": stages, "reward_names": names}, nil
 }

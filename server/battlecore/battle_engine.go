@@ -538,8 +538,8 @@ func (engine *BattleEngine) Submit(memberType int, submission cardPlaySubmission
 		if player.SummonSource == 0 {
 			remainingCost -= cost
 		}
-		state := playerCardStateResult(player, cardType).Args[2]
-		args := []int64{int64(memberType), int64(cardType), int64(submission.Targets[index]), int64(engine.playerCardDarkness(memberType, cardType)), state}
+		state, _ := playerCardState(player, cardType)
+		args := []int64{int64(memberType), int64(cardType), int64(submission.Targets[index]), int64(engine.playerCardDarkness(memberType, cardType)), int64(state)}
 		args = append(args, boolInt64(submission.SummonsCardMask&(1<<index) != 0))
 		results = append(results, BattleResult{Command: CommandCardPlay, Args: args})
 	}

@@ -2,6 +2,7 @@ package gamestate
 
 import (
 	"errors"
+	"maps"
 	"math"
 )
 
@@ -24,13 +25,8 @@ func CloneGachas(source []GachaProfile) []GachaProfile {
 		for j := range p.Steps {
 			p.Steps[j].RewardPool = cloneRewardPool(p.Steps[j].RewardPool)
 		}
-		if p.CardFames != nil {
-			fames := make(map[int]int, len(p.CardFames))
-			for id, fame := range p.CardFames {
-				fames[id] = fame
-			}
-			p.CardFames = fames
-		}
+		p.CardFames = maps.Clone(p.CardFames)
+		p.CardLoves = maps.Clone(p.CardLoves)
 		p.Gifts = append([]GachaGiftRule(nil), p.Gifts...)
 		for j := range p.Gifts {
 			p.Gifts[j].Rewards = cloneRewards(p.Gifts[j].Rewards)
@@ -164,7 +160,7 @@ func ValidateGachaRules(p GachaProfile) error {
 	}
 	mixed := len(p.RewardPool) > 0
 	if mixed {
-		if len(p.CardIDs) > 0 || p.UserSelectMax != 0 || p.GuaranteedCount != 0 || p.UnownedOnly || p.DailyFirstFree || p.CardNum != p.CardNumMax {
+		if len(p.CardIDs) > 0 || len(p.CardLoves) > 0 || p.UserSelectMax != 0 || p.GuaranteedCount != 0 || p.UnownedOnly || p.DailyFirstFree || p.CardNum != p.CardNumMax {
 			return errors.New("mixed gacha has incompatible card-only rules")
 		}
 		if err := ValidateRewardPool(p.RewardPool); err != nil {

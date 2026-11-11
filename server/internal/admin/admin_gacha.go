@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"reflect"
 	"sort"
@@ -34,6 +35,7 @@ type AdminGachaConfig struct {
 	RewardPool   []gamestate.WeightedReward `json:"reward_pool,omitempty"`
 	Steps        []gamestate.GachaStep      `json:"steps,omitempty"`
 	CardFames    map[int]int                `json:"card_fames,omitempty"` // card ID → fame when drawn; missing means 1
+	CardLoves    map[int]int                `json:"card_loves,omitempty"` // card ID → initial loyalty points; missing means 0
 	CoverPath    string                     `json:"cover_path,omitempty"` // uploaded cover suffix; empty keeps the banner
 	// Closed hides this draw method while the pool stays open through its other methods (「扭蛋发布」 opens the
 	// pool itself). A new key: the retired "disabled" field of older documents must not close anything.
@@ -77,7 +79,19 @@ func AdminGachaConfigFromProfile(profile gamestate.GachaProfile) AdminGachaConfi
 	profile = gamestate.CloneGachas([]gamestate.GachaProfile{profile})[0]
 	return AdminGachaConfig{GachaID: profile.GachaID, Name: profile.Name, OddsMessage: profile.OddsMessage, PayType: profile.PayType, PayTypeID: profile.PayTypeID, Price: profile.Price,
 		PlayCountMax: profile.PlayCountMax, DailyPlayMax: profile.DailyPlayMax, CategoryNum: profile.CategoryNum, RandomGifts: profile.RandomGifts,
-		CardIDs: append([]int{}, profile.CardIDs...), Weights: append([]int{}, profile.CardWeights...), RewardPool: profile.RewardPool, Steps: profile.Steps, CardFames: profile.CardFames, CoverPath: profile.CoverPath}
+		CardIDs: append([]int{}, profile.CardIDs...), Weights: append([]int{}, profile.CardWeights...), RewardPool: profile.RewardPool, Steps: profile.Steps,
+		CardFames: profile.CardFames, CardLoves: profile.CardLoves, CoverPath: profile.CoverPath}
+}
+
+func gachaConfigFromDocument(base gamestate.GachaProfile, doc accountstore.Document) (AdminGachaConfig, error) {
+	config := AdminGachaConfigFromProfile(base)
+	if doc.Revision == 0 {
+		return config, nil
+	}
+	// The published loyalty map replaces the base map, including when empty.
+	config.CardLoves = nil
+	err := json.Unmarshal(doc.Payload, &config)
+	return config, err
 }
 
 func applyGachaPayment(base *gamestate.GachaProfile, config AdminGachaConfig) {
@@ -91,7 +105,7 @@ func applyGachaPayment(base *gamestate.GachaProfile, config AdminGachaConfig) {
 	base.PayType, base.PayTypeID = config.PayType, config.PayTypeID
 }
 
-func adminConfiguredGacha(base gamestate.GachaProfile, config AdminGachaConfig) game.GachaConfiguration {
+func (operations *Operations) projectGacha(base gamestate.GachaProfile, config AdminGachaConfig) game.GachaConfiguration {
 	base.RandomGifts = config.RandomGifts
 	base = gamestate.CloneGachas([]gamestate.GachaProfile{base})[0]
 	applyGachaPayment(&base, config)
@@ -102,7 +116,11 @@ func adminConfiguredGacha(base gamestate.GachaProfile, config AdminGachaConfig) 
 		base.CategoryNum, base.CategoryPictID = category.ID, category.PictID
 	}
 	base.OddsMessage = config.OddsMessage
-	payment := map[int]string{2: "友情点", 3: "水晶", 4: fmt.Sprintf("物品 %d", base.PayTypeID), 6: "付费水晶"}[base.PayType]
+	var itemName string
+	if base.PayType == 4 {
+		itemName = operations.itemShopProducts[[2]int{1, base.PayTypeID}].Name
+	}
+	payment := gachaPaymentLabel(base.PayType, itemName)
 	base.BuyMessage = fmt.Sprintf("消耗 %d %s 抽取 %d 张卡牌吗？", config.Price, payment, base.CardNum)
 	if base.PayType == 2 && base.CardNumMax > base.CardNum {
 		base.BuyMessage = fmt.Sprintf("每张消耗 %d 友情点，最多连续抽取 %d 张卡牌吗？", config.Price, base.CardNumMax)
@@ -113,13 +131,8 @@ func adminConfiguredGacha(base gamestate.GachaProfile, config AdminGachaConfig) 
 	}
 	base.CardIDs, base.CardWeights = append([]int(nil), config.CardIDs...), append([]int(nil), config.Weights...)
 	base.CoverPath = config.CoverPath
-	base.CardFames = nil
-	if len(config.CardFames) > 0 {
-		base.CardFames = make(map[int]int, len(config.CardFames))
-		for id, fame := range config.CardFames {
-			base.CardFames[id] = fame
-		}
-	}
+	base.CardFames = maps.Clone(config.CardFames)
+	base.CardLoves = maps.Clone(config.CardLoves)
 	if len(base.RewardPool) > 0 || len(config.RewardPool) > 0 || len(base.Steps) > 0 {
 		base.RewardPool, base.Steps = config.RewardPool, config.Steps
 		base.BuyMessage = fmt.Sprintf("消耗 %d %s 抽取 %d 次吗？", config.Price, payment, base.CardNum)
@@ -153,6 +166,34 @@ func validateAdminGachaPayment(catalog map[string]AdminCatalogEntry, config Admi
 	return nil
 }
 
+// gachaPaymentName names what one draw costs: a currency, or the item from the catalog.
+func gachaPaymentName(catalog map[string]AdminCatalogEntry, payType, payTypeID int) string {
+	if payType != 4 {
+		return gachaPaymentLabel(payType, "")
+	}
+	name := catalog[adminCatalogKey(8, payTypeID)].Name
+	if name == "" {
+		return fmt.Sprintf("道具 %d", payTypeID)
+	}
+	return name
+}
+
+func gachaPaymentLabel(payType int, itemName string) string {
+	switch payType {
+	case 2:
+		return "友情点"
+	case 3:
+		return "水晶"
+	case 6:
+		return "付费水晶"
+	case 4:
+		if itemName != "" {
+			return itemName
+		}
+	}
+	return "道具"
+}
+
 func (operations *Operations) reloadGachaConfigurations() error {
 	configs, revision, err := operations.readGachaConfigurations()
 	if err != nil {
@@ -180,8 +221,8 @@ func (operations *Operations) readGachaConfigurations() ([]game.GachaConfigurati
 			continue
 		}
 		// Draft-only operator pools may be empty; they do not enter player state.
-		config := AdminGachaConfigFromProfile(operations.gachaBases[id])
-		if err := json.Unmarshal(doc.Payload, &config); err != nil {
+		config, err := gachaConfigFromDocument(operations.gachaBases[id], doc)
+		if err != nil {
 			return nil, 0, err
 		}
 		if config.GachaID != id {
@@ -197,7 +238,7 @@ func (operations *Operations) readGachaConfigurations() ([]game.GachaConfigurati
 
 // configuredGacha adds the operator-pool flags (append to accounts; hidden while deleted).
 func (operations *Operations) configuredGacha(id int, config AdminGachaConfig) game.GachaConfiguration {
-	configured := adminConfiguredGacha(operations.gachaBases[id], config)
+	configured := operations.projectGacha(operations.gachaBases[id], config)
 	if pool, custom := operations.customGachas[id]; custom {
 		configured.Operator, configured.Disabled = true, configured.Disabled || pool.Deleted
 	}
@@ -267,8 +308,11 @@ func (admin *API) validateGachaConfig(config AdminGachaConfig) (map[string]any, 
 		if len(config.CardFames) > 0 {
 			return nil, errors.New("混合奖励卡池不能设置抽出名声")
 		}
+		if len(config.CardLoves) > 0 {
+			return nil, errors.New("混合奖励和阶段卡池请在各卡牌奖励中设置忠诚度")
+		}
 		_, operator := admin.operations.customGachas[config.GachaID]
-		return validateMixedGachaConfig(admin.catalogByKey, base, config, operator)
+		return admin.validateMixedGachaConfig(base, config, operator)
 	}
 	if len(config.RewardPool) > 0 || len(config.Steps) > 0 {
 		return nil, errors.New("普通卡池不能附加混合奖励规则")
@@ -301,6 +345,14 @@ func (admin *API) validateGachaConfig(config AdminGachaConfig) (map[string]any, 
 			return nil, fmt.Errorf("卡牌 %d 的抽出名声须为 1–%d", id, limit)
 		}
 	}
+	for id, love := range config.CardLoves {
+		if !seen[id] {
+			return nil, fmt.Errorf("忠诚度设置中的卡牌 %d 不在此卡池", id)
+		}
+		if limit := admin.catalogByKey[adminCatalogKey(6, id)].LoveMax; love < 0 || love > limit {
+			return nil, fmt.Errorf("卡牌 %d 的初始忠诚度须为 0–%d 点", id, limit)
+		}
+	}
 	if base.GuaranteedCount > 0 {
 		if rarities[base.GuaranteedRarityRank] == 0 || rarities[base.RemainderRarityRank] == 0 {
 			return nil, errors.New("此池保底要求两种指定稀有度都有候选卡")
@@ -319,7 +371,7 @@ func (admin *API) validateGachaConfig(config AdminGachaConfig) (map[string]any, 
 	for _, id := range config.CardIDs {
 		rarityByID[id] = admin.catalogByKey[adminCatalogKey(6, id)].Rarity
 	}
-	profile := adminConfiguredGacha(base, config).Profile
+	profile := admin.operations.projectGacha(base, config).Profile
 	if err := gamestate.ValidateGachaRules(profile); err != nil {
 		return nil, err
 	}
@@ -377,12 +429,10 @@ func (admin *API) gachaEditorList(writer http.ResponseWriter, request *http.Requ
 			WriteAdminError(writer, 500, err.Error())
 			return
 		}
-		config := AdminGachaConfigFromProfile(base)
-		if live.Revision > 0 {
-			if err := json.Unmarshal(live.Payload, &config); err != nil {
-				WriteAdminError(writer, 500, err.Error())
-				return
-			}
+		config, err := gachaConfigFromDocument(base, live)
+		if err != nil {
+			WriteAdminError(writer, 500, err.Error())
+			return
 		}
 		pool, custom := admin.operations.customGachas[id]
 		row := map[string]any{"gacha_id": id, "config": config, "base": base, "live": live, "draft": draft, "custom": custom, "deleted": pool.Deleted, "banner_url": "/gacha-assets/" + base.BannerKey + ".png"}
@@ -428,6 +478,7 @@ func (admin *API) gachaEditorAction(writer http.ResponseWriter, request *http.Re
 			WriteAdminError(writer, 409, accountstore.ErrDocumentConflict.Error())
 			return
 		}
+		body.Config = AdminGachaConfig{}
 		if err := json.Unmarshal(draft.Payload, &body.Config); err != nil {
 			WriteAdminError(writer, 500, err.Error())
 			return

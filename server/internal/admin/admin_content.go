@@ -76,24 +76,27 @@ type DropBoss struct {
 }
 
 type contentStore struct {
-	activities        activityRewards
-	activityRevision  int
-	base              gamestate.State
-	bosses            map[int]DropBoss
-	towerBosses       map[string]DropBoss
-	towerDrops        map[string]TowerFloorDrops
-	towerDropRevision int
-	drops             map[int]BossDrops
-	shops             map[int]exchangeShop
-	dropRevision      int
-	shopRevision      int
-	rules             map[int]BossRules
-	ruleRevision      int
-	ruleBases         map[int]bossRuleEntry
-	economy           map[string]bossEconomyOverride
-	economyBases      map[int]bossEconomyBase
-	economyRevision   int
-	configuration     game.ContentConfiguration
+	activities            activityRewards
+	activityRevision      int
+	base                  gamestate.State
+	bosses                map[int]DropBoss
+	towerBosses           map[string]DropBoss
+	towerDrops            map[string]TowerFloorDrops
+	towerDropRevision     int
+	drops                 map[int]BossDrops
+	shops                 map[int]exchangeShop
+	dropRevision          int
+	shopRevision          int
+	rules                 map[int]BossRules
+	ruleRevision          int
+	ruleBases             map[int]bossRuleEntry
+	economy               map[string]bossEconomyOverride
+	economyBases          map[int]bossEconomyBase
+	economyRevision       int
+	battleOpening         bossBattleOpeningConfig
+	battleOpeningBases    map[int]gamestate.TeamBattleOpening
+	battleOpeningRevision int
+	configuration         game.ContentConfiguration
 }
 
 type exchangeShop struct {
@@ -256,6 +259,9 @@ func (o *Operations) InitializeContent(base gamestate.State, battleMasterPath st
 	if err := c.loadBossEconomy(o, battleMasterPath); err != nil {
 		return err
 	}
+	if err := c.loadBossBattleOpening(o); err != nil {
+		return err
+	}
 	state, err := c.project(c.drops, c.shops, c.rules)
 	if err != nil {
 		return err
@@ -327,6 +333,9 @@ func (c *contentStore) project(drops map[int]BossDrops, shops map[int]exchangeSh
 	}
 	if err == nil {
 		err = c.projectBossEconomy(&state)
+	}
+	if err == nil {
+		c.projectBossBattleOpening(&state)
 	}
 	return state, err
 }

@@ -89,6 +89,7 @@ func (c *contentStore) projectActivityRewards(state *gamestate.State) error {
 		r := &state.TeamBattleReplays[i]
 		if policy := policies[c.rewardBossID(r.BossID)]; policy != nil {
 			r.EndTurn = policy.EndTurn
+			r.BurstGaugeInitial = policy.BurstGaugeInitial
 		}
 	}
 	// Preserve native event positions, dialogue and animation identities.

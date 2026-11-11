@@ -147,10 +147,6 @@ func New(config Config) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	itemNames := make(map[int]string, len(itemMaster.Items))
-	for _, item := range itemMaster.Items {
-		itemNames[item.ItemID] = item.Name
-	}
 	presetsByGroup := make(map[int]*AdminGachaPreset)
 	for _, gacha := range primaryState.Gachas {
 		if gamestate.IsOnboardingGachaID(gacha.GachaID) {
@@ -162,24 +158,7 @@ func New(config Config) (http.Handler, error) {
 		}
 		preset := presetsByGroup[gacha.GroupID]
 		if preset == nil {
-			payment := itemNames[gacha.PayTypeID]
-			switch gacha.PayType {
-			case 2:
-				payment = "友情点"
-			case 3:
-				payment = "水晶"
-			case 6:
-				payment = "付费水晶"
-			}
-			preset = &AdminGachaPreset{
-				PublicationKey: gacha.PublicationKey, GroupID: gacha.GroupID,
-				Name: gacha.Name, BannerKey: gacha.BannerKey,
-				ImageURL:      "/gacha-assets/" + gacha.BannerKey + ".png",
-				PaymentItemID: gacha.PayTypeID, PaymentItem: payment,
-				Price: gacha.Price, DrawCount: gacha.CardNum,
-				CardCount:   len(gacha.CardIDs) + len(gacha.RewardPool),
-				CategoryNum: gacha.CategoryNum,
-			}
+			preset = &AdminGachaPreset{PublicationKey: gacha.PublicationKey, GroupID: gacha.GroupID}
 			presetsByGroup[gacha.GroupID] = preset
 		} else if preset.PublicationKey != gacha.PublicationKey {
 			return nil, fmt.Errorf("CN managed gacha group %d has inconsistent metadata", gacha.GroupID)
@@ -366,6 +345,7 @@ func New(config Config) (http.Handler, error) {
 		"/pool-gifts.js":          adminPoolGiftsJS,
 		"/popup-announcements.js": adminPopupAnnouncementsJS,
 		"/boss-economy.js":        adminBossEconomyJS,
+		"/boss-opening.js":        adminBossOpeningJS,
 		"/admin.css":              adminCSS, "/editors.css": adminEditorsCSS,
 	} {
 		router.Get(path, func(w http.ResponseWriter, _ *http.Request) {
@@ -412,6 +392,8 @@ func New(config Config) (http.Handler, error) {
 	router.Put("/api/activity-rewards", admin.saveActivityRewards)
 	router.Get("/api/boss-rules", admin.bossRules)
 	router.Put("/api/boss-rules", admin.saveBossRules)
+	router.Get("/api/boss-battle-opening", admin.bossBattleOpening)
+	router.Put("/api/boss-battle-opening", admin.saveBossBattleOpening)
 	router.Get("/api/boss-economy", admin.bossEconomy)
 	router.Put("/api/boss-economy", admin.saveBossEconomy)
 	router.Put("/api/boss-drops", admin.saveDropEditor)

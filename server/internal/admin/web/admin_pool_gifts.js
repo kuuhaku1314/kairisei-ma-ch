@@ -20,17 +20,22 @@ function poolGiftState(gifts) {
 }
 
 /** Imported files are checked for shape only; ranges and weights go through poolGiftProblems() on save. */
-function poolGiftsShaped(gifts) {
+function weightedPoolShaped(pool) {
   return (
-    Array.isArray(gifts) &&
-    gifts.every(
-      (g) =>
-        g &&
-        typeof g === 'object' &&
-        Array.isArray(g.pool) &&
-        g.pool.every((e) => e && typeof e.reward === 'object' && e.reward && Number.isInteger(e.weight)),
+    Array.isArray(pool) &&
+    pool.every(
+      (e) =>
+        e &&
+        e.reward &&
+        typeof e.reward === 'object' &&
+        !Array.isArray(e.reward) &&
+        Number.isInteger(e.weight),
     )
   );
+}
+
+function poolGiftsShaped(gifts) {
+  return Array.isArray(gifts) && gifts.every((g) => g && typeof g === 'object' && weightedPoolShaped(g.pool));
 }
 
 /** The saved form: zero to_play and empty_weight stay out, like the server's omitempty fields. */

@@ -84,6 +84,9 @@ func auditAlchemistSoloHTTP(t *testing.T, handler *cnDeploymentHandler, masterPa
 		return 0
 	}
 	call("/HomeShow", map[string]any{}, true)
+	if !slices.Contains(state().User.UnlockedFeatureIDs, uint(37)) {
+		t.Fatal("alchemy feature must be unlocked for the loadout check")
+	}
 	var supportSlots []struct {
 		Arthur   int `json:"0"`
 		Unlocked int `json:"1"`
@@ -151,15 +154,17 @@ func auditAlchemistSoloHTTP(t *testing.T, handler *cnDeploymentHandler, masterPa
 			len(active.ClearDecks) != 1 || active.ClearDecks[0].ArthurType != 5 {
 			t.Fatalf("tower %d accepted context/debit differs", tower.TowerID)
 		}
-		var deck struct {
+		type alchemistDeck struct {
 			Arthur   int               `json:"arthur_type"`
 			Job      int               `json:"job_type"`
+			Burst    *int              `json:"is_burst"`
 			HP       int               `json:"hp"`
 			Support  []json.RawMessage `json:"support_deck"`
 			Unlocked int               `json:"support_card_unlock_slot_num"`
 		}
+		var deck alchemistDeck
 		if json.Unmarshal(active.ClearDecks[0].Deck, &deck) != nil || deck.Arthur != 5 || deck.Job != 5 || deck.HP <= 0 ||
-			deck.Unlocked != len(deck.Support) || deck.Unlocked != supportSlots[4].Unlocked {
+			deck.Unlocked != len(deck.Support) || deck.Unlocked != supportSlots[4].Unlocked || deck.Burst == nil || *deck.Burst != 0 {
 			t.Fatal("alchemy loadout/history parameters unavailable")
 		}
 		retry := call("/TeamBattleSoloStart", request, true)
@@ -220,7 +225,12 @@ func auditAlchemistSoloHTTP(t *testing.T, handler *cnDeploymentHandler, masterPa
 			testfixture.CallContentAdmin(t, handler.admin, "PUT", "/api/boss-policy?catalog=tower",
 				map[string]any{"mode": "all", "expected_revision": 1}, 200)
 		}
-		call("/TeamBattleClearDeckShow", map[string]any{"bossid": boss.ID}, true)
+		clear := call("/TeamBattleClearDeckShow", map[string]any{"bossid": boss.ID}, true)
+		var shown []alchemistDeck
+		if json.Unmarshal(clear["partner_deck"], &shown) != nil || len(shown) != 1 || shown[0].Arthur != 5 || shown[0].Job != 5 ||
+			shown[0].Burst == nil || *shown[0].Burst != 0 {
+			t.Fatalf("tower %d returned an invalid alchemist clear deck", tower.TowerID)
+		}
 		call("/HomeShow", map[string]any{}, true)
 		t.Logf("tower %d floor2 boss %d: authenticated HTTP reject/start/retry/settle/history/return PASS", tower.TowerID, boss.ID)
 	}

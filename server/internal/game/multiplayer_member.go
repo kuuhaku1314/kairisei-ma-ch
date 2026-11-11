@@ -75,8 +75,7 @@ func (s *Account) battleLoadoutLocked(userID int, arthurType int8, deckIndex int
 	if int(deck.JobType) >= 0 && int(deck.JobType) < len(s.currentJobs) {
 		job = s.currentJobs[deck.JobType]
 	}
-	_, burstUnlocked := s.unlockedFeatureIDs[uint(32+arthurType)]
-	burst := int8(BoolInt(burstUnlocked))
+	burst := s.arthurBurstUnlockedLocked(arthurType)
 	leader, found := PartnerLeaderCard(deck, cardByUniqueID)
 	if !found {
 		return BattleLoadout{}, errors.New("local multiplayer leader card is unavailable")

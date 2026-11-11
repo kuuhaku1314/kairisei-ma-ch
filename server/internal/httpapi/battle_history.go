@@ -52,7 +52,7 @@ func (a *API) teamBattleClearDeckShow(w http.ResponseWriter, r *http.Request) {
 	}
 	wire := make([]any, 0, len(decks))
 	for _, deck := range decks {
-		wire = append(wire, a.partnerDeckParameterView(deck.Deck))
+		wire = append(wire, a.clearDeckParameterView(deck))
 	}
 	a.writeProtocol(w, map[string]any{"partner_deck": wire, "how_to_list": how, "friend_state_list": states})
 }
@@ -114,7 +114,7 @@ func (a *API) dailyClearRankShow(w http.ResponseWriter, r *http.Request) {
 				name = record.Decks[0].Name
 			}
 			buckets[rowIndex] = append(buckets[rowIndex], map[string]any{"userid": record.UserID, "name": name, "rank": ranks[bucket],
-				"partner_deck": a.partnerDeckParameterView(deck.Deck), "deck_honorids": deck.HonorIDs})
+				"partner_deck": a.clearDeckParameterView(deck), "deck_honorids": deck.HonorIDs})
 			decks = append(decks, deck)
 		}
 	}

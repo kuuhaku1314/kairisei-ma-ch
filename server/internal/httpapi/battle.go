@@ -402,6 +402,7 @@ func (a *API) teamBattleSoloStart(writer http.ResponseWriter, request *http.Requ
 		partnerDecks = append(partnerDecks, partnerDeck)
 	}
 	context, _, started, startErr := a.beginSoloBattleEntry(payload, game.SoloBattleEntry{
+		Opening:        &gamestate.TeamBattleOpening{CostInitial: replay.CostInitial, BurstGaugeInitial: replay.BurstGaugeInitial},
 		ScoreBossID:    a.scoreBossID(payload.BossID),
 		DeckArthurType: payload.DeckArthurType, UserID: a.initialState.User.UserID, BossID: payload.BossID,
 		EnemyTypes: teamBattleEnemyTypes(battleSegments),
@@ -425,7 +426,14 @@ func (a *API) teamBattleSoloStart(writer http.ResponseWriter, request *http.Requ
 		writeError(writer, http.StatusInternalServerError, "team battle drop profile is unavailable")
 		return
 	}
+	if context.Opening != nil {
+		replay.CostInitial = context.Opening.CostInitial
+		replay.BurstGaugeInitial = context.Opening.BurstGaugeInitial
+	}
 	if context.ScorePolicy != nil {
+		if context.ScorePolicy.IsDamageScore() {
+			replay.BurstGaugeInitial = context.ScorePolicy.BurstGaugeInitial
+		}
 		replay.EndTurn = context.ScorePolicy.EndTurn
 		if context.ScorePolicy.TeamCostInitial != 0 {
 			replay.CostInitial = context.ScorePolicy.TeamCostInitial

@@ -389,12 +389,9 @@ $('#drop-current').addEventListener('click', (event) => {
 // null inherits the packaged rewards, [] gives nothing, a list replaces them. Star ratings stay a
 // record only: this page has no star or ranking rewards.
 
-async function resolveTowerFirstClearLabels() {
+async function resolveTowerFirstClearLabels(config = dropEditor.config) {
   if (!dropIsTower()) return;
-  const rewards = [
-    ...(dropEditor.config.first_clear_rewards || []),
-    ...(dropEditor.base.first_clear_rewards || []),
-  ];
+  const rewards = [...(config.first_clear_rewards || []), ...(dropEditor.base.first_clear_rewards || [])];
   await resolveContentLabels(rewards.filter((r) => !activityCurrency(r)));
   await resolveCatalogEntries(rewards.filter(activityCurrency).map((r) => [r.type, r.reward_typeid])).catch(
     () => {},

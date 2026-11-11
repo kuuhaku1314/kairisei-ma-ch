@@ -68,11 +68,15 @@ func (s *Account) completeTrainingBurstLocked() error {
 }
 
 func (s *Account) ArthurBurstUnlocked(arthur int8) int8 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.arthurBurstUnlockedLocked(arthur)
+}
+
+func (s *Account) arthurBurstUnlockedLocked(arthur int8) int8 {
 	if arthur < 1 || arthur > 4 {
 		return 0
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	_, unlocked := s.unlockedFeatureIDs[uint(32+arthur)]
 	return int8(BoolInt(unlocked))
 }

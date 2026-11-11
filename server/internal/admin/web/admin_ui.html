@@ -316,7 +316,7 @@
       </div>
       <div class="page-switch-panel" id="activity-cup" role="tabpanel" aria-labelledby="activity-tab-cup">
         <div class="rule-strip">
-          <div><svg class="icon"><use href="#i-info"/></svg><b>下次挑战生效</b><span>已开始的战斗沿用进入时的回合、COST、倍率与倒下结束设置。</span></div>
+          <div><svg class="icon"><use href="#i-info"/></svg><b>下次挑战生效</b><span>已开始的战斗沿用进入时的回合、COST、圣剑槽、倍率与倒下结束设置。</span></div>
           <div><svg class="icon"><use href="#i-check"/></svg><b>领取记录保留</b><span>单人与组队分别记录领取进度，保存配置不会重置。</span></div>
         </div>
         <div class="panel"><div class="panel-head"><div><h2>圣剑杯积分奖励</h2><span class="hint">单人与组队均按有效扣血 × 倍率计分，九档奖励各领一次。好友卡组单人挑战可以计分领奖，但不参与个人排行榜。</span></div></div><div class="panel-body">
@@ -325,16 +325,19 @@
           </div>
           <div class="cup-hp" id="cup-boss-hp" aria-live="polite" hidden></div>
           <section class="cup-rules" aria-labelledby="cup-rules-title"><h4 id="cup-rules-title">挑战规则<span>单人与组队共用，开战时冻结</span></h4>
-            <div class="field cup-rule"><label for="cup-turns">回合上限</label><div class="input-unit"><input id="cup-turns" type="number" min="0" max="30" step="1" aria-describedby="cup-turns-hint"><span>回合</span></div><small class="hint" id="cup-turns-hint">0–30；0 不限，由 BOSS 自身规则结束</small></div>
-            <div class="field cup-rule"><span class="field-label" id="cup-dead-label">倒下结束</span><label class="switch"><input id="cup-member-dead-end" type="checkbox" aria-labelledby="cup-dead-label" aria-describedby="cup-dead-hint"><span id="cup-dead-state"></span></label><small class="hint" id="cup-dead-hint"></small></div>
-            <div class="field cup-rule"><label for="cup-team-cost">起始 COST</label><div class="input-unit"><input id="cup-team-cost" type="number" min="3" max="10" step="1" aria-describedby="cup-cost-hint"><span>COST</span></div><small class="hint" id="cup-cost-hint">开局可用 COST，3–10，默认 3</small></div>
-            <div class="field cup-rule"><label for="cup-rate">积分倍率</label><div class="input-unit"><input id="cup-rate" type="number" min="1" max="1000" step="1" aria-describedby="cup-rate-hint"><span>%</span></div><small class="hint" id="cup-rate-hint">积分 = 敌方损失的 HP × 倍率，1–1000</small></div>
+            <div class="cup-rule-row">
+              <div class="field cup-rule"><label for="cup-turns">回合上限</label><div class="input-unit"><input id="cup-turns" type="number" min="0" max="30" step="1" aria-describedby="cup-turns-hint"><span>回合</span></div><small class="hint" id="cup-turns-hint">0–30；0 不限，按 BOSS 规则结束</small></div>
+              <div class="field cup-rule"><span class="field-label" id="cup-dead-label">倒下结束</span><label class="switch"><input id="cup-member-dead-end" type="checkbox" aria-labelledby="cup-dead-label" aria-describedby="cup-dead-hint"><span id="cup-dead-state"></span></label><small class="hint" id="cup-dead-hint"></small></div>
+              <div class="field cup-rule"><label for="cup-team-cost">起始 COST</label><div class="input-unit"><input id="cup-team-cost" type="number" min="3" max="10" step="1" aria-describedby="cup-cost-hint"><span>COST</span></div><small class="hint" id="cup-cost-hint">3–10，默认 3</small></div>
+              <div class="field cup-rule"><label for="cup-burst">开场圣剑槽</label><div class="input-unit"><input id="cup-burst" type="number" min="0" max="300" step="1" aria-describedby="cup-burst-hint"><span>/ 300</span></div><small class="hint" id="cup-burst-hint">0–300，默认 0；≥100 首回合可解放</small></div>
+              <div class="field cup-rule"><label for="cup-rate">积分倍率</label><div class="input-unit"><input id="cup-rate" type="number" min="1" max="1000" step="1" aria-describedby="cup-rate-hint"><span>%</span></div><small class="hint" id="cup-rate-hint">1–1000；积分 = 敌方损失 HP × 倍率</small></div>
+            </div>
           </section>
           <p class="field-error" id="cup-errors" hidden></p>
           <div class="table-wrap grades-wrap"><table class="grades"><thead><tr><th class="grade-col">档位</th><th class="score-col">所需积分</th><th>固定奖励（每档最多10项，单人／组队各领一次）</th></tr></thead><tbody id="cup-grades"></tbody></table></div>
           <details class="tool-drawer" id="cup-copy-tool"><summary>批量：复制本杯设置到其他圣剑杯</summary>
             <p class="hint">只修改草稿，核对后需点击“保存配置”。复制后各杯仍可逐项调整。</p>
-            <div class="checks" id="cup-copy-parts"><label><input type="checkbox" value="score" checked> 九档门槛</label><label><input type="checkbox" value="rewards" checked> 九档奖励</label><label><input type="checkbox" value="limits"> 回合上限、倒下结束、起始 COST 与倍率</label></div>
+            <div class="checks" id="cup-copy-parts"><label><input type="checkbox" value="score" checked> 九档门槛</label><label><input type="checkbox" value="rewards" checked> 九档奖励</label><label><input type="checkbox" value="limits"> 回合上限、倒下结束、起始 COST、开场圣剑槽与倍率</label></div>
             <div class="toolbar"><button class="secondary sm" id="cup-copy-all" type="button">全选其他副本</button><button class="secondary sm" id="cup-copy-none" type="button">全不选</button></div>
             <div class="check-grid" id="cup-copy-targets"></div>
             <div class="toolbar"><button class="secondary" id="cup-copy-apply" type="button">复制到所选副本草稿</button><span class="hint" id="cup-copy-result"></span></div>
@@ -446,7 +449,7 @@
     <!-- Boss 发布 -->
     <section class="view" id="bosses">
       <div class="view-alert" role="alert" hidden></div>
-      <div class="tabs" id="boss-catalogs" role="group" aria-label="目录"><button class="active" data-catalog="activity">活动／素材副本</button><button data-catalog="past">往期 BOSS</button><button data-catalog="tower">炼金塔</button><span class="tabs-sep" aria-hidden="true"></span><button data-catalog="economy">体力与经验</button></div>
+      <div class="tabs" id="boss-catalogs" role="group" aria-label="目录"><button class="active" data-catalog="activity">活动／素材副本</button><button data-catalog="past">往期 BOSS</button><button data-catalog="tower">炼金塔</button><span class="tabs-sep" aria-hidden="true"></span><button data-catalog="economy">体力与经验</button><button data-catalog="opening">开场设置</button></div>
       <div class="panel" id="boss-publish-panel"><div class="panel-head"><div><h2>发布设置<span class="tag info" id="boss-publish-scope">仅活动／素材副本</span></h2><span class="hint" id="boss-publish-hint">活动／素材副本、往期 BOSS 和炼金塔各自单独发布。</span></div></div><div class="panel-body">
         <div class="publish-row">
           <div class="field"><label>开放方式</label><div class="mode"><button id="mode-all">全部开放</button><button id="mode-selected">仅开放选中项</button></div></div>
@@ -469,7 +472,7 @@
         <div class="boss-grid" id="boss-rows"></div>
         <div class="pager" id="boss-pager"><button class="secondary" id="boss-prev">上一页</button><span id="boss-page-info" class="page-info"></span><label>跳至 <input id="boss-page" type="number" min="1" value="1" aria-label="页码"> 页</label><button class="secondary" id="boss-next">下一页</button></div>
       </div></div>
-      <div class="panel" id="boss-economy-panel" hidden>
+      <div class="panel" id="boss-economy-panel" data-setting-tab="economy" hidden>
         <div class="panel-head">
           <div><h2>体力与经验<span class="tag info">3D 活动 · 2D 活动 · 往期</span></h2><span class="hint">按难度统一设置单人体力和通关经验。同名难度在这三类副本里共用一个设置，自卡组入口跟随对应难度；普通主线、炼金塔和钥匙素材本不受影响。</span></div>
           <span class="pill" id="be-count"></span>
@@ -497,6 +500,47 @@
             </div>
           </div>
           <div class="table-wrap"><table class="be-table"><thead><tr><th class="check-col"><input class="check" type="checkbox" id="be-pick-all" aria-label="选择全部显示的难度"></th><th>难度</th><th class="num">副本数</th><th>单人体力</th><th class="num"><span title="单人体力 ÷ 2，向上取整">组队建房</span></th><th>通关经验</th><th><span class="sr-only">恢复默认</span></th></tr></thead><tbody id="be-rows"></tbody></table></div>
+        </div>
+      </div>
+      <div class="op-tab" id="boss-opening" data-setting-tab="opening" hidden>
+        <div class="panel" id="op-global-panel">
+          <div class="panel-head">
+            <div><h2>开场设置<span class="tag info">3D 活动 · 2D 活动 · 往期</span></h2><span class="hint">开局 COST 和开场圣剑槽，单人和组队共用。普通主线、炼金塔、钥匙素材本和圣剑杯不受影响；圣剑杯在「圣剑杯与探索」里单独设置。</span></div>
+            <div class="op-head-side"><span class="pill" id="op-count"></span><button class="secondary sm" id="op-reset-all" type="button" disabled>全部恢复默认</button></div>
+          </div>
+          <div class="panel-body">
+            <div class="rule-strip">
+              <div><svg class="icon"><use href="#i-info"/></svg><b>逐项继承</b><span>BOSS 单独设置 → 全局 → 资源默认。留空就沿用上一级，两项分别继承。</span></div>
+              <div><svg class="icon"><use href="#i-info"/></svg><b>圣剑槽</b><span>全队共用。0 为空；达到 100 时，有可用圣剑的角色首回合即可解放；上限 300。</span></div>
+              <div><svg class="icon"><use href="#i-info"/></svg><b>生效</b><span>之后新开的战斗、新建的房间使用保存时的设置；已开始的战斗和已建好的房间不变。</span></div>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-label"><h3>全局开局 COST</h3><p>开局可用的 COST，之后仍按原战斗规则增长。</p></div>
+            <div class="setting-control">
+              <div class="setting-inline"><div class="input-unit"><input id="op-global-cost" type="number" inputmode="numeric" min="3" max="10" step="1" placeholder="资源默认" aria-describedby="op-global-cost-note" disabled><span>COST</span></div></div>
+              <small class="op-note" id="op-global-cost-note"></small>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-label"><h3>全局开场圣剑槽</h3><p>全队开场时圣剑槽里已有的量，不改变职业、圣剑和技能的解锁条件。</p></div>
+            <div class="setting-control">
+              <div class="setting-inline"><div class="input-unit"><input id="op-global-gauge" type="number" inputmode="numeric" min="0" max="300" step="1" placeholder="资源默认" aria-describedby="op-global-gauge-note" disabled><span>/ 300</span></div>
+                <div class="op-scale"><span id="op-global-gauge-bar"></span><span class="op-scale-ticks" aria-hidden="true"><span>0 空</span><span>100 可解放</span><span>200</span><span>300 上限</span></span></div></div>
+              <small class="op-note" id="op-global-gauge-note"></small>
+            </div>
+          </div>
+        </div>
+        <div class="ws op-ws">
+          <aside class="panel ws-list" aria-label="按 BOSS 单独设置">
+            <div class="ws-list-head"><div class="ws-list-title"><b>按 BOSS 单独设置</b><span class="hint" id="op-list-count"></span></div></div>
+            <div class="ws-filter">
+              <input id="op-search" class="search" type="search" placeholder="搜索名称、难度或 BOSS ID" aria-label="搜索 BOSS">
+              <select id="op-filter" aria-label="按设置筛选"><option value="">全部 BOSS</option><option value="set">有单独设置</option><option value="changed">有未保存的修改</option></select>
+            </div>
+            <div class="ws-items" id="op-list"></div>
+          </aside>
+          <div class="ws-main"><div class="panel ws-editor" id="op-editor"></div></div>
         </div>
       </div>
       <div class="savebar"><div class="savebar-status"><span class="pill gold" id="boss-revision">revision —</span><span id="boss-draft-state" aria-live="polite"></span></div><div class="savebar-actions"><button class="primary" id="save-policy" data-save-shortcut>发布策略</button></div></div>
@@ -630,13 +674,13 @@
       <div class="pool-variant-bar" id="pool-variant-bar">
         <div class="pool-variant-title"><span>正在编辑分池</span><b id="pool-variant-name">—</b></div>
         <div class="pool-variant-actions">
-        <details class="pool-copy-menu" id="pool-split-menu" hidden><summary class="secondary">按职业分到各职业分池</summary><div class="pool-copy-pop"><p class="hint">按卡牌职业，把本混合职业分池的卡牌连同权重和名声分到<b>相同抽法</b>的职业分池草稿，替换其现有卡牌；无匹配卡牌的职业跳过并保留原配置，没有这种抽法的职业不分配。</p><div class="pool-split-list" id="pool-split-targets"></div><label class="inline-check"><input type="checkbox" id="pool-split-common" checked> 通用卡牌（无职业）也放入每个职业分池</label><button id="pool-split-apply" class="primary sm" type="button">分配到职业分池</button></div></details>
-        <details class="pool-copy-menu" id="pool-copy-menu"><summary class="secondary">复制到其他分池</summary><div class="pool-copy-pop"><p class="hint">把本分池的卡牌、权重、名声和筛选复制到所选分池草稿；目标的消耗和价格保留，职业不符的卡牌自动跳过。</p><div class="checks content-targets" id="pool-copy-targets"></div><button id="pool-copy-apply" class="primary sm" type="button">复制到所选分池</button></div></details>
+        <details class="pool-copy-menu" id="pool-split-menu" hidden><summary class="secondary">按职业分到各职业分池</summary><div class="pool-copy-pop"><p class="hint">按卡牌职业，把本混合职业分池的卡牌连同权重、名声和初始忠诚度分到<b>相同抽法</b>的职业分池草稿，替换其现有卡牌；无匹配卡牌的职业跳过并保留原配置，没有这种抽法的职业不分配。</p><div class="pool-split-list" id="pool-split-targets"></div><label class="inline-check"><input type="checkbox" id="pool-split-common" checked> 通用卡牌（无职业）也放入每个职业分池</label><button id="pool-split-apply" class="primary sm" type="button">分配到职业分池</button></div></details>
+        <details class="pool-copy-menu" id="pool-copy-menu"><summary class="secondary">复制到其他分池</summary><div class="pool-copy-pop"><p class="hint">把本分池的卡牌、权重、名声、初始忠诚度和筛选复制到所选分池草稿；目标的消耗和价格保留，职业不符的卡牌自动跳过。</p><div class="checks content-targets" id="pool-copy-targets"></div><button id="pool-copy-apply" class="primary sm" type="button">复制到所选分池</button></div></details>
         </div>
       </div>
       <div id="pool-card-editor" class="pool-columns">
         <div class="panel"><div class="panel-head"><div><h2>卡牌目录</h2><span class="hint" id="pool-eligibility-hint">点击卡牌加入或移出草稿。</span></div></div><div class="panel-body">
-          <div class="filterbar"><input class="search" id="pool-search" type="search" placeholder="搜索卡牌名称、ID、图像 ID"><select id="pool-rarity" aria-label="稀有度"><option value="0">全部星级</option><option value="1">1 星</option><option value="2">2 星</option><option value="3">3 星</option><option value="4">4 星</option><option value="5">5 星</option><option value="6">6 星</option><option value="7">7 星</option><option value="8">8 星</option></select><label class="inline-check" id="pool-eligible-only-field"><input id="pool-eligible-only" type="checkbox" checked> 只显示可加入的卡牌</label><label class="inline-check"><input id="pool-ready" type="checkbox"> 仅资源已闭包</label></div>
+          <div class="filterbar"><input class="search" id="pool-search" type="search" placeholder="搜索卡牌名称、ID、图像 ID"><select id="pool-rarity" aria-label="稀有度"><option value="0">全部星级</option><option value="1">1 星</option><option value="2">2 星</option><option value="3">3 星</option><option value="4">4 星</option><option value="5">5 星</option><option value="6">6 星</option><option value="7">7 星</option><option value="8">8 星</option></select><label class="inline-check" id="pool-eligible-only-field"><input id="pool-eligible-only" type="checkbox" checked> 只显示可加入的卡牌</label></div>
           <div class="chip-row"><span class="chip-label">职业</span><div class="kind-tabs small" id="pool-jobs" role="group" aria-label="卡牌所属职业"><button class="active" data-job="0">全部</button><button data-job="1">佣兵</button><button data-job="2">富豪</button><button data-job="3">盗贼</button><button data-job="4">歌姬</button><button data-job="5">炼金</button><button data-job="-1">通用</button></div></div>
           <div class="selbar slim"><div class="selbar-count" id="pool-card-count"></div><div class="selbar-actions"><button class="secondary sm" id="pool-add-matches">加入全部匹配</button><button class="secondary sm" id="pool-prev">上一页</button><button class="secondary sm" id="pool-next">下一页</button></div></div>
           <div class="catalog-grid" id="pool-cards"></div>
@@ -650,8 +694,9 @@
           <div class="pool-batch"><span class="pool-batch-label">批量设置当前筛选下的已选卡</span>
             <div class="pool-batch-row"><label for="pool-batch-weight">相对权重</label><div class="joined"><input id="pool-batch-weight" type="number" min="1" max="1000000" value="1"><button class="secondary sm" id="pool-weight-all" type="button">应用</button></div>
               <label for="pool-batch-fame">抽出名声</label><div class="joined"><input id="pool-batch-fame" type="number" min="1" max="9999" value="1"><button class="secondary sm" id="pool-fame-all" type="button">应用</button></div><button class="secondary sm" id="pool-fame-max" type="button">设为满名声</button>
+              <label for="pool-batch-love">初始忠诚度</label><div class="joined"><input id="pool-batch-love" type="number" min="0" max="999999" value="0"><button class="secondary sm" id="pool-love-all" type="button">应用</button></div><button class="secondary sm" id="pool-love-max" type="button">设为满忠诚度</button>
               <span class="spacer"></span><button class="danger sm" id="pool-clear" type="button">清空已选</button></div></div>
-          <div class="table-wrap selected-scroll"><table class="pool-selected-table"><thead><tr><th>卡牌</th><th>相对权重</th><th title="玩家抽到这张卡时的名声，1 为默认">抽出名声</th><th><span class="sr-only">操作</span></th></tr></thead><tbody id="pool-selected"></tbody></table></div>
+          <div class="table-wrap selected-scroll"><table class="pool-selected-table"><thead><tr><th>卡牌</th><th>相对权重</th><th title="玩家抽到这张卡时的名声，1 为默认">抽出名声</th><th title="玩家抽到这张卡时的忠诚度点数，0 为默认，不超过该卡上限（悬停输入框可见）；下方百分比与游戏概率页一致">初始忠诚度</th><th><span class="sr-only">操作</span></th></tr></thead><tbody id="pool-selected"></tbody></table></div>
           <p class="hint" id="pool-selected-hint"></p>
           <div class="pager" id="pool-selected-pager"><button class="secondary" id="pool-selected-prev">上一页</button><span id="pool-selected-page-info" class="page-info"></span><label>跳至 <input id="pool-selected-page" type="number" min="1" value="1" aria-label="页码"> 页</label><button class="secondary" id="pool-selected-next">下一页</button></div>
         </div></div>
@@ -778,12 +823,12 @@
         </div>
       </div>
       <div class="panel" id="pp-mail"><div class="panel-head"><h2>新手毕业邮件</h2><span class="pill" id="player-mail-count"></span></div><div class="panel-body">
-        <label class="switch"><input id="player-mail-enabled" type="checkbox"><span>全部新手训练完成后发送</span></label>
+        <div class="setting-inline"><label class="switch"><input id="player-mail-enabled" type="checkbox" aria-describedby="player-mail-when"><span>发送毕业邮件</span></label><span class="hint" id="player-mail-when">开启后，玩家完成全部九步新手训练时自动发放一次；默认关闭</span></div>
         <div class="form-grid"><div class="field"><label for="player-mail-title">邮件标题</label><input id="player-mail-title" maxlength="40"></div>
         <div class="field"><label for="player-mail-message">邮件正文</label><textarea id="player-mail-message" maxlength="200" rows="3"></textarea></div></div>
         <div class="toolbar"><button class="secondary" id="player-mail-add">选择奖励</button><button class="secondary sm" id="player-mail-max-level" type="button">全部满级</button><button class="secondary sm" id="player-mail-max-fame" type="button">全部满名声</button><button class="secondary sm" id="player-mail-max-love" type="button">全部满忠诚度</button><span class="hint">可多选卡牌、素材、道具、货币、召唤石和传承卡</span></div>
         <div class="table-wrap"><table><thead><tr><th>奖励</th><th>数量</th><th>卡牌等级</th><th>名声</th><th>忠诚度</th><th><span class="sr-only">操作</span></th></tr></thead><tbody id="player-mail-rewards"></tbody></table></div>
-        <p class="hint">完成整个九步新手训练时按当前配置发放一次；每种奖励一封邮件，最多120种。已完成训练的账号不补发，重复登录或重试不重复发送。默认关闭。</p>
+        <p class="hint">按发放时的配置发送，每种奖励一封邮件，最多120种。开启前已完成训练的账号不补发，重复登录或重试不重复发送。</p>
       </div></div>
       <div class="panel" id="pp-story"><div class="panel-head"><h2>剧情首通奖励</h2></div><div class="panel-body">
         <div class="field narrow"><label for="player-story-crystals">每话首次通关获得的水晶</label><input id="player-story-crystals" type="number" min="1" max="10000000"></div>
@@ -1002,7 +1047,7 @@
     <section class="view" id="audit">
       <div class="view-alert" role="alert" hidden></div>
       <div class="panel"><div class="panel-body">
-        <div class="filterbar"><input id="audit-search" class="search" type="search" placeholder="搜索玩家 ID、批次编号或操作内容"><select id="audit-operation" aria-label="操作类型"><option value="">所有操作</option><option value="mail-delivery">批量赠礼</option><option value="account-mail">单封赠礼</option><option value="account-mail-delete">删除玩家邮件</option><option value="account-grant">资源与进度调整</option><option value="account-credentials-admin">账号绑定／密码</option><option value="account-unbind">解除绑定</option><option value="boss-policy">BOSS发布</option><option value="boss-rules">BOSS难度规则</option><option value="boss-economy">副本体力与经验</option><option value="boss-drops">BOSS掉落</option><option value="activity-rewards">圣剑杯与探索</option><option value="exchange-shops">兑换所</option><option value="item-shop">道具商店</option><option value="gacha-policy">扭蛋发布</option><option value="gacha-draft">卡池草稿</option><option value="gacha-live">卡池发布</option><option value="gacha-custom">新建／删除卡池</option><option value="runtime-settings">运营设置</option><option value="image-sync">运营图片同步</option><option value="player-policy">公告与奖励</option><option value="popup-announcements">首页弹窗公告</option></select>
+        <div class="filterbar"><input id="audit-search" class="search" type="search" placeholder="搜索玩家 ID、批次编号或操作内容"><select id="audit-operation" aria-label="操作类型"><option value="">所有操作</option><option value="mail-delivery">批量赠礼</option><option value="account-mail">单封赠礼</option><option value="account-mail-delete">删除玩家邮件</option><option value="account-grant">资源与进度调整</option><option value="account-credentials-admin">账号绑定／密码</option><option value="account-unbind">解除绑定</option><option value="boss-policy">BOSS发布</option><option value="boss-rules">BOSS难度规则</option><option value="boss-economy">副本体力与经验</option><option value="boss-battle-opening">BOSS开场设置</option><option value="boss-drops">BOSS掉落</option><option value="activity-rewards">圣剑杯与探索</option><option value="exchange-shops">兑换所</option><option value="item-shop">道具商店</option><option value="gacha-policy">扭蛋发布</option><option value="gacha-draft">卡池草稿</option><option value="gacha-live">卡池发布</option><option value="gacha-custom">新建／删除卡池</option><option value="runtime-settings">运营设置</option><option value="image-sync">运营图片同步</option><option value="player-policy">公告与奖励</option><option value="popup-announcements">首页弹窗公告</option></select>
           <span class="range" role="group" aria-label="时间范围"><input type="datetime-local" id="audit-after" aria-label="开始时间"><span>–</span><input type="datetime-local" id="audit-before" aria-label="结束时间"></span><button class="secondary" id="audit-reset">清除筛选</button><button id="audit-export" class="secondary">导出本页</button></div>
         <div class="table-wrap"><table><thead><tr><th>ID / 时间</th><th>操作</th><th>目标</th><th>详细内容</th></tr></thead><tbody id="audit-rows"></tbody></table></div>
         <div class="pager" id="audit-pager"><button class="secondary" id="audit-prev">上一页</button><span id="audit-page-info" class="page-info"></span><label>跳至 <input id="audit-page" type="number" min="1" value="1" aria-label="页码"> 页</label><button class="secondary" id="audit-next">下一页</button></div>
@@ -1185,5 +1230,6 @@
 <script defer src="/pool-gifts.js"></script>
 <script defer src="/popup-announcements.js"></script>
 <script defer src="/boss-economy.js"></script>
+<script defer src="/boss-opening.js"></script>
 </body>
 </html>

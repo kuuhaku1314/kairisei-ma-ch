@@ -25,19 +25,20 @@ type PVPResultCommand struct {
 // PVPConfig contains static local rules. Official client-owned field and rank
 // rows are kept separate from mutable account state in SQLite.
 type PVPConfig struct {
-	ChallengeMax   int                `json:"challenge_max"`
-	CostInitial    int                `json:"cost_initial"`
-	TurnMax        int                `json:"turn_max"`
-	HoldMax        int                `json:"hold_max"`
-	GimmickID      int                `json:"gimmickid"`
-	RankWinPoint   int                `json:"rank_win_point"`
-	RankLosePoint  int                `json:"rank_lose_point"`
-	ReplayResult   int                `json:"replay_result"`
-	ResetStartTime int                `json:"reset_start_time"`
-	ResetEndTime   int                `json:"reset_end_time"`
-	Fields         []PVPFieldConfig   `json:"fields"`
-	Ranks          []PVPRankConfig    `json:"ranks"`
-	ResultCommands []PVPResultCommand `json:"result_cmds"`
+	ChallengeMax      int                `json:"challenge_max"`
+	CostInitial       int                `json:"cost_initial"`
+	BurstGaugeInitial int                `json:"burst_gauge_initial"`
+	TurnMax           int                `json:"turn_max"`
+	HoldMax           int                `json:"hold_max"`
+	GimmickID         int                `json:"gimmickid"`
+	RankWinPoint      int                `json:"rank_win_point"`
+	RankLosePoint     int                `json:"rank_lose_point"`
+	ReplayResult      int                `json:"replay_result"`
+	ResetStartTime    int                `json:"reset_start_time"`
+	ResetEndTime      int                `json:"reset_end_time"`
+	Fields            []PVPFieldConfig   `json:"fields"`
+	Ranks             []PVPRankConfig    `json:"ranks"`
+	ResultCommands    []PVPResultCommand `json:"result_cmds"`
 }
 
 type PVPAccountRepository interface {

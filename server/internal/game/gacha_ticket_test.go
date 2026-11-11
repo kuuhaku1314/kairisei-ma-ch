@@ -18,7 +18,7 @@ func TestRarityFiveTicketGachaConsumesOfficialItemAndAddsCard(t *testing.T) {
 		Name:              "五星测试卡",
 		RarityRank:        5,
 		LevelMax:          1,
-		LoveMax:           0,
+		LoveMax:           10000,
 		FameMax:           100,
 		ExperienceTableID: 1,
 	}
@@ -27,6 +27,7 @@ func TestRarityFiveTicketGachaConsumesOfficialItemAndAddsCard(t *testing.T) {
 			GachaID: gachaID, PayType: 4, PayTypeID: itemID, Price: 1,
 			CardNum: 1, CardNumMax: 1, CardIDs: []int{cardID}, CardWeights: []int{1},
 			CardFames: map[int]int{cardID: 77},
+			CardLoves: map[int]int{cardID: 6501},
 		}},
 		items: map[int]gamestate.Item{itemID: {ItemID: itemID, Num: 2}},
 		itemDefinitions: map[int]gamestate.ItemDefinition{
@@ -58,14 +59,20 @@ func TestRarityFiveTicketGachaConsumesOfficialItemAndAddsCard(t *testing.T) {
 	if cardStore.cards[0].Fame != 77 {
 		t.Fatalf("configured pool fame not applied to the drawn card: %d", cardStore.cards[0].Fame)
 	}
+	if cardStore.cards[0].Love != 6501 || result.Reward.Cards[0].Love != 6501 {
+		t.Fatalf("draw did not grant the configured loyalty points: %+v", result.Reward.Cards)
+	}
 	if card := cardStore.cards[0]; card.CreateTime < beforeDraw || card.CreateTime > int(time.Now().Unix()) || result.Reward.Cards[0].CreateTime != card.CreateTime {
 		t.Fatalf("new card acquisition time is missing from inventory or draw response: %+v", card)
 	}
 	if saved := snapshotCards(cardStore.cards, nil); saved[0].CreateTime != cardStore.cards[0].CreateTime || CardsFromState(saved, 0)[0].CreateTime != cardStore.cards[0].CreateTime {
 		t.Fatal("card acquisition time was lost between runtime and persisted state")
 	}
-	if pool := GachaPoolRewards(cardStore.gachas[0]); pool[0].CardFame != 77 {
-		t.Fatalf("lineup shows fame %d, want configured 77", pool[0].CardFame)
+	if saved := snapshotCards(cardStore.cards, nil); CardsFromState(saved, 0)[0].Love != 6501 {
+		t.Fatal("configured loyalty points were lost on save")
+	}
+	if pool := GachaPoolRewards(cardStore.gachas[0]); pool[0].CardFame != 77 || pool[0].CardLove != 6501 || cardStore.GachaPrizeForClient(pool[0]).CardLove != 65 {
+		t.Fatalf("lineup lost configured fame or loyalty: %+v", pool[0])
 	}
 	if cardStore.gachas[0].PlayCount != 1 {
 		t.Fatalf("play count = %d, want 1", cardStore.gachas[0].PlayCount)

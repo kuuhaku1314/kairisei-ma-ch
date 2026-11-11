@@ -1,6 +1,7 @@
 {
   "challenge_max": 5,
   "cost_initial": 3,
+  "burst_gauge_initial": 100,
   "turn_max": 10,
   "hold_max": 6,
   "gimmickid": 0,

@@ -172,17 +172,27 @@ type AdminGachaPreset struct {
 	PublicationKey string `json:"publication_key"`
 	GroupID        int    `json:"group_id"`
 	Name           string `json:"name"`
-	BannerKey      string `json:"banner_key"`
-	ImageURL       string `json:"image_url"`
-	PaymentItemID  int    `json:"payment_item_id"`
-	PaymentItem    string `json:"payment_item"`
-	Price          int    `json:"price"`
-	DrawCount      int    `json:"draw_count"`
+	ImageURL       string `json:"image_url"` // the uploaded cover, else the banner the pool inherits
 	CardCount      int    `json:"card_count"`
 	GachaIDs       []int  `json:"gacha_ids"`
 	// The game-list entry players see: the published category, or the pool's own preset.
-	CategoryNum int    `json:"category_num"`
-	Category    string `json:"category,omitempty"`
+	Category string             `json:"category,omitempty"`
+	Methods  []AdminGachaMethod `json:"methods"`
+	// An operator pool that was never published stays invisible to players even when opened.
+	Unpublished bool `json:"unpublished,omitempty"`
+}
+
+// AdminGachaMethod is one draw method of a pool as players currently get it.
+type AdminGachaMethod struct {
+	GachaID        int    `json:"gacha_id"`
+	DrawCount      int    `json:"draw_count"`
+	MaxDrawCount   int    `json:"max_draw_count"` // above DrawCount, the friend-point balance decides
+	Profession     int8   `json:"profession"`
+	Payment        string `json:"payment"`
+	Price          int    `json:"price"`  // per draw for friend points; the first stage's for stepped pools
+	Stages         int    `json:"stages"` // stepped pools advance a stage per draw and repeat the last
+	DailyFirstFree bool   `json:"daily_first_free"`
+	Closed         bool   `json:"closed"`
 }
 
 type adminAccount struct {
@@ -700,11 +710,6 @@ func (admin *API) catalogEntries(writer http.ResponseWriter, request *http.Reque
 			return
 		}
 	}
-	resource := request.URL.Query().Get("resource")
-	if resource != "" && resource != "available" && resource != "unavailable" {
-		WriteAdminError(writer, 400, "未知资源状态")
-		return
-	}
 	kind := strings.ToLower(strings.TrimSpace(request.URL.Query().Get("kind")))
 	source := request.URL.Query().Get("source")
 	arthurType := 0
@@ -775,9 +780,6 @@ func (admin *API) catalogEntries(writer http.ResponseWriter, request *http.Reque
 			continue
 		}
 		if cost >= 0 && (entry.Combat == nil || entry.Combat.Cost != cost) {
-			continue
-		}
-		if resource == "available" && entry.ResourceState == "unavailable" || resource == "unavailable" && entry.ResourceState != "unavailable" {
 			continue
 		}
 		if kind != "" && entry.Kind != kind {
@@ -1329,27 +1331,74 @@ func (admin *API) setBossPolicy(writer http.ResponseWriter, request *http.Reques
 	WriteAdminJSON(writer, http.StatusOK, result)
 }
 
+// gachaPresetList describes each pool group by what players currently get: every method's published
+// configuration, else the pool's own profile. Name, entry and cover follow the first method.
 func (admin *API) gachaPresetList(writer http.ResponseWriter, _ *http.Request) {
-	admin.operations.configMu.RLock()
-	defer admin.operations.configMu.RUnlock()
+	type methodSnapshot struct {
+		profile   gamestate.GachaProfile
+		published bool
+		closed    bool
+	}
+	o := admin.operations
+	o.configMu.RLock()
+	methods := make(map[int]methodSnapshot, len(o.gachaBases))
+	for _, config := range o.gachaConfigurations {
+		methods[config.Profile.GachaID] = methodSnapshot{profile: config.Profile, published: true, closed: config.Disabled}
+	}
 	presets := append(append([]AdminGachaPreset(nil), admin.gachaPresets...), admin.customGachaPresets()...)
-	for i := range presets {
-		for _, config := range admin.operations.gachaConfigurations {
-			if len(presets[i].GachaIDs) > 0 && presets[i].GachaIDs[0] == config.Profile.GachaID {
-				presets[i].Name = config.Profile.Name
-				presets[i].Price = config.Profile.Price
-				presets[i].CardCount = len(config.Profile.CardIDs) + len(config.Profile.RewardPool)
-				presets[i].CategoryNum = config.Profile.CategoryNum
-				if config.Profile.CoverPath != "" {
-					presets[i].ImageURL = "/" + config.Profile.CoverPath
-				}
+	for _, preset := range presets {
+		for _, id := range preset.GachaIDs {
+			if _, published := methods[id]; !published {
+				methods[id] = methodSnapshot{profile: o.gachaBases[id]}
 			}
 		}
 	}
-
+	// Pool writes replace profile values and their slices. This snapshot owns the
+	// selected profile headers, so counting and encoding can run outside configMu.
+	o.configMu.RUnlock()
 	for i := range presets {
-		if category, ok := gachaEditorCategoryByID(presets[i].CategoryNum); ok && category.ID != 0 {
-			presets[i].Category = category.Name
+		preset := &presets[i]
+		cards, categoryNum := map[int]struct{}{}, 0
+		collectRewardCards := func(pool []gamestate.WeightedReward) {
+			for _, entry := range pool {
+				if entry.Reward.Type == 6 {
+					cards[entry.Reward.RewardTypeID] = struct{}{}
+				}
+			}
+		}
+		preset.Methods = make([]AdminGachaMethod, 0, len(preset.GachaIDs))
+		for n, id := range preset.GachaIDs {
+			method := methods[id]
+			profile := method.profile
+			preset.Unpublished = preset.Unpublished || preset.PublicationKey == "operator" && !method.published
+			if n == 0 {
+				preset.Name, categoryNum = profile.Name, profile.CategoryNum
+				preset.ImageURL = "/gacha-assets/" + profile.BannerKey + ".png"
+				if profile.CoverPath != "" {
+					preset.ImageURL = "/" + profile.CoverPath
+				}
+			}
+			for _, card := range profile.CardIDs {
+				cards[card] = struct{}{}
+			}
+			if len(profile.Steps) == 0 {
+				collectRewardCards(profile.RewardPool)
+			} else {
+				for _, step := range profile.Steps {
+					collectRewardCards(step.RewardPool)
+				}
+			}
+			profile.PlayCount = 0
+			profile = profile.CurrentStep()
+			preset.Methods = append(preset.Methods, AdminGachaMethod{
+				GachaID: id, DrawCount: profile.CardNum, MaxDrawCount: profile.CardNumMax, Profession: profile.ArthurType,
+				Payment: gachaPaymentName(admin.catalogByKey, profile.PayType, profile.PayTypeID), Price: profile.Price,
+				Stages: len(profile.Steps), DailyFirstFree: profile.DailyFirstFree, Closed: method.closed,
+			})
+		}
+		preset.CardCount = len(cards)
+		if category, ok := gachaEditorCategoryByID(categoryNum); ok && category.ID != 0 {
+			preset.Category = category.Name
 		}
 	}
 

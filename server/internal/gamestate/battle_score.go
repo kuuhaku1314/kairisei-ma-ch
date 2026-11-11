@@ -27,13 +27,14 @@ type BossScoreResult struct {
 // Display and claim slots follow the native nine-grade UI. Economic thresholds
 // and the multiplier are explicit local policy, not recovered official prices.
 type TeamBattleScorePolicy struct {
-	BaseScore       int64                  `json:"base_score"`
-	BestTurn        int                    `json:"best_turn"`
-	Grades          []TeamBattleScoreGrade `json:"grades"`
-	EndTurn         int                    `json:"end_turn"`                  // 0: no forced turn limit; retain boss AI ending.
-	MemberDeadEnd   bool                   `json:"member_dead_end,omitempty"` // Operator rule frozen at entry; independent of the displayed score grade.
-	Rate            int                    `json:"rate,omitempty"`
-	TeamCostInitial int                    `json:"team_cost_initial,omitempty"` // Initial COST for solo and multiplayer; 0 keeps the replay default.
+	BaseScore         int64                  `json:"base_score"`
+	BestTurn          int                    `json:"best_turn"`
+	Grades            []TeamBattleScoreGrade `json:"grades"`
+	EndTurn           int                    `json:"end_turn"`                  // 0: no forced turn limit; retain boss AI ending.
+	MemberDeadEnd     bool                   `json:"member_dead_end,omitempty"` // Operator rule frozen at entry; independent of the displayed score grade.
+	Rate              int                    `json:"rate,omitempty"`
+	BurstGaugeInitial int                    `json:"burst_gauge_initial"`
+	TeamCostInitial   int                    `json:"team_cost_initial,omitempty"` // Initial COST for solo and multiplayer; 0 keeps the replay default.
 }
 
 type TeamBattleScoreGrade struct {
@@ -72,7 +73,10 @@ func ValidateTeamBattleScorePolicy(p *TeamBattleScorePolicy) error {
 		return errors.New("score rate must not be negative")
 	}
 	if p.IsDamageScore() {
-		if p.TeamCostInitial != 0 && (p.TeamCostInitial < 3 || p.TeamCostInitial > 10) {
+		if p.BurstGaugeInitial < 0 || p.BurstGaugeInitial > BattleOpeningBurstGaugeMax {
+			return errors.New("开场圣剑槽须为0至300")
+		}
+		if p.TeamCostInitial != 0 && (p.TeamCostInitial < BattleOpeningCostMin || p.TeamCostInitial > BattleOpeningCostMax) {
 			return errors.New("起始COST须为3至10")
 		}
 		if p.EndTurn < 0 || p.EndTurn > 30 || p.Rate < 1 || p.Rate > 1000 || p.BaseScore != 0 || p.BestTurn != 0 || len(p.Grades) != 9 {

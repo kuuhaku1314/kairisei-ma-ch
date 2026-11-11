@@ -142,20 +142,15 @@ func (engine *BattleEngine) CardPlayPlanResults(memberType int, submission cardP
 	if engine == nil {
 		return nil, errors.New("card play plan battle engine is unavailable")
 	}
+	player := engine.player(memberType)
 	results := make([]BattleResult, 0, len(submission.CardTypes))
 	for index, cardType := range submission.CardTypes {
 		if cardType == 0 {
 			continue
 		}
 		darkness := engine.playerCardDarkness(memberType, cardType)
-		state := 0
-		if _, sealed := playerCardSealEffect(engine.player(memberType), cardType); sealed {
-			state |= 1
-		}
-		if _, trapped := playerCardTrapEffect(engine.player(memberType), cardType); trapped {
-			state |= 2
-		}
-		results = append(results, BattleResult{Command: 303, Args: []int64{
+		state, _ := playerCardState(player, cardType)
+		results = append(results, BattleResult{Command: CommandCardPlayPlan, Args: []int64{
 			int64(memberType), int64(cardType), int64(submission.Targets[index]), 0, 0, int64(darkness), int64(state),
 		}})
 	}
