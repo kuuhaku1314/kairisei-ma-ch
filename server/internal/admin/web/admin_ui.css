@@ -2384,8 +2384,9 @@ table.grades td:first-child {
 .section-nav .hint {
   margin-left: 6px;
 }
+/* A section jump always leaves the topbar collapsed (51px), so clear that height, not the current one. */
 #player-policy .panel {
-  scroll-margin-top: calc(var(--topbar-h, 92px) + 56px);
+  scroll-margin-top: 64px;
 }
 .login-grid {
   display: grid;
@@ -3093,14 +3094,6 @@ body.scrolled .topbar h1 {
 }
 .navi-item.off .navi-name {
   color: var(--faint);
-}
-.section-nav.sticky {
-  position: sticky;
-  top: var(--topbar-h, 92px);
-  z-index: 12;
-  background: var(--bg);
-  padding: 8px 0;
-  margin: -8px 0;
 }
 .currency-button {
   display: inline-flex;

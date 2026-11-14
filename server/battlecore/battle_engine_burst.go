@@ -865,15 +865,10 @@ func (engine *BattleEngine) executeBurstRoleWithListType(action battleAction, ro
 
 func (engine *BattleEngine) executeBurstDiscardDraw(memberType int, retainedCardTypes []int, handMaximum int) ([]BattleResult, error) {
 	player := engine.player(memberType)
-	// 7ee5e removes the member's selection before publishing its empty plans.
-	delete(engine.selectedPlays, memberType)
-	keptActions := engine.turnActions[:0]
-	for _, action := range engine.turnActions {
-		if action.memberType != memberType {
-			keptActions = append(keptActions, action)
-		}
+	// Discarding the plan also releases its reserved cost before the redraw.
+	if err := engine.resetCardSubmission(memberType); err != nil {
+		return nil, err
 	}
-	engine.turnActions = keptActions
 	retained := make(map[int]struct{}, len(retainedCardTypes))
 	for _, cardType := range retainedCardTypes {
 		retained[cardType] = struct{}{}
@@ -949,7 +944,7 @@ func (engine *BattleEngine) executeBurstDiscardDraw(memberType int, retainedCard
 	}
 	results = append(results, display...)
 	results = append(results,
-		BattleResult{Command: CommandCost, Args: []int64{int64(memberType), int64(player.Cost + engine.playerEffectValue(player, "COST_BLOCK"))}},
+		BattleResult{Command: CommandCost, Args: []int64{int64(memberType), int64(engine.memberTurnCost(player))}},
 		BattleResult{Command: CommandCardDeck, Args: []int64{int64(memberType), int64(player.remainingDeckCount()), 0}},
 	)
 	return results, nil

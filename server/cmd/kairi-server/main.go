@@ -26,7 +26,7 @@ import (
 	"kairisei.local/server/internal/netstats"
 )
 
-const serverVersion = "2.0.3"
+const serverVersion = "2.0.4"
 
 type options struct {
 	showVersion       bool

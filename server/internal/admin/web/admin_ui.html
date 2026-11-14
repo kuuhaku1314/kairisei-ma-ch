@@ -761,7 +761,7 @@
     <!-- 公告与奖励 -->
     <section class="view" id="player-policy">
       <div class="view-alert" role="alert" hidden></div>
-      <nav class="section-nav sticky" aria-label="本页分区"><a href="#pp-notice">游戏公告</a><a href="#pp-popups">首页弹窗</a><a href="#pp-banners">首页轮播</a><a href="#pp-mail">新手毕业邮件</a><a href="#pp-story">剧情首通</a><a href="#pp-login">签到奖励</a><a href="#pp-navi">看板购买</a><span class="hint">首页弹窗公告单独发布；其余分区整页一次保存，保存后生效并在重启后保留；签到与剧情保留领取进度。</span></nav>
+      <nav class="section-nav" aria-label="本页分区"><a href="#pp-notice">游戏公告</a><a href="#pp-popups">首页弹窗</a><a href="#pp-banners">首页轮播</a><a href="#pp-mail">新手毕业邮件</a><a href="#pp-story">剧情首通</a><a href="#pp-login">签到奖励</a><a href="#pp-navi">看板购买</a><span class="hint">首页弹窗公告单独发布；其余分区整页一次保存，保存后生效并在重启后保留；签到与剧情保留领取进度。</span></nav>
       <div class="panel" id="pp-notice"><div class="panel-head"><div><h2>游戏公告</h2><span class="hint">玩家在游戏里点「公告」时打开的页面，不会自动弹出。</span></div><a href="/api/player-policy/notice-preview" target="_blank" rel="noopener">查看已发布公告 ↗</a></div><div class="panel-body">
         <label class="switch"><input id="player-notice-enabled" type="checkbox"><span>显示公告内容</span></label>
         <div class="form-grid three"><div class="field"><label for="player-notice-title">标题</label><input id="player-notice-title" maxlength="80"></div><div class="field"><label for="player-notice-start">开始显示（本机时区，留空立即）</label><input id="player-notice-start" type="datetime-local"></div><div class="field"><label for="player-notice-end">结束显示（留空不限）</label><input id="player-notice-end" type="datetime-local"></div></div>
